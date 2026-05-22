@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/assets/status-badge'
 import { Button } from '@/components/ui/button'
-import { Pencil } from 'lucide-react'
+import { Pencil, Gauge } from 'lucide-react'
 import { deleteAsset } from '../actions'
 
 function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -70,12 +70,28 @@ export default async function AssetDetailPage({
     .eq('id', user!.id)
     .single()
 
-  const { data: asset } = await admin
-    .from('assets')
-    .select('*, asset_types(name)')
-    .eq('id', id)
-    .eq('company_id', profile!.company_id)
-    .single()
+  const [{ data: asset }, { data: mileageHistory }] = await Promise.all([
+    admin
+      .from('assets')
+      .select('*, asset_types(name)')
+      .eq('id', id)
+      .eq('company_id', profile!.company_id)
+      .single(),
+    admin
+      .from('mileage_entries')
+      .select('id, entry_date, mileage, notes, submitted_by, profiles(full_name)')
+      .eq('asset_id', id)
+      .order('entry_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(15),
+  ])
+
+  // Compute mileage deltas for history display
+  const historyWithDelta = (mileageHistory ?? []).map((entry, i, arr) => {
+    const prev = arr[i + 1]
+    const delta = prev ? entry.mileage - prev.mileage : null
+    return { ...entry, delta }
+  })
 
   if (!asset) notFound()
 
@@ -106,14 +122,22 @@ export default async function AssetDetailPage({
           {vehicleLabel && <p className="text-gray-500 mt-0.5">{vehicleLabel}</p>}
           {asset.name && <p className="text-sm text-gray-400">{asset.name}</p>}
         </div>
-        {canManage && (
-          <Link href={`/assets/${id}/edit`}>
-            <Button variant="outline" className="gap-2 shrink-0">
-              <Pencil className="w-4 h-4" />
-              Edit
+        <div className="flex gap-2 shrink-0">
+          <Link href={`/assets/${id}/mileage`}>
+            <Button variant="outline" className="gap-2">
+              <Gauge className="w-4 h-4" />
+              Add Mileage
             </Button>
           </Link>
-        )}
+          {canManage && (
+            <Link href={`/assets/${id}/edit`}>
+              <Button variant="outline" className="gap-2">
+                <Pencil className="w-4 h-4" />
+                Edit
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 space-y-5">
@@ -176,6 +200,67 @@ export default async function AssetDetailPage({
             <p className="text-sm text-gray-600 whitespace-pre-wrap">{asset.notes}</p>
           </div>
         )}
+
+        {/* Mileage History */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-gray-900">Mileage History</h2>
+            <Link
+              href={`/assets/${id}/mileage`}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              + Add Entry
+            </Link>
+          </div>
+          {historyWithDelta.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">
+              No mileage entries yet.{' '}
+              <Link href={`/assets/${id}/mileage`} className="text-blue-600 hover:underline">
+                Add the first one.
+              </Link>
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left py-2 pr-4 font-medium text-gray-500">Date</th>
+                    <th className="text-right py-2 pr-4 font-medium text-gray-500">Mileage</th>
+                    <th className="text-right py-2 pr-4 font-medium text-gray-500">+/−</th>
+                    <th className="text-left py-2 font-medium text-gray-500">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {historyWithDelta.map((entry) => (
+                    <tr key={entry.id}>
+                      <td className="py-2 pr-4 text-gray-600 whitespace-nowrap">
+                        {new Date(entry.entry_date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </td>
+                      <td className="py-2 pr-4 text-right font-semibold text-gray-900 whitespace-nowrap">
+                        {entry.mileage.toLocaleString()} mi
+                      </td>
+                      <td className="py-2 pr-4 text-right whitespace-nowrap">
+                        {entry.delta != null ? (
+                          <span className={entry.delta >= 0 ? 'text-green-600' : 'text-red-500'}>
+                            {entry.delta >= 0 ? '+' : ''}
+                            {entry.delta.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-gray-500 text-xs">{entry.notes ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         {/* Danger zone */}
         {canDelete && (
