@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/assets/status-badge'
 import { Button } from '@/components/ui/button'
-import { Pencil, Gauge } from 'lucide-react'
+import { Pencil, Gauge, Wrench } from 'lucide-react'
 import { deleteAsset } from '../actions'
 
 function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -70,7 +70,7 @@ export default async function AssetDetailPage({
     .eq('id', user!.id)
     .single()
 
-  const [{ data: asset }, { data: mileageHistory }] = await Promise.all([
+  const [{ data: asset }, { data: mileageHistory }, { data: maintenanceHistory }] = await Promise.all([
     admin
       .from('assets')
       .select('*, asset_types(name)')
@@ -84,6 +84,12 @@ export default async function AssetDetailPage({
       .order('entry_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(15),
+    admin
+      .from('maintenance_events')
+      .select('id, performed_date, mileage_at_service, cost, notes, maintenance_types(name)')
+      .eq('asset_id', id)
+      .order('performed_date', { ascending: false })
+      .limit(20),
   ])
 
   // Compute mileage deltas for history display
@@ -138,6 +144,28 @@ export default async function AssetDetailPage({
             </Link>
           )}
         </div>
+      </div>
+
+      {/* Quick service actions */}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          href={`/assets/${id}/maintenance/oil-change`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+        >
+          <Wrench className="w-3.5 h-3.5" /> Oil Change
+        </Link>
+        <Link
+          href={`/assets/${id}/maintenance/brakes`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+        >
+          <Wrench className="w-3.5 h-3.5" /> Brake Service
+        </Link>
+        <Link
+          href={`/assets/${id}/maintenance/tires`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+        >
+          <Wrench className="w-3.5 h-3.5" /> Tire Service
+        </Link>
       </div>
 
       <div className="mt-6 space-y-5">
@@ -200,6 +228,47 @@ export default async function AssetDetailPage({
             <p className="text-sm text-gray-600 whitespace-pre-wrap">{asset.notes}</p>
           </div>
         )}
+
+        {/* Maintenance History */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 mb-3">Maintenance History</h2>
+          {!maintenanceHistory?.length ? (
+            <p className="text-sm text-gray-400 text-center py-4">
+              No maintenance records yet. Use the buttons above to record a service.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {maintenanceHistory.map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-start justify-between py-2 border-b border-gray-50 last:border-0"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {(event as any).maintenance_types?.name ?? 'Service'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {new Date(event.performed_date).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
+                      {event.mileage_at_service != null && (
+                        <> &mdash; {event.mileage_at_service.toLocaleString()} mi</>
+                      )}
+                    </p>
+                    {event.notes && (
+                      <p className="text-xs text-gray-400 mt-0.5 italic">{event.notes}</p>
+                    )}
+                  </div>
+                  {event.cost != null && (
+                    <span className="text-sm font-medium text-gray-700 shrink-0 ml-4">
+                      ${Number(event.cost).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Mileage History */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
