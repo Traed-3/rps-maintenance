@@ -21,7 +21,7 @@ const navItems = [
   { href: '/assets', label: 'Assets', icon: Truck, active: true },
   { href: '/maintenance', label: 'Maintenance', icon: Wrench, active: true },
   { href: '/tickets', label: 'Tickets', icon: ClipboardList, active: true },
-  { href: '/shop', label: 'Shop', icon: Users, active: false },
+  { href: '/shop', label: 'Shop', icon: Users, active: true },
   { href: '/reports', label: 'Reports', icon: BarChart3, active: false },
   { href: '/settings', label: 'Settings', icon: Settings, active: false },
 ]

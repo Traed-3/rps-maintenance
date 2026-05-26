@@ -1,0 +1,86 @@
+import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
+import { clockIn, clockOut } from '../actions'
+import { ClockWidget } from './clock-widget'
+
+export default async function ClockPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const admin = createAdminClient()
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id, company_id, full_name')
+    .eq('id', user!.id)
+    .single()
+
+  // Current status
+  const { data: empStatus } = await admin
+    .from('employee_statuses')
+    .select('clock_status, current_status, status_updated_at')
+    .eq('profile_id', profile!.id)
+    .single()
+
+  // Open clock entry (if clocked in)
+  const { data: openEntry } = await admin
+    .from('time_clock_entries')
+    .select('id, clock_in')
+    .eq('profile_id', profile!.id)
+    .is('clock_out', null)
+    .order('clock_in', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  // Today's total minutes
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const { data: todayEntries } = await admin
+    .from('time_clock_entries')
+    .select('total_minutes, clock_in, clock_out')
+    .eq('profile_id', profile!.id)
+    .gte('clock_in', todayStart.toISOString())
+
+  const todayCompletedMins = (todayEntries ?? [])
+    .filter(e => e.clock_out)
+    .reduce((sum, e) => sum + (e.total_minutes ?? 0), 0)
+
+  const isClockedIn = empStatus?.clock_status === 'clocked_in'
+
+  async function handleClockIn() {
+    'use server'
+    await clockIn()
+  }
+
+  async function handleClockOut() {
+    'use server'
+    await clockOut()
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <p className="text-sm text-gray-500">Welcome back</p>
+          <h1 className="text-2xl font-bold text-gray-900">{profile?.full_name}</h1>
+        </div>
+
+        <ClockWidget
+          isClockedIn={isClockedIn}
+          clockInTime={openEntry?.clock_in ?? null}
+          todayCompletedMins={todayCompletedMins}
+          clockInAction={handleClockIn}
+          clockOutAction={handleClockOut}
+        />
+
+        <div className="mt-6 flex gap-3">
+          <a href="/shop/status" className="flex-1 text-center py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            Set Status
+          </a>
+          <a href="/shop/my-tasks" className="flex-1 text-center py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            My Tasks
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
