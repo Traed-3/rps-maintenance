@@ -19,7 +19,7 @@ import { useRouter } from 'next/navigation'
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, active: true },
   { href: '/assets', label: 'Assets', icon: Truck, active: true },
-  { href: '/maintenance', label: 'Maintenance', icon: Wrench, active: false },
+  { href: '/maintenance', label: 'Maintenance', icon: Wrench, active: true },
   { href: '/tickets', label: 'Tickets', icon: ClipboardList, active: false },
   { href: '/shop', label: 'Shop', icon: Users, active: false },
   { href: '/reports', label: 'Reports', icon: BarChart3, active: false },
