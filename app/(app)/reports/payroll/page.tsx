@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { bulkApprove } from '../../time/actions'
+import { EmployeeSelect } from '@/components/reports/employee-select'
 import { Download } from 'lucide-react'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -180,19 +181,11 @@ export default async function PayrollPage({
           </Link>
         ))}
 
-        <select
-          className="ml-auto px-3 py-1.5 text-xs border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-          defaultValue={empFilter ?? ''}
-          onChange={e => {
-            const val = e.target.value
-            window.location.href = `/reports/payroll?period=${period}${val ? `&employee=${val}` : ''}`
-          }}
-        >
-          <option value="">All Employees</option>
-          {employees?.map(emp => (
-            <option key={emp.id} value={emp.id}>{emp.full_name}</option>
-          ))}
-        </select>
+        <EmployeeSelect
+          employees={employees ?? []}
+          currentValue={empFilter ?? ''}
+          period={period}
+        />
       </div>
 
       {/* Summary cards */}

@@ -23,7 +23,7 @@ const navItems = [
   { href: '/tickets', label: 'Tickets', icon: ClipboardList, active: true },
   { href: '/shop', label: 'Shop', icon: Users, active: true },
   { href: '/reports', label: 'Reports', icon: BarChart3, active: true },
-  { href: '/settings', label: 'Settings', icon: Settings, active: false },
+  { href: '/settings', label: 'Settings', icon: Settings, active: true },
 ]
 
 export default function AppNav({ email }: { email: string }) {

@@ -59,20 +59,30 @@ export async function GET(request: Request) {
       .eq('slug', 'rps')
       .single()
 
-    // Create the profile on first login.
-    // Default role is 'viewer' — the owner can promote users in settings.
     const fullName =
       user.user_metadata?.full_name ??
       user.user_metadata?.name ??
       user.email?.split('@')[0] ??
       'Unknown'
 
+    // If no owner exists yet in this company, the first person in gets owner.
+    // This handles the initial setup — Trae's father logs in first.
+    let role = 'viewer'
+    if (company?.id) {
+      const { count } = await admin
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', company.id)
+        .eq('role', 'owner')
+      if ((count ?? 0) === 0) role = 'owner'
+    }
+
     await admin.from('profiles').insert({
       id: user.id,
       company_id: company?.id ?? null,
       full_name: fullName,
       email: user.email!,
-      role: 'viewer',
+      role,
     })
   }
 
