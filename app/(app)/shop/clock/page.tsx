@@ -72,12 +72,15 @@ export default async function ClockPage() {
           clockOutAction={handleClockOut}
         />
 
-        <div className="mt-6 flex gap-3">
-          <a href="/shop/status" className="flex-1 text-center py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+        <div className="mt-6 grid grid-cols-3 gap-2">
+          <a href="/shop/status" className="text-center py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
             Set Status
           </a>
-          <a href="/shop/my-tasks" className="flex-1 text-center py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+          <a href="/shop/my-tasks" className="text-center py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
             My Tasks
+          </a>
+          <a href="/shop/general-time" className="text-center py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            Log Time
           </a>
         </div>
       </div>

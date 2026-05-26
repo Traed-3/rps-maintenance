@@ -8,6 +8,7 @@ import { Pencil } from 'lucide-react'
 import { changeTicketStatus, addComment } from '../actions'
 import { CommentForm } from './comment-form'
 import { StatusButtons } from './status-buttons'
+import { LaborTimer } from './labor-timer'
 
 export default async function TicketDetailPage({
   params,
@@ -22,7 +23,7 @@ export default async function TicketDetailPage({
 
   const { data: profile } = await admin.from('profiles').select('id, company_id, role').eq('id', user!.id).single()
 
-  const [{ data: ticket }, { data: comments }] = await Promise.all([
+  const [{ data: ticket }, { data: comments }, { data: laborHistory }, { data: empStatus }] = await Promise.all([
     admin.from('repair_tickets')
       .select(`
         *,
@@ -37,7 +38,33 @@ export default async function TicketDetailPage({
       .select('id, comment, is_internal, created_at, profiles(full_name)')
       .eq('ticket_id', id)
       .order('created_at', { ascending: true }),
+    admin.from('labor_entries')
+      .select('id, started_at, ended_at, total_minutes, entry_type, profiles(full_name)')
+      .eq('ticket_id', id)
+      .eq('entry_type', 'ticket')
+      .order('started_at', { ascending: false })
+      .limit(20),
+    admin.from('employee_statuses')
+      .select('clock_status, current_ticket_id, active_labor_entry_id')
+      .eq('profile_id', user!.id)
+      .maybeSingle(),
   ])
+
+  // Is the current user actively working on THIS ticket?
+  const isActiveOnThisTicket =
+    empStatus?.current_ticket_id === id && !!empStatus?.active_labor_entry_id
+  const isClockedIn = empStatus?.clock_status === 'clocked_in'
+
+  // Get started_at for the active entry if running
+  let activeLaborStartedAt: string | null = null
+  if (isActiveOnThisTicket && empStatus?.active_labor_entry_id) {
+    const { data: activeEntry } = await admin
+      .from('labor_entries')
+      .select('started_at')
+      .eq('id', empStatus.active_labor_entry_id)
+      .single()
+    activeLaborStartedAt = activeEntry?.started_at ?? null
+  }
 
   if (!ticket) notFound()
 
@@ -120,6 +147,19 @@ export default async function TicketDetailPage({
               <p className="text-sm text-gray-700">{ticket.completion_notes}</p>
             </div>
           )}
+
+          {/* Labor time tracking */}
+          <LaborTimer
+            ticketId={id}
+            isActive={isActiveOnThisTicket}
+            startedAt={activeLaborStartedAt}
+            totalLaborHours={ticket.total_labor_hours ?? 0}
+            laborHistory={(laborHistory ?? []).map(e => ({
+              ...e,
+              profiles: Array.isArray(e.profiles) ? e.profiles[0] ?? null : (e.profiles as any) ?? null,
+            }))}
+            isClockedIn={isClockedIn}
+          />
 
           {/* Comments */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
