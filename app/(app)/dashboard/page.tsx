@@ -5,6 +5,7 @@ import { StatCard } from '@/components/dashboard/stat-card'
 import { TicketStatusBadge, PriorityBadge } from '@/components/tickets/ticket-badges'
 import { StatusBadge } from '@/components/assets/status-badge'
 import { calcDateDue, calcOilChangeDue, toBand, BAND_CONFIG, sortByUrgency, type DueStatus } from '@/lib/maintenance'
+import { checkOverdueMaintenanceNotifications, checkForgotClockOut } from '@/lib/notifications'
 import { ClipboardList, AlertTriangle, Truck, Package, Wrench, Calendar, Users, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -119,6 +120,10 @@ export default async function DashboardPage() {
     due_next_2_weeks: sortedAlerts.filter(a => toBand(a.status) === 'due_next_2_weeks').slice(0, 4),
     due_this_month:   sortedAlerts.filter(a => toBand(a.status) === 'due_this_month').slice(0, 4),
   }
+
+  // Generate notifications in the background (fire-and-forget, non-blocking)
+  checkOverdueMaintenanceNotifications(admin, companyId).catch(() => {})
+  checkForgotClockOut(admin, companyId).catch(() => {})
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'

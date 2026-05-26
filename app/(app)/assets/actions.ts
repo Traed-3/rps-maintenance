@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { notifyAssetUnsafe } from '@/lib/notifications'
 
 type ActionState = { error: string } | null
 
@@ -138,6 +139,13 @@ export async function updateAsset(
     .eq('company_id', profile.company_id)
 
   if (error) return { error: error.message }
+
+  // Notify if asset set to unsafe or down
+  const newStatus = str(formData.get('status'))
+  if (newStatus === 'unsafe' || newStatus === 'down') {
+    const unitNumber = str(formData.get('unit_number')) ?? id
+    notifyAssetUnsafe(admin, profile.company_id, id, unitNumber, newStatus).catch(() => {})
+  }
 
   revalidatePath('/assets')
   revalidatePath(`/assets/${id}`)
