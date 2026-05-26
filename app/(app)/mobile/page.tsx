@@ -1,0 +1,170 @@
+import Link from 'next/link'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
+import { cn } from '@/lib/utils'
+
+const STATUS_LABELS: Record<string, string> = {
+  clocked_out: 'Clocked Out', at_shop: 'At Shop',
+  working_on_ticket: 'Working on Ticket', waiting_parts: 'Waiting on Parts',
+  parts_run: 'Parts Run', cleaning_shop: 'Cleaning Shop',
+  helping_employee: 'Helping Someone', general_maintenance: 'General Maintenance',
+  break: 'On Break', lunch: 'At Lunch', meeting: 'In a Meeting',
+  off_site: 'Off Site', other: 'Other',
+}
+
+export default async function MobilePage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const admin = createAdminClient()
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id, company_id, full_name, role')
+    .eq('id', user!.id)
+    .single()
+
+  const { data: empStatus } = await admin
+    .from('employee_statuses')
+    .select('clock_status, current_status, current_ticket_id, status_updated_at, repair_tickets(id, ticket_number, title)')
+    .eq('profile_id', profile!.id)
+    .maybeSingle()
+
+  // Today's hours
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const { data: todayEntries } = await admin
+    .from('time_clock_entries')
+    .select('clock_in, clock_out, total_minutes')
+    .eq('profile_id', profile!.id)
+    .gte('clock_in', todayStart.toISOString())
+
+  const now = Date.now()
+  const todayMins = (todayEntries ?? []).reduce((sum, e) => {
+    return sum + (e.clock_out ? (e.total_minutes ?? 0) : Math.round((now - new Date(e.clock_in).getTime()) / 60000))
+  }, 0)
+
+  const isClockedIn = empStatus?.clock_status === 'clocked_in'
+  const isManager = ['owner', 'manager', 'shop_manager'].includes(profile?.role ?? '')
+
+  // Assigned tickets count
+  const { count: myTaskCount } = await admin
+    .from('repair_tickets')
+    .select('*', { count: 'exact', head: true })
+    .eq('assigned_to', profile!.id)
+    .not('status', 'in', '(completed,closed,deferred)')
+
+  const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Header */}
+      <div className="bg-blue-600 text-white px-6 pt-10 pb-8">
+        <p className="text-blue-200 text-sm">{greeting}</p>
+        <h1 className="text-2xl font-bold mt-0.5">{firstName}</h1>
+
+        {/* Status pill */}
+        <div className={cn(
+          'inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full text-sm font-semibold',
+          isClockedIn ? 'bg-green-500/30 text-green-100' : 'bg-white/20 text-white/80'
+        )}>
+          <span className={cn('w-2 h-2 rounded-full', isClockedIn ? 'bg-green-300' : 'bg-white/50')} />
+          {isClockedIn
+            ? STATUS_LABELS[empStatus?.current_status ?? ''] ?? 'Clocked In'
+            : 'Clocked Out'}
+        </div>
+
+        {todayMins > 0 && (
+          <p className="text-blue-200 text-xs mt-2">
+            {Math.floor(todayMins / 60)}h {todayMins % 60}m today
+          </p>
+        )}
+      </div>
+
+      {/* Active ticket banner */}
+      {isClockedIn && (empStatus as any)?.repair_tickets && (
+        <Link
+          href={`/tickets/${(empStatus as any).repair_tickets.id}`}
+          className="mx-4 -mt-4 bg-white rounded-xl border border-green-200 shadow-sm px-4 py-3 flex items-center justify-between"
+        >
+          <div>
+            <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Active Ticket</p>
+            <p className="text-sm font-semibold text-gray-900 mt-0.5">
+              {(empStatus as any).repair_tickets.ticket_number} — {(empStatus as any).repair_tickets.title?.slice(0, 40)}
+            </p>
+          </div>
+          <span className="text-green-600 text-lg">→</span>
+        </Link>
+      )}
+
+      {/* Main actions */}
+      <div className="flex-1 px-4 py-6 space-y-3">
+
+        {/* Primary action — clock */}
+        <Link
+          href="/shop/clock"
+          className={cn(
+            'flex items-center justify-between w-full rounded-2xl px-6 py-5 text-white font-bold text-lg shadow-sm',
+            isClockedIn ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
+          )}
+        >
+          <span>{isClockedIn ? '🔴 Clock Out' : '🟢 Clock In'}</span>
+          <span className="text-2xl opacity-80">→</span>
+        </Link>
+
+        {/* Secondary actions grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <Link href="/shop/status" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+            <span className="text-3xl">🏷️</span>
+            <span className="text-sm font-semibold text-gray-800">Set Status</span>
+          </Link>
+
+          <Link href="/shop/my-tasks" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors relative">
+            <span className="text-3xl">📋</span>
+            <span className="text-sm font-semibold text-gray-800">My Tasks</span>
+            {(myTaskCount ?? 0) > 0 && (
+              <span className="absolute top-3 right-3 w-5 h-5 bg-blue-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                {myTaskCount}
+              </span>
+            )}
+          </Link>
+
+          <Link href="/mobile/report-issue" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+            <span className="text-3xl">⚠️</span>
+            <span className="text-sm font-semibold text-gray-800">Report Issue</span>
+          </Link>
+
+          <Link href="/mobile/mileage" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+            <span className="text-3xl">🚗</span>
+            <span className="text-sm font-semibold text-gray-800">Log Mileage</span>
+          </Link>
+
+          <Link href="/shop/general-time" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+            <span className="text-3xl">⏱️</span>
+            <span className="text-sm font-semibold text-gray-800">Log Shop Time</span>
+          </Link>
+
+          {isManager ? (
+            <Link href="/dashboard" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+              <span className="text-3xl">📊</span>
+              <span className="text-sm font-semibold text-gray-800">Dashboard</span>
+            </Link>
+          ) : (
+            <Link href="/tickets" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+              <span className="text-3xl">🔧</span>
+              <span className="text-sm font-semibold text-gray-800">All Tickets</span>
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Install hint for iOS */}
+      <div className="px-6 pb-8 text-center">
+        <p className="text-xs text-gray-400">
+          Add to Home Screen for quick access:{' '}
+          <span className="font-medium">tap Share → Add to Home Screen</span>
+        </p>
+      </div>
+    </div>
+  )
+}
