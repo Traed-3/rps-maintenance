@@ -1,9 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { cookies } from 'next/headers'
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/dashboard'
@@ -12,28 +11,24 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`)
   }
 
-  // In Next.js 16, cookies() must be awaited
-  const cookieStore = await cookies()
-
-  // Build the redirect response first so we can set cookies ON the response,
-  // not on the incoming cookieStore (which is read-only in Route Handlers).
-  const redirectTo = NextResponse.redirect(`${origin}${next}`)
-  const errorRedirect = (msg: string) =>
-    NextResponse.redirect(`${origin}/login?error=${msg}`)
+  // Build the success redirect up front so we can set session cookies on it.
+  // In Next.js 16 Route Handlers, cookies must be set on the Response —
+  // the incoming Request cookies are read-only.
+  const successResponse = NextResponse.redirect(`${origin}${next}`)
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
+        // Read cookies from the incoming request
         getAll() {
-          return cookieStore.getAll()
+          return request.cookies.getAll()
         },
-        // Set cookies on the response, not the incoming request store.
-        // This fixes "TypeError: Headers.append" in Next.js 16 Route Handlers.
+        // Write cookies onto the outgoing response
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) =>
-            redirectTo.cookies.set(name, value, options)
+            successResponse.cookies.set(name, value, options)
           )
         },
       },
@@ -43,8 +38,8 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error || !data.user) {
-    console.error('Auth callback error:', error?.message)
-    return errorRedirect('auth_failed')
+    console.error('Auth callback error:', error?.message ?? 'No user returned')
+    return NextResponse.redirect(`${origin}/login?error=auth_failed`)
   }
 
   const user = data.user
@@ -70,7 +65,7 @@ export async function GET(request: Request) {
       user.email?.split('@')[0] ??
       'Unknown'
 
-    // First user in the company gets owner role automatically
+    // First user in the company automatically gets owner role
     let role = 'viewer'
     if (company?.id) {
       const { count } = await admin
@@ -90,5 +85,5 @@ export async function GET(request: Request) {
     })
   }
 
-  return redirectTo
+  return successResponse
 }
