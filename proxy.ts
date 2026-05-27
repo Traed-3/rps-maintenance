@@ -27,24 +27,19 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Refresh the session — keeps auth tokens alive between requests.
-  // IMPORTANT: never call supabase.auth.getSession() here; always getUser().
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
 
-  // Routes that don't require a login
   const publicPaths = ['/login', '/auth/callback']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
 
-  // Not logged in and trying to access a protected page → go to login
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Already logged in and hitting the login page → go to dashboard
   if (user && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
@@ -54,7 +49,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on all paths except Next.js internals and static files
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Exclude Next.js internals, static files, AND the auth callback so the
+    // OAuth code exchange is not interfered with by the proxy session check.
+    '/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

@@ -11,25 +11,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`)
   }
 
-  // Build the success redirect up front so we can set session cookies on it.
-  // In Next.js 16 Route Handlers, cookies must be set on the Response —
-  // the incoming Request cookies are read-only.
-  const successResponse = NextResponse.redirect(`${origin}${next}`)
+  // We need a mutable response to attach session cookies to.
+  // Using a redirect response so the browser is sent to the dashboard
+  // with the auth cookies already set.
+  const response = NextResponse.redirect(`${origin}${next}`)
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        // Read cookies from the incoming request
         getAll() {
+          // Read the PKCE code verifier from the incoming request cookies
           return request.cookies.getAll()
         },
-        // Write cookies onto the outgoing response
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            successResponse.cookies.set(name, value, options)
-          )
+          // Write the session cookies onto the outgoing redirect response
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
         },
       },
     }
@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
       user.email?.split('@')[0] ??
       'Unknown'
 
-    // First user in the company automatically gets owner role
     let role = 'viewer'
     if (company?.id) {
       const { count } = await admin
@@ -85,5 +84,5 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  return successResponse
+  return response
 }
