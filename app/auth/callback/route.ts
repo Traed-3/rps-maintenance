@@ -15,6 +15,12 @@ export async function GET(request: Request) {
   // In Next.js 16, cookies() must be awaited
   const cookieStore = await cookies()
 
+  // Build the redirect response first so we can set cookies ON the response,
+  // not on the incoming cookieStore (which is read-only in Route Handlers).
+  const redirectTo = NextResponse.redirect(`${origin}${next}`)
+  const errorRedirect = (msg: string) =>
+    NextResponse.redirect(`${origin}/login?error=${msg}`)
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -23,9 +29,11 @@ export async function GET(request: Request) {
         getAll() {
           return cookieStore.getAll()
         },
+        // Set cookies on the response, not the incoming request store.
+        // This fixes "TypeError: Headers.append" in Next.js 16 Route Handlers.
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
+            redirectTo.cookies.set(name, value, options)
           )
         },
       },
@@ -35,16 +43,14 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error || !data.user) {
-    console.error('Auth callback error:', error)
-    return NextResponse.redirect(`${origin}/login?error=auth_failed`)
+    console.error('Auth callback error:', error?.message)
+    return errorRedirect('auth_failed')
   }
 
   const user = data.user
-
-  // Use the admin client to bypass RLS for profile creation
   const admin = createAdminClient()
 
-  // Check if a profile already exists for this user
+  // Check if a profile already exists
   const { data: existingProfile } = await admin
     .from('profiles')
     .select('id, role')
@@ -52,7 +58,6 @@ export async function GET(request: Request) {
     .single()
 
   if (!existingProfile) {
-    // Look up the RPS company row
     const { data: company } = await admin
       .from('companies')
       .select('id')
@@ -65,8 +70,7 @@ export async function GET(request: Request) {
       user.email?.split('@')[0] ??
       'Unknown'
 
-    // If no owner exists yet in this company, the first person in gets owner.
-    // This handles the initial setup — Trae's father logs in first.
+    // First user in the company gets owner role automatically
     let role = 'viewer'
     if (company?.id) {
       const { count } = await admin
@@ -86,5 +90,5 @@ export async function GET(request: Request) {
     })
   }
 
-  return NextResponse.redirect(`${origin}${next}`)
+  return redirectTo
 }
