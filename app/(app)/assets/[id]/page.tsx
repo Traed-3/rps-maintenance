@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/assets/status-badge'
 import { Button } from '@/components/ui/button'
 import { Pencil, Gauge, Wrench } from 'lucide-react'
-import { deleteAsset } from '../actions'
+
+import { DeleteAssetButton } from './delete-button'
 
 function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
   if (value == null || value === '') return null
@@ -105,11 +106,6 @@ export default async function AssetDetailPage({
   const canDelete = ['owner', 'manager'].includes(profile?.role ?? '')
 
   const vehicleLabel = [asset.year, asset.make, asset.model].filter(Boolean).join(' ')
-
-  async function handleDelete() {
-    'use server'
-    await deleteAsset(id)
-  }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -338,20 +334,7 @@ export default async function AssetDetailPage({
             <p className="text-sm text-gray-500 mb-3">
               Permanently delete this asset and all its records. This cannot be undone.
             </p>
-            <form action={handleDelete}>
-              <Button
-                type="submit"
-                variant="destructive"
-                className="text-sm"
-                onClick={(e) => {
-                  if (!confirm(`Delete ${asset.unit_number}? This cannot be undone.`)) {
-                    e.preventDefault()
-                  }
-                }}
-              >
-                Delete Asset
-              </Button>
-            </form>
+            <DeleteAssetButton id={id} unitNumber={asset.unit_number} />
           </div>
         )}
       </div>
