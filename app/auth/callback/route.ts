@@ -7,8 +7,8 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/dashboard'
 
-  console.log('[auth/callback] code present:', !!code)
-  console.log('[auth/callback] cookies:', request.cookies.getAll().map(c => c.name).join(', '))
+  const allCookies = request.cookies.getAll().map(c => c.name).join(',')
+  console.log(`[callback] code:${!!code} cookies:${allCookies || 'NONE'}`)
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`)
@@ -35,59 +35,31 @@ export async function GET(request: NextRequest) {
 
   try {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-    console.log('[auth/callback] exchange error:', error?.message ?? 'none')
-    console.log('[auth/callback] has user:', !!data?.user)
+    console.log(`[callback] exchange error:${error?.message ?? 'none'} hasUser:${!!data?.user}`)
 
     if (error || !data.user) {
       return NextResponse.redirect(`${origin}/login?error=auth_failed`)
     }
 
-    const user = data.user
     const admin = createAdminClient()
-
     const { data: existingProfile } = await admin
-      .from('profiles')
-      .select('id, role')
-      .eq('id', user.id)
-      .single()
+      .from('profiles').select('id').eq('id', data.user.id).single()
 
     if (!existingProfile) {
       const { data: company } = await admin
-        .from('companies')
-        .select('id')
-        .eq('slug', 'rps')
-        .single()
-
-      const fullName =
-        user.user_metadata?.full_name ??
-        user.user_metadata?.name ??
-        user.email?.split('@')[0] ??
-        'Unknown'
-
+        .from('companies').select('id').eq('slug', 'rps').single()
+      const fullName = data.user.user_metadata?.full_name ?? data.user.user_metadata?.name ?? data.user.email?.split('@')[0] ?? 'Unknown'
       let role = 'viewer'
       if (company?.id) {
-        const { count } = await admin
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('company_id', company.id)
-          .eq('role', 'owner')
+        const { count } = await admin.from('profiles').select('*', { count: 'exact', head: true }).eq('company_id', company.id).eq('role', 'owner')
         if ((count ?? 0) === 0) role = 'owner'
       }
-
-      await admin.from('profiles').insert({
-        id: user.id,
-        company_id: company?.id ?? null,
-        full_name: fullName,
-        email: user.email!,
-        role,
-      })
+      await admin.from('profiles').insert({ id: data.user.id, company_id: company?.id ?? null, full_name: fullName, email: data.user.email!, role })
     }
 
     return response
-
   } catch (e: any) {
-    console.error('[auth/callback] caught exception:', e?.message ?? String(e))
+    console.log(`[callback] exception:${e?.message ?? String(e)}`)
     return NextResponse.redirect(`${origin}/login?error=auth_failed`)
   }
 }
