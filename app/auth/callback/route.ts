@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/keys'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -29,8 +30,8 @@ export async function GET(request: NextRequest) {
   const redirectToDashboard = NextResponse.redirect(`${origin}/dashboard`)
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {
