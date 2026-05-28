@@ -1,21 +1,15 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
-
 export function SignInButton() {
-  async function handleSignIn() {
-    // Use the browser Supabase client so it can store the PKCE code_verifier
-    // in a cookie via document.cookie BEFORE navigating to Google.
-    // A server-side Route Handler can't guarantee the cookie is flushed to the
-    // browser before the redirect fires, which is why exchangeCodeForSession
-    // was failing — no verifier in the callback request.
-    const supabase = createClient()
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
+  function handleSignIn() {
+    // Navigate to the server Route Handler which:
+    // 1. Generates the Google OAuth URL
+    // 2. Returns a 200 HTML page that sets the PKCE code_verifier cookie
+    //    reliably (via Set-Cookie on a 200 response, not a redirect)
+    // 3. The inline script then navigates the browser to Google
+    //
+    // This is the canonical @supabase/ssr server-side PKCE flow.
+    window.location.href = '/api/auth/google'
   }
 
   return (
