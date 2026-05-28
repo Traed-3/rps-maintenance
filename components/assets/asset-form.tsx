@@ -1,9 +1,10 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 type AssetType = { id: string; name: string }
+type Employee = { id: string; full_name: string }
 type ActionState = { error: string } | null
 
 const inputClass =
@@ -30,15 +31,16 @@ type Asset = {
   make: string | null
   model: string | null
   vin: string | null
-  serial_number: string | null
   license_plate: string | null
   current_mileage: number | null
+  current_hours: number | null
+  uses_hours: boolean
+  assigned_profile_id: string | null
   oil_change_interval_miles: number | null
   oil_change_interval_months: number | null
   last_oil_change_date: string | null
   last_oil_change_mileage: number | null
   inspection_due_date: string | null
-  dot_inspection_due_date: string | null
   registration_due_date: string | null
   insurance_due_date: string | null
   notes: string | null
@@ -47,14 +49,19 @@ type Asset = {
 export function AssetForm({
   action,
   assetTypes,
+  employees,
   asset,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   assetTypes: AssetType[]
+  employees: Employee[]
   asset?: Asset
 }) {
   const [state, formAction, isPending] = useActionState(action, null)
-  const v = asset // shorthand for default values
+  const [usesHours, setUsesHours] = useState(asset?.uses_hours ?? false)
+  const v = asset
+
+  const mileLabel = usesHours ? 'Hours' : 'Miles'
 
   return (
     <form action={formAction} className="space-y-8">
@@ -107,6 +114,18 @@ export function AssetForm({
           </div>
 
           <div>
+            <label className={labelClass}>Assigned To</label>
+            <select name="assigned_profile_id" className={inputClass} defaultValue={v?.assigned_profile_id ?? ''}>
+              <option value="">— Unassigned —</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="sm:col-span-2">
             <label className={labelClass}>Name / Description</label>
             <input
               name="name"
@@ -118,11 +137,22 @@ export function AssetForm({
         </div>
       </section>
 
-      {/* Vehicle Details */}
+      {/* Vehicle / Equipment Details */}
       <section>
-        <h2 className="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">
-          Vehicle Details
-        </h2>
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">Vehicle / Equipment Details</h2>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              name="uses_hours"
+              value="true"
+              checked={usesHours}
+              onChange={(e) => setUsesHours(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-600 font-medium">Tracks hours (not miles)</span>
+          </label>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className={labelClass}>Year</label>
@@ -153,21 +183,12 @@ export function AssetForm({
             />
           </div>
           <div>
-            <label className={labelClass}>VIN</label>
+            <label className={labelClass}>VIN / Serial Number</label>
             <input
               name="vin"
               className={inputClass}
-              placeholder="17-character VIN"
+              placeholder="VIN, serial, or ID number"
               defaultValue={v?.vin ?? ''}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Serial Number</label>
-            <input
-              name="serial_number"
-              className={inputClass}
-              placeholder="For trailers / equipment"
-              defaultValue={v?.serial_number ?? ''}
             />
           </div>
           <div>
@@ -180,31 +201,31 @@ export function AssetForm({
             />
           </div>
           <div>
-            <label className={labelClass}>Current Mileage</label>
+            <label className={labelClass}>Current {mileLabel}</label>
             <input
               name="current_mileage"
               type="number"
               className={inputClass}
               placeholder="0"
-              defaultValue={v?.current_mileage ?? ''}
+              defaultValue={usesHours ? (v?.current_hours ?? '') : (v?.current_mileage ?? '')}
             />
           </div>
         </div>
       </section>
 
-      {/* Oil Change Service */}
+      {/* Oil / Service Interval */}
       <section>
         <h2 className="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">
-          Oil Change Service
+          Oil Change / Service Interval
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={labelClass}>Change Interval (miles)</label>
+            <label className={labelClass}>Change Interval ({mileLabel.toLowerCase()})</label>
             <input
               name="oil_change_interval_miles"
               type="number"
               className={inputClass}
-              placeholder="e.g. 5000"
+              placeholder={usesHours ? 'e.g. 250' : 'e.g. 5000'}
               defaultValue={v?.oil_change_interval_miles ?? ''}
             />
           </div>
@@ -228,7 +249,7 @@ export function AssetForm({
             />
           </div>
           <div>
-            <label className={labelClass}>Last Oil Change Mileage</label>
+            <label className={labelClass}>Last Oil Change {mileLabel}</label>
             <input
               name="last_oil_change_mileage"
               type="number"
@@ -253,15 +274,6 @@ export function AssetForm({
               type="date"
               className={inputClass}
               defaultValue={v?.inspection_due_date ?? ''}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>DOT Inspection Due</label>
-            <input
-              name="dot_inspection_due_date"
-              type="date"
-              className={inputClass}
-              defaultValue={v?.dot_inspection_due_date ?? ''}
             />
           </div>
           <div>

@@ -74,7 +74,7 @@ export default async function AssetDetailPage({
   const [{ data: asset }, { data: mileageHistory }, { data: maintenanceHistory }] = await Promise.all([
     admin
       .from('assets')
-      .select('*, asset_types(name)')
+      .select('*, asset_types(name), assigned:profiles!assets_assigned_profile_id_fkey(full_name)')
       .eq('id', id)
       .eq('company_id', profile!.company_id)
       .single(),
@@ -171,46 +171,61 @@ export default async function AssetDetailPage({
           <div className="divide-y divide-gray-50">
             <InfoRow label="Asset Type" value={(asset as any).asset_types?.name} />
             <InfoRow label="Unit Number" value={asset.unit_number} />
+            <InfoRow label="Assigned To" value={(asset as any).assigned?.full_name} />
             <InfoRow label="Year" value={asset.year} />
             <InfoRow label="Make" value={asset.make} />
             <InfoRow label="Model" value={asset.model} />
-            <InfoRow label="VIN" value={asset.vin} />
-            <InfoRow label="Serial Number" value={asset.serial_number} />
+            <InfoRow label="VIN / Serial Number" value={asset.vin} />
             <InfoRow label="License Plate" value={asset.license_plate} />
-            <InfoRow
-              label="Current Mileage"
-              value={asset.current_mileage != null ? `${asset.current_mileage.toLocaleString()} mi` : null}
-            />
+            {(asset as any).uses_hours ? (
+              <InfoRow
+                label="Current Hours"
+                value={(asset as any).current_hours != null ? `${Number((asset as any).current_hours).toLocaleString()} hrs` : null}
+              />
+            ) : (
+              <InfoRow
+                label="Current Mileage"
+                value={asset.current_mileage != null ? `${asset.current_mileage.toLocaleString()} mi` : null}
+              />
+            )}
           </div>
         </div>
 
         {/* Oil Change */}
         {(asset.last_oil_change_date || asset.oil_change_interval_miles) && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-900 mb-2">Oil Change</h2>
+            <h2 className="font-semibold text-gray-900 mb-2">Oil Change / Service</h2>
             <div className="divide-y divide-gray-50">
-              <InfoRow label="Last Oil Change" value={asset.last_oil_change_date} />
+              <InfoRow label="Last Service Date" value={asset.last_oil_change_date} />
               <InfoRow
-                label="Last Oil Change Mi"
-                value={asset.last_oil_change_mileage != null ? `${asset.last_oil_change_mileage.toLocaleString()} mi` : null}
+                label={(asset as any).uses_hours ? 'Last Service Hours' : 'Last Service Mileage'}
+                value={asset.last_oil_change_mileage != null
+                  ? `${asset.last_oil_change_mileage.toLocaleString()} ${(asset as any).uses_hours ? 'hrs' : 'mi'}`
+                  : null}
               />
               <InfoRow
-                label="Next Oil Change Mi"
-                value={asset.next_oil_change_mileage != null ? `${asset.next_oil_change_mileage.toLocaleString()} mi` : null}
+                label={(asset as any).uses_hours ? 'Next Service Hours' : 'Next Service Mileage'}
+                value={asset.next_oil_change_mileage != null
+                  ? `${asset.next_oil_change_mileage.toLocaleString()} ${(asset as any).uses_hours ? 'hrs' : 'mi'}`
+                  : null}
               />
-              <InfoRow label="Interval (miles)" value={asset.oil_change_interval_miles ? `every ${asset.oil_change_interval_miles.toLocaleString()} mi` : null} />
+              <InfoRow
+                label={(asset as any).uses_hours ? 'Interval (hours)' : 'Interval (miles)'}
+                value={asset.oil_change_interval_miles
+                  ? `every ${asset.oil_change_interval_miles.toLocaleString()} ${(asset as any).uses_hours ? 'hrs' : 'mi'}`
+                  : null}
+              />
               <InfoRow label="Interval (months)" value={asset.oil_change_interval_months ? `every ${asset.oil_change_interval_months} months` : null} />
             </div>
           </div>
         )}
 
         {/* Due Dates */}
-        {(asset.inspection_due_date || asset.dot_inspection_due_date || asset.registration_due_date || asset.insurance_due_date) && (
+        {(asset.inspection_due_date || asset.registration_due_date || asset.insurance_due_date) && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-semibold text-gray-900 mb-3">Due Dates</h2>
             <div className="space-y-2">
               <DueDate label="Inspection" date={asset.inspection_due_date} />
-              <DueDate label="DOT Inspection" date={asset.dot_inspection_due_date} />
               <DueDate label="Registration / Tag" date={asset.registration_due_date} />
               <DueDate label="Insurance" date={asset.insurance_due_date} />
             </div>

@@ -77,38 +77,56 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (!existingProfile) {
-      const { data: company } = await admin
-        .from('companies')
-        .select('id')
-        .eq('slug', 'rps')
-        .single()
+      // Check if there's a pre-created profile for this email (added via "Add Employee" flow)
+      // Supabase email-links the Google identity automatically, so data.user.id will be the
+      // same as the pre-created auth user ID. But if the profile was created with a different
+      // auth user ID, we fall back to an email lookup.
+      const userEmail = data.user.email?.toLowerCase()
+      const { data: emailProfile } = userEmail
+        ? await admin.from('profiles').select('id').eq('email', userEmail).maybeSingle()
+        : { data: null }
 
-      const meta = data.user.user_metadata ?? {}
-      const fullName =
-        (meta.full_name as string | undefined) ??
-        (meta.name as string | undefined) ??
-        data.user.email?.split('@')[0] ??
-        'Unknown'
+      if (emailProfile && emailProfile.id !== data.user.id) {
+        // A pre-created profile exists with this email but a different UUID —
+        // update it to the actual auth user ID so it matches going forward.
+        // (This is rare; normally Supabase links identities and keeps the same UUID.)
+        await admin.from('profiles').update({ id: data.user.id }).eq('id', emailProfile.id)
+        console.log('[callback] linked pre-created profile to auth user')
+      } else if (!emailProfile) {
+        // Genuinely new user — create their profile
+        const { data: company } = await admin
+          .from('companies')
+          .select('id')
+          .eq('slug', 'rps')
+          .single()
 
-      let role = 'viewer'
-      if (company?.id) {
-        const { count } = await admin
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('company_id', company.id)
-          .eq('role', 'owner')
-        if ((count ?? 0) === 0) role = 'owner'
+        const meta = data.user.user_metadata ?? {}
+        const fullName =
+          (meta.full_name as string | undefined) ??
+          (meta.name as string | undefined) ??
+          data.user.email?.split('@')[0] ??
+          'Unknown'
+
+        let role = 'viewer'
+        if (company?.id) {
+          const { count } = await admin
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('company_id', company.id)
+            .eq('role', 'owner')
+          if ((count ?? 0) === 0) role = 'owner'
+        }
+
+        await admin.from('profiles').insert({
+          id: data.user.id,
+          company_id: company?.id ?? null,
+          full_name: fullName,
+          email: data.user.email!,
+          role,
+        })
+
+        console.log('[callback] profile created, role:', role)
       }
-
-      await admin.from('profiles').insert({
-        id: data.user.id,
-        company_id: company?.id ?? null,
-        full_name: fullName,
-        email: data.user.email!,
-        role,
-      })
-
-      console.log('[callback] profile created, role:', role)
     }
   } catch (profileErr) {
     // Non-fatal — the app layout has a belt-and-suspenders fallback

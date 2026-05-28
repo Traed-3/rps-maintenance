@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { UserRoleForm } from './user-role-form'
+import { AddEmployeeForm } from './add-employee-form'
 import { updateUserRole, toggleUserActive } from './actions'
 
 export default async function UsersSettingsPage() {
@@ -29,6 +30,10 @@ export default async function UsersSettingsPage() {
         <Link href="/settings" className="text-sm text-gray-500 hover:text-gray-700">← Settings</Link>
         <span className="text-gray-300">/</span>
         <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+      </div>
+
+      <div className="mb-6">
+        <AddEmployeeForm />
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-6 text-sm text-blue-800">

@@ -28,7 +28,7 @@ export default async function EditAssetPage({
     redirect(`/assets/${id}`)
   }
 
-  const [{ data: asset }, { data: assetTypes }] = await Promise.all([
+  const [{ data: asset }, { data: assetTypes }, { data: employees }] = await Promise.all([
     admin
       .from('assets')
       .select('*')
@@ -40,6 +40,12 @@ export default async function EditAssetPage({
       .select('id, name')
       .eq('company_id', profile.company_id)
       .order('name'),
+    admin
+      .from('profiles')
+      .select('id, full_name')
+      .eq('company_id', profile.company_id)
+      .eq('is_active', true)
+      .order('full_name'),
   ])
 
   if (!asset) notFound()
@@ -62,6 +68,7 @@ export default async function EditAssetPage({
         <AssetForm
           action={updateAssetWithId}
           assetTypes={assetTypes ?? []}
+          employees={employees ?? []}
           asset={asset}
         />
       </div>

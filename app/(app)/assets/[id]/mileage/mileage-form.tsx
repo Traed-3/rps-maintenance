@@ -11,11 +11,15 @@ const inputClass =
 export function MileageForm({
   action,
   today,
+  usesHours,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   today: string
+  usesHours?: boolean
 }) {
   const [state, formAction, isPending] = useActionState(action, null)
+  const label = usesHours ? 'Hours' : 'Mileage'
+  const unit = usesHours ? 'hours' : 'miles'
 
   return (
     <form action={formAction} className="space-y-5">
@@ -27,18 +31,19 @@ export function MileageForm({
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Mileage Reading <span className="text-red-500">*</span>
+          {label} Reading <span className="text-red-500">*</span>
         </label>
         <input
           name="mileage"
           type="number"
           min="0"
+          step={usesHours ? '0.1' : '1'}
           required
           autoFocus
           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-2xl font-bold text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="0"
         />
-        <p className="text-xs text-gray-400 mt-1">Enter the odometer reading in miles.</p>
+        <p className="text-xs text-gray-400 mt-1">Enter the current reading in {unit}.</p>
       </div>
 
       <div>
@@ -57,7 +62,7 @@ export function MileageForm({
       </div>
 
       <Button type="submit" className="w-full" size="lg" disabled={isPending}>
-        {isPending ? 'Saving…' : 'Submit Mileage'}
+        {isPending ? 'Saving…' : `Submit ${label}`}
       </Button>
     </form>
   )

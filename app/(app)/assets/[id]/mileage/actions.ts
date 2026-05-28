@@ -28,11 +28,10 @@ export async function addMileageEntry(
 
   if (!profile) return { error: 'Profile not found.' }
 
-  // Any authenticated company member can submit mileage
   const mileageVal = formData.get('mileage') as string
-  const mileage = parseInt(mileageVal, 10)
-  if (!mileageVal || isNaN(mileage) || mileage < 0) {
-    return { error: 'Please enter a valid mileage reading.' }
+  const reading = parseFloat(mileageVal)
+  if (!mileageVal || isNaN(reading) || reading < 0) {
+    return { error: 'Please enter a valid reading.' }
   }
 
   const entryDate =
@@ -41,37 +40,43 @@ export async function addMileageEntry(
   // Verify asset belongs to this company
   const { data: asset } = await admin
     .from('assets')
-    .select('id, current_mileage, oil_change_interval_miles, last_oil_change_mileage')
+    .select('id, uses_hours, current_mileage, current_hours, oil_change_interval_miles, last_oil_change_mileage')
     .eq('id', assetId)
     .eq('company_id', profile.company_id)
     .single()
 
   if (!asset) return { error: 'Asset not found.' }
 
-  // Insert the mileage entry
+  // Insert the mileage/hours entry (mileage_entries.mileage stores both)
   const { error: insertError } = await admin.from('mileage_entries').insert({
     company_id: profile.company_id,
     asset_id: assetId,
     submitted_by: profile.id,
     entry_date: entryDate,
-    mileage,
+    mileage: reading,
     source: 'manual',
     notes: (formData.get('notes') as string)?.trim() || null,
   })
 
   if (insertError) return { error: insertError.message }
 
-  // Update current_mileage on the asset if this reading is higher
-  if (asset.current_mileage === null || mileage > asset.current_mileage) {
-    const assetUpdates: Record<string, unknown> = { current_mileage: mileage }
-
-    // Recalculate next oil change mileage if we have enough data
-    if (asset.oil_change_interval_miles && asset.last_oil_change_mileage) {
-      assetUpdates.next_oil_change_mileage =
-        asset.last_oil_change_mileage + asset.oil_change_interval_miles
+  // Update the asset's current reading if this is higher
+  if ((asset as any).uses_hours) {
+    const currentHours = (asset as any).current_hours
+    if (currentHours === null || reading > Number(currentHours)) {
+      await admin.from('assets').update({ current_hours: reading }).eq('id', assetId)
     }
-
-    await admin.from('assets').update(assetUpdates).eq('id', assetId)
+  } else {
+    const currentMileage = asset.current_mileage
+    const mileageInt = Math.round(reading)
+    if (currentMileage === null || mileageInt > currentMileage) {
+      const assetUpdates: Record<string, unknown> = { current_mileage: mileageInt }
+      if (asset.oil_change_interval_miles && asset.last_oil_change_mileage) {
+        assetUpdates.next_oil_change_mileage =
+          asset.last_oil_change_mileage + asset.oil_change_interval_miles
+      }
+      await admin.from('assets').update(assetUpdates).eq('id', assetId)
+    }
   }
 
   revalidatePath(`/assets/${assetId}`)

@@ -50,6 +50,8 @@ export async function createAsset(_state: ActionState, formData: FormData): Prom
   const lastOilDate = str(formData.get('last_oil_change_date'))
   const lastOilMileage = num(formData.get('last_oil_change_mileage'))
   const intervalMiles = num(formData.get('oil_change_interval_miles'))
+  const usesHours = formData.get('uses_hours') === 'true'
+  const currentVal = num(formData.get('current_mileage'))
 
   // Auto-calculate next oil change mileage if we have the data
   const nextOilMileage =
@@ -67,16 +69,17 @@ export async function createAsset(_state: ActionState, formData: FormData): Prom
     make: str(formData.get('make')),
     model: str(formData.get('model')),
     vin: str(formData.get('vin')),
-    serial_number: str(formData.get('serial_number')),
     license_plate: str(formData.get('license_plate')),
-    current_mileage: num(formData.get('current_mileage')),
+    uses_hours: usesHours,
+    current_mileage: usesHours ? null : currentVal,
+    current_hours: usesHours ? currentVal : null,
+    assigned_profile_id: str(formData.get('assigned_profile_id')),
     oil_change_interval_miles: intervalMiles,
     oil_change_interval_months: num(formData.get('oil_change_interval_months')),
     last_oil_change_date: lastOilDate,
     last_oil_change_mileage: lastOilMileage,
     next_oil_change_mileage: nextOilMileage,
     inspection_due_date: str(formData.get('inspection_due_date')),
-    dot_inspection_due_date: str(formData.get('dot_inspection_due_date')),
     registration_due_date: str(formData.get('registration_due_date')),
     insurance_due_date: str(formData.get('insurance_due_date')),
     notes: str(formData.get('notes')),
@@ -110,6 +113,9 @@ export async function updateAsset(
       ? lastOilMileage + intervalMiles
       : null
 
+  const usesHours = formData.get('uses_hours') === 'true'
+  const currentVal = num(formData.get('current_mileage'))
+
   const { error } = await admin
     .from('assets')
     .update({
@@ -121,16 +127,17 @@ export async function updateAsset(
       make: str(formData.get('make')),
       model: str(formData.get('model')),
       vin: str(formData.get('vin')),
-      serial_number: str(formData.get('serial_number')),
       license_plate: str(formData.get('license_plate')),
-      current_mileage: num(formData.get('current_mileage')),
+      uses_hours: usesHours,
+      current_mileage: usesHours ? null : currentVal,
+      current_hours: usesHours ? currentVal : null,
+      assigned_profile_id: str(formData.get('assigned_profile_id')),
       oil_change_interval_miles: intervalMiles,
       oil_change_interval_months: num(formData.get('oil_change_interval_months')),
       last_oil_change_date: str(formData.get('last_oil_change_date')),
       last_oil_change_mileage: lastOilMileage,
       next_oil_change_mileage: nextOilMileage,
       inspection_due_date: str(formData.get('inspection_due_date')),
-      dot_inspection_due_date: str(formData.get('dot_inspection_due_date')),
       registration_due_date: str(formData.get('registration_due_date')),
       insurance_due_date: str(formData.get('insurance_due_date')),
       notes: str(formData.get('notes')),
@@ -143,8 +150,8 @@ export async function updateAsset(
   // Notify if asset set to unsafe or down
   const newStatus = str(formData.get('status'))
   if (newStatus === 'unsafe' || newStatus === 'down') {
-    const unitNumber = str(formData.get('unit_number')) ?? id
-    notifyAssetUnsafe(admin, profile.company_id, id, unitNumber, newStatus).catch(() => {})
+    const unitNum = str(formData.get('unit_number')) ?? id
+    notifyAssetUnsafe(admin, profile.company_id, id, unitNum, newStatus).catch(() => {})
   }
 
   revalidatePath('/assets')

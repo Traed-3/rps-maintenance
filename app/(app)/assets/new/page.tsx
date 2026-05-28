@@ -21,11 +21,10 @@ export default async function NewAssetPage() {
     redirect('/assets')
   }
 
-  const { data: assetTypes } = await admin
-    .from('asset_types')
-    .select('id, name')
-    .eq('company_id', profile.company_id)
-    .order('name')
+  const [{ data: assetTypes }, { data: employees }] = await Promise.all([
+    admin.from('asset_types').select('id, name').eq('company_id', profile.company_id).order('name'),
+    admin.from('profiles').select('id, full_name').eq('company_id', profile.company_id).eq('is_active', true).order('full_name'),
+  ])
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -37,7 +36,7 @@ export default async function NewAssetPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <AssetForm action={createAsset} assetTypes={assetTypes ?? []} />
+        <AssetForm action={createAsset} assetTypes={assetTypes ?? []} employees={employees ?? []} />
       </div>
     </div>
   )
