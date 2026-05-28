@@ -14,6 +14,12 @@ function num(val: FormDataEntryValue | null) {
   return isNaN(n) ? null : n
 }
 
+function flt(val: FormDataEntryValue | null) {
+  if (!val || val === '') return null
+  const n = parseFloat(val as string)
+  return isNaN(n) ? null : n
+}
+
 function str(val: FormDataEntryValue | null) {
   const s = (val as string)?.trim()
   return s || null
@@ -51,7 +57,7 @@ export async function createAsset(_state: ActionState, formData: FormData): Prom
   const lastOilMileage = num(formData.get('last_oil_change_mileage'))
   const intervalMiles = num(formData.get('oil_change_interval_miles'))
   const usesHours = formData.get('uses_hours') === 'true'
-  const currentVal = num(formData.get('current_mileage'))
+  const currentVal = flt(formData.get('current_mileage'))
 
   // Auto-calculate next oil change mileage if we have the data
   const nextOilMileage =
@@ -114,7 +120,7 @@ export async function updateAsset(
       : null
 
   const usesHours = formData.get('uses_hours') === 'true'
-  const currentVal = num(formData.get('current_mileage'))
+  const currentVal = flt(formData.get('current_mileage'))
 
   const { error } = await admin
     .from('assets')
