@@ -1,11 +1,21 @@
 'use client'
 
+import { createClient } from '@/lib/supabase/client'
+
 export function SignInButton() {
-  function handleSignIn() {
-    // Force a full browser navigation — Next.js's client router would intercept
-    // an <a href> click and fetch the response as data instead of following the
-    // redirect, which breaks the PKCE cookie flow.
-    window.location.href = '/api/auth/google'
+  async function handleSignIn() {
+    // Use the browser Supabase client so it can store the PKCE code_verifier
+    // in a cookie via document.cookie BEFORE navigating to Google.
+    // A server-side Route Handler can't guarantee the cookie is flushed to the
+    // browser before the redirect fires, which is why exchangeCodeForSession
+    // was failing — no verifier in the callback request.
+    const supabase = createClient()
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
   }
 
   return (
