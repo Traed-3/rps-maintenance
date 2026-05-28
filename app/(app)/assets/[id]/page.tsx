@@ -128,7 +128,7 @@ export default async function AssetDetailPage({
           <Link href={`/assets/${id}/mileage`}>
             <Button variant="outline" className="gap-2">
               <Gauge className="w-4 h-4" />
-              Add Mileage
+              {(asset as any).uses_hours ? 'Add Hours' : 'Add Mileage'}
             </Button>
           </Link>
           {canManage && (
@@ -284,7 +284,9 @@ export default async function AssetDetailPage({
         {/* Mileage History */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-gray-900">Mileage History</h2>
+            <h2 className="font-semibold text-gray-900">
+              {(asset as any).uses_hours ? 'Hours History' : 'Mileage History'}
+            </h2>
             <Link
               href={`/assets/${id}/mileage`}
               className="text-sm text-blue-600 hover:text-blue-800 font-medium"
@@ -294,7 +296,7 @@ export default async function AssetDetailPage({
           </div>
           {historyWithDelta.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-4">
-              No mileage entries yet.{' '}
+              No {(asset as any).uses_hours ? 'hours' : 'mileage'} entries yet.{' '}
               <Link href={`/assets/${id}/mileage`} className="text-blue-600 hover:underline">
                 Add the first one.
               </Link>
@@ -305,7 +307,9 @@ export default async function AssetDetailPage({
                 <thead>
                   <tr className="border-b border-gray-100">
                     <th className="text-left py-2 pr-4 font-medium text-gray-500">Date</th>
-                    <th className="text-right py-2 pr-4 font-medium text-gray-500">Mileage</th>
+                    <th className="text-right py-2 pr-4 font-medium text-gray-500">
+                      {(asset as any).uses_hours ? 'Hours' : 'Mileage'}
+                    </th>
                     <th className="text-right py-2 pr-4 font-medium text-gray-500">+/−</th>
                     <th className="text-left py-2 font-medium text-gray-500">Notes</th>
                   </tr>
@@ -321,7 +325,7 @@ export default async function AssetDetailPage({
                         })}
                       </td>
                       <td className="py-2 pr-4 text-right font-semibold text-gray-900 whitespace-nowrap">
-                        {entry.mileage.toLocaleString()} mi
+                        {entry.mileage.toLocaleString()} {(asset as any).uses_hours ? 'hrs' : 'mi'}
                       </td>
                       <td className="py-2 pr-4 text-right whitespace-nowrap">
                         {entry.delta != null ? (
