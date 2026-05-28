@@ -22,7 +22,7 @@ export default async function UsersSettingsPage() {
     .eq('company_id', profile!.company_id)
     .order('full_name')
 
-  const ROLE_ORDER = ['owner', 'manager', 'shop_manager', 'shop_employee', 'viewer']
+  const ROLE_ORDER = ['owner', 'manager', 'shop_manager', 'shop_employee', 'service_tech', 'office_staff', 'viewer']
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -117,6 +117,8 @@ export default async function UsersSettingsPage() {
           <p><strong>Manager</strong> — Can create/edit tickets, view reports, approve time entries.</p>
           <p><strong>Shop Manager</strong> — Manages repair tickets and shop employees. Can approve time.</p>
           <p><strong>Shop Employee</strong> — Can clock in/out, update ticket status, log time.</p>
+          <p><strong>Service Tech</strong> — Field technician. Can log mileage/hours and update asset status.</p>
+          <p><strong>Office Staff</strong> — Administrative access. Can view assets and records.</p>
           <p><strong>Viewer</strong> — Read-only. Cannot edit anything.</p>
         </div>
       </div>

@@ -12,6 +12,8 @@ const inputClass =
 const ROLES = [
   { value: 'shop_employee', label: 'Shop Employee' },
   { value: 'shop_manager',  label: 'Shop Manager' },
+  { value: 'service_tech',  label: 'Service Tech' },
+  { value: 'office_staff',  label: 'Office Staff' },
   { value: 'viewer',        label: 'Viewer (read-only)' },
   { value: 'manager',       label: 'Manager' },
 ]

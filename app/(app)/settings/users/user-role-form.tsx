@@ -7,6 +7,8 @@ const ROLES = [
   { value: 'manager',       label: 'Manager' },
   { value: 'shop_manager',  label: 'Shop Manager' },
   { value: 'shop_employee', label: 'Shop Employee' },
+  { value: 'service_tech',  label: 'Service Tech' },
+  { value: 'office_staff',  label: 'Office Staff' },
   { value: 'viewer',        label: 'Viewer' },
 ]
 
