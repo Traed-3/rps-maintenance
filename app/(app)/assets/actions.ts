@@ -65,7 +65,7 @@ export async function createAsset(_state: ActionState, formData: FormData): Prom
       ? lastOilMileage + intervalMiles
       : null
 
-  const { error } = await admin.from('assets').insert({
+  const { data, error } = await admin.from('assets').insert({
     company_id: profile.company_id,
     unit_number: unitNumber,
     asset_type_id: str(formData.get('asset_type_id')),
@@ -89,9 +89,20 @@ export async function createAsset(_state: ActionState, formData: FormData): Prom
     registration_due_date: str(formData.get('registration_due_date')),
     insurance_due_date: str(formData.get('insurance_due_date')),
     notes: str(formData.get('notes')),
-  })
+  }).select('id').single()
 
   if (error) return { error: error.message }
+
+  // Save the photo if one was uploaded during creation
+  const photoUrl = str(formData.get('photo_url'))
+  if (photoUrl && data?.id) {
+    await admin.from('asset_photos').insert({
+      asset_id:    data.id,
+      uploaded_by: profile.id,
+      photo_url:   photoUrl,
+      is_primary:  true,
+    })
+  }
 
   revalidatePath('/assets')
   redirect('/assets')

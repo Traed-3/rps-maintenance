@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ImageUpload } from '@/components/ui/image-upload'
 
 type AssetType = { id: string; name: string }
 type Employee = { id: string; full_name: string }
@@ -59,6 +60,7 @@ export function AssetForm({
 }) {
   const [state, formAction, isPending] = useActionState(action, null)
   const [usesHours, setUsesHours] = useState(asset?.uses_hours ?? false)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const v = asset
 
   const mileLabel = usesHours ? 'Hours' : 'Miles'
@@ -307,6 +309,25 @@ export function AssetForm({
           defaultValue={v?.notes ?? ''}
         />
       </section>
+
+      {/* Photo — only shown when adding a new asset */}
+      {!asset && (
+        <section>
+          <h2 className="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">
+            Asset Photo <span className="text-sm font-normal text-gray-400">(optional)</span>
+          </h2>
+          <input type="hidden" name="photo_url" value={photoUrl ?? ''} />
+          <ImageUpload
+            bucket="asset-photos"
+            value={photoUrl}
+            onChange={setPhotoUrl}
+            label="Take or Upload Asset Photo"
+          />
+          <p className="text-xs text-gray-400 mt-2">
+            You can also add more photos from the asset detail page after saving.
+          </p>
+        </section>
+      )}
 
       <div className="flex items-center gap-3 pt-2">
         <Button type="submit" disabled={isPending}>
