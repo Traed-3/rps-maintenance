@@ -81,7 +81,7 @@ export function AssetForm({
   const showRegistration = !NO_REGISTRATION_TYPES.includes(selectedTypeName)
 
   return (
-    <form action={formAction} className="space-y-8">
+    <form action={formAction} className="space-y-8" autoComplete="off">
       {state?.error && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           {state.error}
@@ -267,6 +267,7 @@ export function AssetForm({
               type="date"
               className={inputClass}
               defaultValue={v?.last_oil_change_date ?? ''}
+              autoComplete="off"
             />
           </div>
           <div>
@@ -295,6 +296,7 @@ export function AssetForm({
               type="date"
               className={inputClass}
               defaultValue={v?.inspection_due_date ?? ''}
+              autoComplete="off"
             />
           </div>
           {showRegistration && (
@@ -305,6 +307,7 @@ export function AssetForm({
                 type="date"
                 className={inputClass}
                 defaultValue={v?.registration_due_date ?? ''}
+                autoComplete="off"
               />
             </div>
           )}
@@ -316,6 +319,7 @@ export function AssetForm({
                 type="date"
                 className={inputClass}
                 defaultValue={v?.insurance_due_date ?? ''}
+                autoComplete="off"
               />
             </div>
           )}
