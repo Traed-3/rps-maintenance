@@ -11,6 +11,7 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  Receipt,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -22,6 +23,7 @@ const navItems = [
   { href: '/maintenance', label: 'Maintenance', icon: Wrench, active: true },
   { href: '/tickets', label: 'Tickets', icon: ClipboardList, active: true },
   { href: '/shop', label: 'Shop', icon: Users, active: true },
+  { href: '/expenses', label: 'Expenses', icon: Receipt, active: true },
   { href: '/reports', label: 'Reports', icon: BarChart3, active: true },
   { href: '/settings', label: 'Settings', icon: Settings, active: true },
 ]

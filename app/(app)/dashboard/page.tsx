@@ -6,7 +6,8 @@ import { TicketStatusBadge, PriorityBadge } from '@/components/tickets/ticket-ba
 import { StatusBadge } from '@/components/assets/status-badge'
 import { calcDateDue, calcOilChangeDue, toBand, BAND_CONFIG, sortByUrgency, type DueStatus } from '@/lib/maintenance'
 import { checkOverdueMaintenanceNotifications, checkForgotClockOut } from '@/lib/notifications'
-import { ClipboardList, AlertTriangle, Truck, Package, Wrench, Calendar, Users, Clock } from 'lucide-react'
+import { createOverdueMaintenanceTickets } from '@/lib/auto-tickets'
+import { ClipboardList, AlertTriangle, Truck, Package, Wrench, Calendar, Users, Clock, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const STATUS_LABELS: Record<string, string> = {
@@ -50,6 +51,9 @@ export default async function DashboardPage() {
   const companyId = profile!.company_id
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
 
+  const weekStart  = new Date(todayStart); weekStart.setDate(todayStart.getDate() - todayStart.getDay())
+  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1)
+
   const [
     { count: openCount },
     { count: criticalCount },
@@ -59,6 +63,9 @@ export default async function DashboardPage() {
     { data: employees },
     { data: todayClocks },
     { data: recentTickets },
+    { count: completedToday },
+    { count: completedWeek },
+    { count: completedMonth },
   ] = await Promise.all([
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)'),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('priority', ['critical', 'safety']).not('status', 'in', '(completed,closed,deferred)'),
@@ -68,6 +75,9 @@ export default async function DashboardPage() {
     admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', ['shop_employee', 'shop_manager']).eq('is_active', true).order('full_name'),
     admin.from('time_clock_entries').select('profile_id, clock_in, clock_out, total_minutes').eq('company_id', companyId).gte('clock_in', todayStart.toISOString()),
     admin.from('repair_tickets').select('id, ticket_number, title, status, priority, updated_at, assets(unit_number), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').order('updated_at', { ascending: false }).limit(8),
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', todayStart.toISOString()),
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', weekStart.toISOString()),
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', monthStart.toISOString()),
   ])
 
   const empIds = (employees ?? []).map(e => e.id)
@@ -121,9 +131,10 @@ export default async function DashboardPage() {
     due_this_month:   sortedAlerts.filter(a => toBand(a.status) === 'due_this_month').slice(0, 4),
   }
 
-  // Generate notifications in the background (fire-and-forget, non-blocking)
+  // Fire-and-forget background tasks
   checkOverdueMaintenanceNotifications(admin, companyId).catch(() => {})
   checkForgotClockOut(admin, companyId).catch(() => {})
+  createOverdueMaintenanceTickets(admin, companyId).catch(() => {})
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
@@ -142,7 +153,7 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      {/* Row 1 — 8 summary cards */}
+      {/* Row 1 — Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Open Tickets"      value={openCount ?? 0}           icon={ClipboardList} color="blue"   href="/tickets" />
         <StatCard label="Critical / Safety" value={criticalCount ?? 0}       icon={AlertTriangle} color="red"    href="/tickets?priority=critical" alert />
@@ -152,6 +163,13 @@ export default async function DashboardPage() {
         <StatCard label="Due This Week"     value={dueThisWeekCount}         icon={Calendar}      color="orange" href="/maintenance" />
         <StatCard label="Clocked In"        value={clockedInCount}           icon={Users}         color="green"  href="/shop" />
         <StatCard label="Shop Hrs Today"    value={(totalShopMins / 60).toFixed(1) + 'h'} icon={Clock} color="gray" href="/shop" />
+      </div>
+
+      {/* Tickets Completed Row */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Completed Today"   value={completedToday ?? 0}  icon={CheckCircle} color="green" href="/tickets?status=completed" />
+        <StatCard label="Completed This Week" value={completedWeek ?? 0} icon={CheckCircle} color="green" href="/tickets?status=completed" />
+        <StatCard label="Completed This Month" value={completedMonth ?? 0} icon={CheckCircle} color="green" href="/tickets?status=completed" />
       </div>
 
       {/* Row 2 — Maintenance alert bands */}

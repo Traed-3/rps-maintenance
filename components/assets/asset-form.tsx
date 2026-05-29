@@ -229,14 +229,13 @@ export function AssetForm({
               defaultValue={v?.oil_change_interval_miles ?? ''}
             />
           </div>
-          <div>
-            <label className={labelClass}>Change Interval (months)</label>
+          <div className="hidden">
             <input
               name="oil_change_interval_months"
               type="number"
-              className={inputClass}
-              placeholder="e.g. 6"
               defaultValue={v?.oil_change_interval_months ?? ''}
+              tabIndex={-1}
+              aria-hidden="true"
             />
           </div>
           <div>

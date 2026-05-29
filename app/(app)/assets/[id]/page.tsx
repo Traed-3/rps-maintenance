@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/assets/status-badge'
 import { Button } from '@/components/ui/button'
 import { Pencil, Gauge, Wrench } from 'lucide-react'
-
+import { revalidatePath } from 'next/cache'
 import { DeleteAssetButton } from './delete-button'
+import { AssetPhotoSection } from '@/components/assets/asset-photo-section'
 
 function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
   if (value == null || value === '') return null
@@ -71,7 +72,7 @@ export default async function AssetDetailPage({
     .eq('id', user!.id)
     .single()
 
-  const [{ data: asset }, { data: mileageHistory }, { data: maintenanceHistory }] = await Promise.all([
+  const [{ data: asset }, { data: mileageHistory }, { data: maintenanceHistory }, { data: assetPhotos }] = await Promise.all([
     admin
       .from('assets')
       .select('*, asset_types(name), assigned:profiles!assets_assigned_profile_id_fkey(full_name)')
@@ -91,7 +92,18 @@ export default async function AssetDetailPage({
       .eq('asset_id', id)
       .order('performed_date', { ascending: false })
       .limit(20),
+    admin.from('asset_photos').select('id, photo_url, caption, is_primary').eq('asset_id', id).order('created_at'),
   ])
+
+  async function saveAssetPhoto(photoUrl: string, caption: string) {
+    'use server'
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const admin = createAdminClient()
+    await admin.from('asset_photos').insert({ asset_id: id, uploaded_by: user.id, photo_url: photoUrl, caption: caption || null })
+    revalidatePath(`/assets/${id}`)
+  }
 
   // Compute mileage deltas for history display
   const historyWithDelta = (mileageHistory ?? []).map((entry, i, arr) => {
@@ -345,6 +357,9 @@ export default async function AssetDetailPage({
             </div>
           )}
         </div>
+
+        {/* Asset Photos */}
+        <AssetPhotoSection assetId={id} initialPhotos={assetPhotos ?? []} onSave={saveAssetPhoto} />
 
         {/* Danger zone */}
         {canDelete && (

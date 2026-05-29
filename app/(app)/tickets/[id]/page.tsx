@@ -9,6 +9,8 @@ import { changeTicketStatus, addComment } from '../actions'
 import { CommentForm } from './comment-form'
 import { StatusButtons } from './status-buttons'
 import { LaborTimer } from './labor-timer'
+import { TicketPhotoUpload } from '@/components/tickets/ticket-photo-upload'
+import { revalidatePath } from 'next/cache'
 
 export default async function TicketDetailPage({
   params,
@@ -74,6 +76,18 @@ export default async function TicketDetailPage({
   async function handleStatusChange(nextStatus: string) {
     'use server'
     await changeTicketStatus(id, nextStatus)
+  }
+
+  async function saveTicketPhoto(fileUrl: string, fileName: string) {
+    'use server'
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const admin = createAdminClient()
+    await admin.from('repair_ticket_attachments').insert({
+      ticket_id: id, uploaded_by: user.id, file_url: fileUrl, file_name: fileName, file_type: 'image/jpeg',
+    })
+    revalidatePath(`/tickets/${id}`)
   }
 
   return (
@@ -145,6 +159,15 @@ export default async function TicketDetailPage({
             <div className="bg-white rounded-xl border border-green-200 p-5">
               <h2 className="font-semibold text-gray-900 mb-2">Completion Notes</h2>
               <p className="text-sm text-gray-700">{ticket.completion_notes}</p>
+            </div>
+          )}
+
+          {/* Completion photo */}
+          {(ticket.status === 'in_progress' || ticket.status === 'completed' || ticket.status === 'closed') && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h2 className="font-semibold text-gray-900 mb-3">Completion Photo</h2>
+              <p className="text-xs text-gray-500 mb-3">Upload a photo of the completed work.</p>
+              <TicketPhotoUpload ticketId={id} onSave={saveTicketPhoto} />
             </div>
           )}
 
