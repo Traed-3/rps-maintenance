@@ -206,8 +206,14 @@ export async function logGeneralTime(
   const durationMins = parseInt(formData.get('duration_minutes') as string, 10)
   if (!durationMins || durationMins <= 0) return { error: 'Please enter a valid duration.' }
 
-  const entryType = (formData.get('entry_type') as string) || 'general_shop'
+  const entryType  = (formData.get('entry_type') as string) || 'general_shop'
   const description = ((formData.get('description') as string) || '').trim() || null
+  const ticketId   = (formData.get('ticket_id') as string)?.trim() || null
+
+  // If a ticket is selected, require that the ticket_id was provided
+  if (entryType === 'ticket' && !ticketId) {
+    return { error: 'Please select a ticket.' }
+  }
 
   const now = new Date()
   const startedAt = new Date(now.getTime() - durationMins * 60000)
@@ -225,7 +231,7 @@ export async function logGeneralTime(
   const { error } = await admin.from('labor_entries').insert({
     company_id: profile.company_id,
     profile_id: profile.id,
-    ticket_id: null,
+    ticket_id: entryType === 'ticket' ? ticketId : null,
     time_clock_entry_id: clockEntry?.id ?? null,
     entry_type: entryType,
     started_at: startedAt.toISOString(),
@@ -236,6 +242,20 @@ export async function logGeneralTime(
   })
 
   if (error) return { error: error.message }
+
+  // If logged against a ticket, update that ticket's total labor hours
+  if (entryType === 'ticket' && ticketId) {
+    const { data: entries } = await admin
+      .from('labor_entries')
+      .select('total_minutes')
+      .eq('ticket_id', ticketId)
+      .eq('entry_type', 'ticket')
+    const totalMins = (entries ?? []).reduce((s, e) => s + (e.total_minutes ?? 0), 0)
+    await admin.from('repair_tickets')
+      .update({ total_labor_hours: Math.round((totalMins / 60) * 100) / 100 })
+      .eq('id', ticketId)
+    revalidatePath(`/tickets/${ticketId}`)
+  }
 
   revalidatePath('/shop')
   revalidatePath('/shop/general-time')
