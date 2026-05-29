@@ -264,14 +264,16 @@ export default async function DashboardPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {(employees ?? []).map(emp => {
+                {(employees ?? [])
+                  .filter(emp => statusMap[emp.id]?.clock_status === 'clocked_in')
+                  .map(emp => {
                   const s = statusMap[emp.id]
                   const mins = hoursToday[emp.id] ?? 0
                   return (
                     <tr key={emp.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span className={cn('w-2 h-2 rounded-full shrink-0', s?.clock_status === 'clocked_in' ? 'bg-green-500' : 'bg-gray-300')} />
+                          <span className="w-2 h-2 rounded-full shrink-0 bg-green-500" />
                           <Link href={`/shop/employees/${emp.id}`} className="font-medium text-gray-900 hover:text-blue-600">{emp.full_name}</Link>
                         </div>
                       </td>
@@ -288,7 +290,9 @@ export default async function DashboardPage({
                     </tr>
                   )
                 })}
-                {!employees?.length && <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-400">No shop employees.</td></tr>}
+                {(employees ?? []).filter(emp => statusMap[emp.id]?.clock_status === 'clocked_in').length === 0 && (
+                  <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-400">No employees currently clocked in.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
