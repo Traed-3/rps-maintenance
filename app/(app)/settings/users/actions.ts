@@ -18,7 +18,7 @@ export async function updateUserRole(userId: string, newRole: string) {
   if (!profile || !['owner', 'manager'].includes(profile.role)) return
   if (userId === profile.id) return  // can't change own role
 
-  const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'service_tech', 'office_staff', 'viewer']
+  const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'service_tech', 'construction_tech', 'office_staff', 'viewer']
   if (!validRoles.includes(newRole)) return
 
   const admin = createAdminClient()
@@ -59,7 +59,7 @@ export async function createEmployee(
 
   if (!fullName || !email) return { error: 'Name and email are required.' }
 
-  const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'service_tech', 'office_staff', 'viewer']
+  const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'service_tech', 'construction_tech', 'office_staff', 'viewer']
   if (!validRoles.includes(role)) return { error: 'Invalid role.' }
 
   const admin = createAdminClient()

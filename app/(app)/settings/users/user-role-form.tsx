@@ -3,13 +3,14 @@
 import { useTransition } from 'react'
 
 const ROLES = [
-  { value: 'owner',         label: 'Owner' },
-  { value: 'manager',       label: 'Manager' },
-  { value: 'shop_manager',  label: 'Shop Manager' },
-  { value: 'shop_employee', label: 'Shop Employee' },
-  { value: 'service_tech',  label: 'Service Tech' },
-  { value: 'office_staff',  label: 'Office Staff' },
-  { value: 'viewer',        label: 'Viewer' },
+  { value: 'owner',             label: 'Owner' },
+  { value: 'manager',           label: 'Manager' },
+  { value: 'shop_manager',      label: 'Shop Manager' },
+  { value: 'shop_employee',     label: 'Shop Employee' },
+  { value: 'service_tech',      label: 'Service Tech' },
+  { value: 'construction_tech', label: 'Construction Tech' },
+  { value: 'office_staff',      label: 'Office Staff' },
+  { value: 'viewer',            label: 'Viewer' },
 ]
 
 export function UserRoleForm({

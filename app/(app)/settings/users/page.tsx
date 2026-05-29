@@ -118,6 +118,7 @@ export default async function UsersSettingsPage() {
           <p><strong>Shop Manager</strong> — Manages repair tickets and shop employees. Can approve time.</p>
           <p><strong>Shop Employee</strong> — Can clock in/out, update ticket status, log time.</p>
           <p><strong>Service Tech</strong> — Field technician. Can log mileage/hours and update asset status.</p>
+          <p><strong>Construction Tech</strong> — Construction field technician. Can log time and view assigned work.</p>
           <p><strong>Office Staff</strong> — Administrative access. Can view assets and records.</p>
           <p><strong>Viewer</strong> — Read-only. Cannot edit anything.</p>
         </div>
