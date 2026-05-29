@@ -61,9 +61,15 @@ export function AssetForm({
   const [state, formAction, isPending] = useActionState(action, null)
   const [usesHours, setUsesHours] = useState(asset?.uses_hours ?? false)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [selectedTypeId, setSelectedTypeId] = useState(asset?.asset_type_id ?? '')
   const v = asset
 
   const mileLabel = usesHours ? 'Hours' : 'Miles'
+
+  // Types that don't need oil change tracking
+  const NO_OIL_TYPE_NAMES = ['Trailer']
+  const selectedTypeName = assetTypes.find(t => t.id === selectedTypeId)?.name ?? ''
+  const showOilChange = !NO_OIL_TYPE_NAMES.includes(selectedTypeName)
 
   return (
     <form action={formAction} className="space-y-8">
@@ -94,7 +100,12 @@ export function AssetForm({
 
           <div>
             <label className={labelClass}>Asset Type</label>
-            <select name="asset_type_id" className={inputClass} defaultValue={v?.asset_type_id ?? ''}>
+            <select
+              name="asset_type_id"
+              className={inputClass}
+              value={selectedTypeId}
+              onChange={e => setSelectedTypeId(e.target.value)}
+            >
               <option value="">— Select type —</option>
               {assetTypes.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -215,8 +226,8 @@ export function AssetForm({
         </div>
       </section>
 
-      {/* Oil / Service Interval */}
-      <section>
+      {/* Oil / Service Interval — hidden for Trailer and other non-engine asset types */}
+      <section className={showOilChange ? '' : 'hidden'} aria-hidden={!showOilChange}>
         <h2 className="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">
           Oil Change / Service Interval
         </h2>
