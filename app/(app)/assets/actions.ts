@@ -183,6 +183,15 @@ export async function deleteAsset(id: string): Promise<void> {
   const admin = createAdminClient()
   await admin.from('assets').delete().eq('id', id).eq('company_id', profile.company_id)
 
+  // Revalidate every page that shows asset data so the deleted asset
+  // doesn't linger in Next.js's cache
   revalidatePath('/assets')
+  revalidatePath('/maintenance')
+  revalidatePath('/maintenance/oil-changes')
+  revalidatePath('/maintenance/brakes')
+  revalidatePath('/maintenance/tires')
+  revalidatePath('/maintenance/inspections')
+  revalidatePath('/maintenance/registrations')
+  revalidatePath('/dashboard')
   redirect('/assets')
 }
