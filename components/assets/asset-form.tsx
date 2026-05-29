@@ -66,10 +66,19 @@ export function AssetForm({
 
   const mileLabel = usesHours ? 'Hours' : 'Miles'
 
-  // Types that don't need oil change tracking
-  const NO_OIL_TYPE_NAMES = ['Trailer']
   const selectedTypeName = assetTypes.find(t => t.id === selectedTypeId)?.name ?? ''
-  const showOilChange = !NO_OIL_TYPE_NAMES.includes(selectedTypeName)
+
+  // Oil change: hide for Trailer, Equipment, Machine, Other
+  const NO_OIL_TYPES = ['Trailer', 'Equipment', 'Machine', 'Other']
+  const showOilChange = !NO_OIL_TYPES.includes(selectedTypeName)
+
+  // Insurance: hide for Equipment, Machine, Trailer, Other
+  const NO_INSURANCE_TYPES = ['Equipment', 'Machine', 'Trailer', 'Other']
+  const showInsurance = !NO_INSURANCE_TYPES.includes(selectedTypeName)
+
+  // Registration/Tag: hide for Equipment, Machine, Other (Trailers DO need tags)
+  const NO_REGISTRATION_TYPES = ['Equipment', 'Machine', 'Other']
+  const showRegistration = !NO_REGISTRATION_TYPES.includes(selectedTypeName)
 
   return (
     <form action={formAction} className="space-y-8">
@@ -288,24 +297,28 @@ export function AssetForm({
               defaultValue={v?.inspection_due_date ?? ''}
             />
           </div>
-          <div>
-            <label className={labelClass}>Registration / Tag Due</label>
-            <input
-              name="registration_due_date"
-              type="date"
-              className={inputClass}
-              defaultValue={v?.registration_due_date ?? ''}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Insurance Due</label>
-            <input
-              name="insurance_due_date"
-              type="date"
-              className={inputClass}
-              defaultValue={v?.insurance_due_date ?? ''}
-            />
-          </div>
+          {showRegistration && (
+            <div>
+              <label className={labelClass}>Registration / Tag Due</label>
+              <input
+                name="registration_due_date"
+                type="date"
+                className={inputClass}
+                defaultValue={v?.registration_due_date ?? ''}
+              />
+            </div>
+          )}
+          {showInsurance && (
+            <div>
+              <label className={labelClass}>Insurance Due</label>
+              <input
+                name="insurance_due_date"
+                type="date"
+                className={inputClass}
+                defaultValue={v?.insurance_due_date ?? ''}
+              />
+            </div>
+          )}
         </div>
       </section>
 
