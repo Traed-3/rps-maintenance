@@ -69,12 +69,15 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)'),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('priority', ['critical', 'safety']).not('status', 'in', '(completed,closed,deferred)'),
-    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).eq('waiting_on_parts', true).not('status', 'in', '(completed,closed,deferred)'),
+    // Waiting on parts: count tickets where the boolean is set OR status is waiting_parts
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).or('waiting_on_parts.eq.true,status.eq.waiting_parts').not('status', 'in', '(completed,closed,deferred)'),
     admin.from('assets').select('id, unit_number, name, make, model, year, status').eq('company_id', companyId).in('status', ['down', 'unsafe']),
-    admin.from('assets').select('id, unit_number, name, make, model, status, current_mileage, next_oil_change_mileage, next_brake_inspection_date, next_tire_inspection_date, inspection_due_date, dot_inspection_due_date, registration_due_date, insurance_due_date').eq('company_id', companyId).neq('status', 'retired'),
-    admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', ['shop_employee', 'shop_manager']).eq('is_active', true).order('full_name'),
+    // Removed dot_inspection_due_date — DOT inspections are not tracked here
+    admin.from('assets').select('id, unit_number, name, make, model, status, current_mileage, next_oil_change_mileage, next_brake_inspection_date, next_tire_inspection_date, inspection_due_date, registration_due_date, insurance_due_date').eq('company_id', companyId).neq('status', 'retired'),
+    admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', ['shop_employee', 'shop_manager', 'service_tech', 'construction_tech']).eq('is_active', true).order('full_name'),
     admin.from('time_clock_entries').select('profile_id, clock_in, clock_out, total_minutes').eq('company_id', companyId).gte('clock_in', todayStart.toISOString()),
-    admin.from('repair_tickets').select('id, ticket_number, title, status, priority, updated_at, assets(unit_number), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').order('updated_at', { ascending: false }).limit(8),
+    // Show up to 15 open tickets so all 18 are visible
+    admin.from('repair_tickets').select('id, ticket_number, title, status, priority, updated_at, assets(unit_number), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').order('updated_at', { ascending: false }).limit(20),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', todayStart.toISOString()),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', weekStart.toISOString()),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', monthStart.toISOString()),
@@ -109,7 +112,7 @@ export default async function DashboardPage() {
       { r: calcDateDue(a.next_brake_inspection_date), category: 'Brakes', href: `/assets/${a.id}/maintenance/brakes` },
       { r: calcDateDue(a.next_tire_inspection_date), category: 'Tires', href: `/assets/${a.id}/maintenance/tires` },
       { r: calcDateDue(a.inspection_due_date), category: 'Inspection', href: `/assets/${a.id}/edit` },
-      { r: calcDateDue(a.dot_inspection_due_date), category: 'DOT Inspection', href: `/assets/${a.id}/edit` },
+      // DOT Inspection removed — not tracked in this system
       { r: calcDateDue(a.registration_due_date), category: 'Registration', href: `/assets/${a.id}/edit` },
       { r: calcDateDue(a.insurance_due_date), category: 'Insurance', href: `/assets/${a.id}/edit` },
     ]

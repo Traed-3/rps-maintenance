@@ -12,7 +12,7 @@ export default async function InspectionsPage() {
 
   const { data: assets } = await admin
     .from('assets')
-    .select('id, unit_number, name, make, model, year, status, inspection_due_date, dot_inspection_due_date')
+    .select('id, unit_number, name, make, model, year, status, inspection_due_date')
     .eq('company_id', profile!.company_id)
     .neq('status', 'retired')
     .order('unit_number')
@@ -24,9 +24,7 @@ export default async function InspectionsPage() {
   for (const a of assets ?? []) {
     const label = [a.year, a.make, a.model].filter(Boolean).join(' ') || a.name || ''
     const insp = calcDateDue(a.inspection_due_date)
-    const dot  = calcDateDue(a.dot_inspection_due_date)
     rows.push({ id: a.id, unit_number: a.unit_number, vehicleLabel: label, type: 'State Inspection', date: a.inspection_due_date, status: insp.status, daysUntil: insp.daysUntil, due: insp })
-    rows.push({ id: a.id, unit_number: a.unit_number, vehicleLabel: label, type: 'DOT Inspection',   date: a.dot_inspection_due_date, status: dot.status, daysUntil: dot.daysUntil, due: dot })
   }
 
   const filtered = rows.filter(r => r.date)

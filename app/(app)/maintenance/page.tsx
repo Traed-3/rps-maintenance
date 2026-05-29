@@ -26,7 +26,6 @@ type AssetRow = {
   next_brake_inspection_date: string | null
   next_tire_inspection_date: string | null
   inspection_due_date: string | null
-  dot_inspection_due_date: string | null
   registration_due_date: string | null
   insurance_due_date: string | null
 }
@@ -97,12 +96,6 @@ function buildAlerts(assets: AssetRow[]): AlertItem[] {
       items.push({ ...base, category: 'Inspection', status: insp.status, daysUntil: insp.daysUntil, detail: insp.label, href: `/assets/${a.id}/edit` })
     }
 
-    // DOT inspection
-    const dot = calcDateDue(a.dot_inspection_due_date)
-    if (dot.status !== 'ok' && dot.status !== 'no_data') {
-      items.push({ ...base, category: 'DOT Inspection', status: dot.status, daysUntil: dot.daysUntil, detail: dot.label, href: `/assets/${a.id}/edit` })
-    }
-
     // Registration / tag
     const reg = calcDateDue(a.registration_due_date)
     if (reg.status !== 'ok' && reg.status !== 'no_data') {
@@ -138,7 +131,7 @@ export default async function MaintenancePage() {
       id, unit_number, name, make, model, status,
       current_mileage, next_oil_change_mileage,
       next_brake_inspection_date, next_tire_inspection_date,
-      inspection_due_date, dot_inspection_due_date,
+      inspection_due_date,
       registration_due_date, insurance_due_date
     `)
     .eq('company_id', profile!.company_id)
