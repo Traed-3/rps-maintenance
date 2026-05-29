@@ -41,7 +41,19 @@ type AlertItem = {
   category: string; status: DueStatus; daysUntil: number | null; detail: string; href: string
 }
 
-export default async function DashboardPage() {
+// Roles shown in the default "shop" view
+const SHOP_ROLES = ['shop_employee', 'shop_manager', 'mechanic', 'service_tech', 'construction_tech']
+// All roles that can appear in the employee status table
+const ALL_STAFF_ROLES = ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech', 'office_staff']
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ staff?: string }>
+}) {
+  const { staff = 'shop' } = await searchParams
+  const showAll = staff === 'all'
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const admin = createAdminClient()
@@ -74,7 +86,7 @@ export default async function DashboardPage() {
     admin.from('assets').select('id, unit_number, name, make, model, year, status').eq('company_id', companyId).in('status', ['down', 'unsafe']),
     // Removed dot_inspection_due_date — DOT inspections are not tracked here
     admin.from('assets').select('id, unit_number, name, make, model, status, current_mileage, next_oil_change_mileage, next_brake_inspection_date, next_tire_inspection_date, inspection_due_date, registration_due_date, insurance_due_date').eq('company_id', companyId).neq('status', 'retired'),
-    admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', ['shop_employee', 'shop_manager', 'service_tech', 'construction_tech']).eq('is_active', true).order('full_name'),
+    admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', showAll ? ALL_STAFF_ROLES : SHOP_ROLES).eq('is_active', true).order('full_name'),
     admin.from('time_clock_entries').select('profile_id, clock_in, clock_out, total_minutes').eq('company_id', companyId).gte('clock_in', todayStart.toISOString()),
     // Show up to 15 open tickets so all 18 are visible
     admin.from('repair_tickets').select('id, ticket_number, title, status, priority, updated_at, assets(unit_number), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').order('updated_at', { ascending: false }).limit(20),
@@ -220,7 +232,24 @@ export default async function DashboardPage() {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-gray-900">Employee Status</h2>
-          <Link href="/shop" className="text-sm text-blue-600 hover:text-blue-800 font-medium">Shop →</Link>
+          <div className="flex items-center gap-3">
+            {/* Shop / All toggle */}
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+              <Link
+                href="/dashboard?staff=shop"
+                className={`px-3 py-1.5 transition-colors ${!showAll ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              >
+                Shop View
+              </Link>
+              <Link
+                href="/dashboard?staff=all"
+                className={`px-3 py-1.5 transition-colors ${showAll ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              >
+                All Staff
+              </Link>
+            </div>
+            <Link href="/shop" className="text-sm text-blue-600 hover:text-blue-800 font-medium">Shop →</Link>
+          </div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">

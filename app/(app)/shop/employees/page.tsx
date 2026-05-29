@@ -19,7 +19,7 @@ export default async function ShopEmployeesPage() {
     .from('profiles')
     .select('id, full_name, email, role, is_active')
     .eq('company_id', profile!.company_id)
-    .in('role', ['shop_employee', 'shop_manager'])
+    .in('role', ['shop_employee', 'shop_manager', 'mechanic', 'service_tech', 'construction_tech'])
     .order('full_name')
 
   const empIds = (employees ?? []).map(e => e.id)

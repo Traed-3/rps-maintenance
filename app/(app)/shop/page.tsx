@@ -43,7 +43,7 @@ export default async function ShopPage() {
     .from('profiles')
     .select('id, full_name, role')
     .eq('company_id', profile!.company_id)
-    .in('role', ['shop_employee', 'shop_manager'])
+    .in('role', ['shop_employee', 'shop_manager', 'mechanic', 'service_tech', 'construction_tech'])
     .eq('is_active', true)
     .order('full_name')
 
