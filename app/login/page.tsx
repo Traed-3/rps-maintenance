@@ -1,4 +1,5 @@
 import { SignInButton } from './sign-in-button'
+import { PasswordLoginForm } from './password-form'
 
 export default function LoginPage() {
   return (
@@ -18,15 +19,28 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Sign in to your account</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Use your RPS company Gmail address to log in.
-          </p>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 space-y-5">
 
-          <SignInButton />
+          {/* Email + password (master / admin login) */}
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-3">Sign in with password</p>
+            <PasswordLoginForm />
+          </div>
 
-          <p className="mt-4 text-xs text-center text-gray-400">
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-xs text-gray-400 font-medium">or</span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          {/* Google OAuth */}
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-3">Sign in with Gmail</p>
+            <SignInButton />
+          </div>
+
+          <p className="text-xs text-center text-gray-400">
             Access is limited to RPS employees only.
           </p>
         </div>
