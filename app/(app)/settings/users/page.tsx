@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { UserRoleForm } from './user-role-form'
 import { AddEmployeeForm } from './add-employee-form'
 import { DeleteUserButton } from './delete-user-button'
+import { EditUserButton } from './edit-user-button'
 import { updateUserRole, toggleUserActive } from './actions'
 
 export default async function UsersSettingsPage() {
@@ -19,7 +20,7 @@ export default async function UsersSettingsPage() {
 
   const { data: users } = await admin
     .from('profiles')
-    .select('id, full_name, email, role, is_active, created_at')
+    .select('id, full_name, email, phone, role, is_active, created_at')
     .eq('company_id', profile!.company_id)
     .order('full_name')
 
@@ -70,9 +71,13 @@ export default async function UsersSettingsPage() {
               }
               return (
                 <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {u.full_name}
-                    {isSelf && <span className="ml-1.5 text-xs text-gray-400">(you)</span>}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900">{u.full_name}</span>
+                      {isSelf && <span className="text-xs text-gray-400">(you)</span>}
+                      <EditUserButton user={{ id: u.id, full_name: u.full_name, email: u.email, phone: (u as any).phone ?? null }} />
+                    </div>
+                    {(u as any).phone && <p className="text-xs text-gray-400 mt-0.5">{(u as any).phone}</p>}
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell text-xs">{u.email}</td>
                   <td className="px-4 py-3">

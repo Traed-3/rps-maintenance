@@ -13,6 +13,33 @@ async function getProfile() {
   return data
 }
 
+// ── Edit user profile ─────────────────────────────────────────────────────────
+
+export async function editUser(
+  userId: string,
+  data: { full_name: string; email: string; phone?: string }
+): Promise<{ error?: string }> {
+  const profile = await getProfile()
+  if (!profile || !['owner', 'manager'].includes(profile.role)) {
+    return { error: 'Access denied.' }
+  }
+  const admin = createAdminClient()
+  if (data.email) {
+    const { error: authError } = await admin.auth.admin.updateUserById(userId, {
+      email: data.email.trim().toLowerCase(),
+    })
+    if (authError) return { error: authError.message }
+  }
+  const { error: profileError } = await admin.from('profiles').update({
+    full_name: data.full_name.trim(),
+    email:     data.email.trim().toLowerCase(),
+    phone:     data.phone?.trim() || null,
+  }).eq('id', userId).eq('company_id', profile.company_id)
+  if (profileError) return { error: profileError.message }
+  revalidatePath('/settings/users')
+  return {}
+}
+
 // ── Delete user — owner only ──────────────────────────────────────────────────
 
 export async function deleteUser(userId: string): Promise<{ error?: string }> {
