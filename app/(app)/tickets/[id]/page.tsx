@@ -242,6 +242,18 @@ export default async function TicketDetailPage({
                   <span className="text-red-700 font-medium capitalize">{ticket.safety_status.replace(/_/g, ' ')}</span>
                 </div>
               )}
+              {(ticket as any).due_date && (
+                <div className="flex justify-between pt-1 border-t border-gray-100">
+                  <span className="text-gray-500">Due Date</span>
+                  <span className={`font-semibold ${
+                    new Date((ticket as any).due_date) < new Date() ? 'text-red-600' :
+                    new Date((ticket as any).due_date) <= new Date(Date.now() + 7*86400000) ? 'text-orange-600' :
+                    'text-gray-700'
+                  }`}>
+                    {new Date((ticket as any).due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between pt-1 border-t border-gray-100">
                 <span className="text-gray-500">Created by</span>
                 <span className="text-gray-700">{(ticket as any).creator?.full_name ?? '—'}</span>
