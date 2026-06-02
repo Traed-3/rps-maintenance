@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ImageUpload } from '@/components/ui/image-upload'
+import { DateInput } from '@/components/ui/date-input'
 
 type AssetType = { id: string; name: string }
 type Employee = { id: string; full_name: string }
@@ -261,13 +262,11 @@ export function AssetForm({
           </div>
           <div>
             <label className={labelClass}>Last Oil Change Date</label>
-            <input
+            <DateInput
               name="last_oil_change_date"
-              type="date"
-              className={inputClass}
               value={lastOilDate}
-              onChange={e => setLastOilDate(e.target.value)}
-              autoComplete="off"
+              onChange={setLastOilDate}
+              className={inputClass}
             />
           </div>
           <div>
@@ -291,25 +290,21 @@ export function AssetForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Inspection Due</label>
-            <input
+            <DateInput
               name="inspection_due_date"
-              type="date"
-              className={inputClass}
               value={inspectionDate}
-              onChange={e => setInspectionDate(e.target.value)}
-              autoComplete="off"
+              onChange={setInspectionDate}
+              className={inputClass}
             />
           </div>
           {showRegistration && (
             <div>
               <label className={labelClass}>Registration / Tag Due</label>
-              <input
+              <DateInput
                 name="registration_due_date"
-                type="date"
-                className={inputClass}
                 value={registrationDate}
-                onChange={e => setRegistrationDate(e.target.value)}
-                autoComplete="off"
+                onChange={setRegistrationDate}
+                className={inputClass}
               />
             </div>
           )}
