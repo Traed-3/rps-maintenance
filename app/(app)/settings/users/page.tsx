@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { UserRoleForm } from './user-role-form'
 import { AddEmployeeForm } from './add-employee-form'
+import { DeleteUserButton } from './delete-user-button'
 import { updateUserRole, toggleUserActive } from './actions'
 
 export default async function UsersSettingsPage() {
@@ -53,6 +54,7 @@ export default async function UsersSettingsPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Email</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Role</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
+              {profile!.role === 'owner' && <th className="px-4 py-3" />}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -103,6 +105,14 @@ export default async function UsersSettingsPage() {
                       </form>
                     )}
                   </td>
+                  {/* Delete — owner only, can't delete yourself */}
+                  {profile!.role === 'owner' && (
+                    <td className="px-4 py-3 text-right">
+                      {!isSelf && (
+                        <DeleteUserButton userId={u.id} fullName={u.full_name} />
+                      )}
+                    </td>
+                  )}
                 </tr>
               )
             })}

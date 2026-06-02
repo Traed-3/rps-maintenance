@@ -13,6 +13,23 @@ async function getProfile() {
   return data
 }
 
+// ── Delete user — owner only ──────────────────────────────────────────────────
+
+export async function deleteUser(userId: string): Promise<{ error?: string }> {
+  const profile = await getProfile()
+  if (!profile || profile.role !== 'owner') return { error: 'Only owners can delete users.' }
+  if (userId === profile.id) return { error: 'You cannot delete your own account.' }
+
+  const admin = createAdminClient()
+
+  // Delete from Supabase Auth — cascades to profiles table automatically
+  const { error } = await admin.auth.admin.deleteUser(userId)
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings/users')
+  return {}
+}
+
 export async function updateUserRole(userId: string, newRole: string) {
   const profile = await getProfile()
   if (!profile || !['owner', 'manager'].includes(profile.role)) return
