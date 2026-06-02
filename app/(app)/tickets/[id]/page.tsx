@@ -25,7 +25,7 @@ export default async function TicketDetailPage({
 
   const { data: profile } = await admin.from('profiles').select('id, company_id, role').eq('id', user!.id).single()
 
-  const [{ data: ticket }, { data: comments }, { data: laborHistory }, { data: empStatus }] = await Promise.all([
+  const [{ data: ticket }, { data: comments }, { data: laborHistory }, { data: empStatus }, { data: allAssignees }] = await Promise.all([
     admin.from('repair_tickets')
       .select(`
         *,
@@ -50,6 +50,10 @@ export default async function TicketDetailPage({
       .select('clock_status, current_ticket_id, active_labor_entry_id')
       .eq('profile_id', user!.id)
       .maybeSingle(),
+    admin.from('repair_ticket_assignments')
+      .select('profile_id, profiles(full_name, role)')
+      .eq('ticket_id', id)
+      .eq('is_active', true),
   ])
 
   // Is the current user actively working on THIS ticket?
@@ -244,7 +248,11 @@ export default async function TicketDetailPage({
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Assigned to</span>
-                <span className="text-gray-700">{(ticket as any).assignee?.full_name ?? <span className="text-gray-400">Unassigned</span>}</span>
+                <span className="text-gray-700">
+                  {(allAssignees && allAssignees.length > 0)
+                    ? allAssignees.map((a: any) => a.profiles?.full_name).filter(Boolean).join(', ')
+                    : <span className="text-gray-400">Unassigned</span>}
+                </span>
               </div>
               {ticket.vendor && (
                 <div className="flex justify-between">

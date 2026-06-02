@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 type ActionState = { error: string } | null
@@ -8,7 +8,7 @@ const inp = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gra
 const lbl = 'block text-sm font-medium text-gray-700 mb-1'
 
 type Asset    = { id: string; unit_number: string; name: string | null; make: string | null; model: string | null }
-type Employee = { id: string; full_name: string }
+type Employee = { id: string; full_name: string; role: string }
 
 type Ticket = {
   id: string
@@ -32,14 +32,26 @@ export function TicketForm({
   assets,
   employees,
   ticket,
+  currentAssigneeIds = [],
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   assets: Asset[]
   employees: Employee[]
   ticket?: Ticket
+  currentAssigneeIds?: string[]
 }) {
   const [state, formAction, isPending] = useActionState(action, null)
+  const [selected, setSelected] = useState<Set<string>>(new Set(currentAssigneeIds))
   const t = ticket
+
+  function toggleEmployee(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <form action={formAction} className="space-y-6">
@@ -80,13 +92,45 @@ export function TicketForm({
             </select>
           </div>
           <div>
-            <label className={lbl}>Assign To</label>
-            <select name="assigned_to" className={inp} defaultValue={t?.assigned_to ?? ''}>
-              <option value="">— Unassigned —</option>
+            <label className={lbl}>
+              Assign To
+              <span className="ml-1.5 text-xs font-normal text-gray-400">
+                — select one or more
+              </span>
+            </label>
+            {/* Hidden inputs carry the selected IDs */}
+            {Array.from(selected).map(id => (
+              <input key={id} type="hidden" name="assigned_to" value={id} />
+            ))}
+            <div className="rounded-lg border border-gray-300 divide-y divide-gray-100 max-h-48 overflow-y-auto">
+              {employees.length === 0 && (
+                <p className="px-3 py-2 text-sm text-gray-400">No employees found.</p>
+              )}
               {employees.map((e) => (
-                <option key={e.id} value={e.id}>{e.full_name}</option>
+                <label
+                  key={e.id}
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${
+                    selected.has(e.id) ? 'bg-blue-50' : ''
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(e.id)}
+                    onChange={() => toggleEmployee(e.id)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{e.full_name}</p>
+                    <p className="text-xs text-gray-400 capitalize">{e.role.replace(/_/g, ' ')}</p>
+                  </div>
+                </label>
               ))}
-            </select>
+            </div>
+            {selected.size > 0 && (
+              <p className="text-xs text-blue-600 mt-1 font-medium">
+                {selected.size} employee{selected.size !== 1 ? 's' : ''} selected
+              </p>
+            )}
           </div>
         </div>
       </section>

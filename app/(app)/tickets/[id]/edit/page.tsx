@@ -18,14 +18,16 @@ export default async function EditTicketPage({
   const { data: profile } = await admin.from('profiles').select('company_id, role').eq('id', user!.id).single()
   if (!profile || !['owner', 'manager', 'shop_manager'].includes(profile.role)) redirect(`/tickets/${id}`)
 
-  const [{ data: ticket }, { data: assets }, { data: employees }] = await Promise.all([
+  const [{ data: ticket }, { data: assets }, { data: employees }, { data: currentAssignments }] = await Promise.all([
     admin.from('repair_tickets').select('*').eq('id', id).eq('company_id', profile.company_id).single(),
     admin.from('assets').select('id, unit_number, name, make, model').eq('company_id', profile.company_id).neq('status', 'retired').order('unit_number'),
-    admin.from('profiles').select('id, full_name').eq('company_id', profile.company_id).in('role', ['shop_employee', 'shop_manager']).eq('is_active', true).order('full_name'),
+    admin.from('profiles').select('id, full_name, role').eq('company_id', profile.company_id).in('role', ['shop_employee', 'shop_manager', 'mechanic', 'service_tech', 'construction_tech']).eq('is_active', true).order('full_name'),
+    admin.from('repair_ticket_assignments').select('profile_id').eq('ticket_id', id).eq('is_active', true),
   ])
 
   if (!ticket) notFound()
 
+  const currentAssigneeIds = (currentAssignments ?? []).map(a => a.profile_id)
   const action = updateTicket.bind(null, id)
 
   return (
@@ -35,7 +37,7 @@ export default async function EditTicketPage({
         <h1 className="text-2xl font-bold text-gray-900 mt-2">Edit Ticket — {ticket.ticket_number}</h1>
       </div>
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <TicketForm action={action} assets={assets ?? []} employees={employees ?? []} ticket={ticket} />
+        <TicketForm action={action} assets={assets ?? []} employees={employees ?? []} ticket={ticket} currentAssigneeIds={currentAssigneeIds} />
       </div>
     </div>
   )

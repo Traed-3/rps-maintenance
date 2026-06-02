@@ -34,32 +34,36 @@ export async function createTicket(_state: ActionState, formData: FormData): Pro
   if (!title) return { error: 'Title is required.' }
 
   const admin = createAdminClient()
-  const assignedTo = str(formData.get('assigned_to'))
+  // Support multiple assignees — getAll returns all values for the same key
+  const assigneeIds = formData.getAll('assigned_to').map(v => (v as string).trim()).filter(Boolean)
+  const primaryAssignee = assigneeIds[0] ?? null
 
   const { data: ticket, error } = await admin.from('repair_tickets').insert({
     company_id:    profile.company_id,
     asset_id:      str(formData.get('asset_id')),
     created_by:    profile.id,
-    assigned_to:   assignedTo,
+    assigned_to:   primaryAssignee,
     title,
     description:   str(formData.get('description')),
     source:        str(formData.get('source')) ?? 'manual',
     priority:      str(formData.get('priority')) ?? 'normal',
     safety_status: str(formData.get('safety_status')) ?? 'none',
-    status:        assignedTo ? 'assigned' : 'new',
+    status:        assigneeIds.length > 0 ? 'assigned' : 'new',
     parts_needed:  bool(formData.get('parts_needed')),
     parts_notes:   str(formData.get('parts_notes')),
   }).select('id').single()
 
   if (error) return { error: error.message }
 
-  // Record assignment history if assigned
-  if (assignedTo && ticket) {
-    await admin.from('repair_ticket_assignments').insert({
-      ticket_id:   ticket.id,
-      profile_id:  assignedTo,
-      assigned_by: profile.id,
-    })
+  // Record all assignees in repair_ticket_assignments
+  if (assigneeIds.length > 0 && ticket) {
+    await admin.from('repair_ticket_assignments').insert(
+      assigneeIds.map(id => ({
+        ticket_id:   ticket.id,
+        profile_id:  id,
+        assigned_by: profile.id,
+      }))
+    )
   }
 
   revalidatePath('/tickets')
@@ -79,9 +83,12 @@ export async function updateTicket(id: string, _state: ActionState, formData: Fo
   if (!title) return { error: 'Title is required.' }
 
   const admin = createAdminClient()
+  const assigneeIds = formData.getAll('assigned_to').map(v => (v as string).trim()).filter(Boolean)
+  const primaryAssignee = assigneeIds[0] ?? null
+
   const { error } = await admin.from('repair_tickets').update({
     asset_id:      str(formData.get('asset_id')),
-    assigned_to:   str(formData.get('assigned_to')),
+    assigned_to:   primaryAssignee,
     title,
     description:   str(formData.get('description')),
     source:        str(formData.get('source')) ?? 'manual',
@@ -95,6 +102,18 @@ export async function updateTicket(id: string, _state: ActionState, formData: Fo
   }).eq('id', id).eq('company_id', profile.company_id)
 
   if (error) return { error: error.message }
+
+  // Replace all active assignments with the new selection
+  await admin.from('repair_ticket_assignments').update({ is_active: false }).eq('ticket_id', id)
+  if (assigneeIds.length > 0) {
+    await admin.from('repair_ticket_assignments').insert(
+      assigneeIds.map(pid => ({
+        ticket_id:   id,
+        profile_id:  pid,
+        assigned_by: profile.id,
+      }))
+    )
+  }
 
   revalidatePath('/tickets')
   revalidatePath(`/tickets/${id}`)

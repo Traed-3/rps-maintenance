@@ -15,7 +15,7 @@ export default async function NewTicketPage() {
 
   const [{ data: assets }, { data: employees }] = await Promise.all([
     admin.from('assets').select('id, unit_number, name, make, model').eq('company_id', profile.company_id).neq('status', 'retired').order('unit_number'),
-    admin.from('profiles').select('id, full_name').eq('company_id', profile.company_id).in('role', ['shop_employee', 'shop_manager']).eq('is_active', true).order('full_name'),
+    admin.from('profiles').select('id, full_name, role').eq('company_id', profile.company_id).in('role', ['shop_employee', 'shop_manager', 'mechanic', 'service_tech', 'construction_tech']).eq('is_active', true).order('full_name'),
   ])
 
   return (
