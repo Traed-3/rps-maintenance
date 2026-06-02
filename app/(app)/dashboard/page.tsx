@@ -85,7 +85,7 @@ export default async function DashboardPage({
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).or('waiting_on_parts.eq.true,status.eq.waiting_parts').not('status', 'in', '(completed,closed,deferred)'),
     admin.from('assets').select('id, unit_number, name, make, model, year, status').eq('company_id', companyId).in('status', ['down', 'unsafe']),
     // Removed dot_inspection_due_date — DOT inspections are not tracked here
-    admin.from('assets').select('id, unit_number, name, make, model, status, current_mileage, next_oil_change_mileage, next_brake_inspection_date, next_tire_inspection_date, inspection_due_date, registration_due_date, insurance_due_date').eq('company_id', companyId).neq('status', 'retired'),
+    admin.from('assets').select('id, unit_number, name, make, model, status, current_mileage, next_oil_change_mileage, next_brake_inspection_date, next_tire_inspection_date, inspection_due_date, registration_due_date').eq('company_id', companyId).neq('status', 'retired'),
     admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', showAll ? ALL_STAFF_ROLES : SHOP_ROLES).eq('is_active', true).order('full_name'),
     admin.from('time_clock_entries').select('profile_id, clock_in, clock_out, total_minutes').eq('company_id', companyId).gte('clock_in', todayStart.toISOString()),
     // Show up to 15 open tickets so all 18 are visible
@@ -126,7 +126,6 @@ export default async function DashboardPage({
       { r: calcDateDue(a.inspection_due_date), category: 'Inspection', href: `/assets/${a.id}/edit` },
       // DOT Inspection removed — not tracked in this system
       { r: calcDateDue(a.registration_due_date), category: 'Registration', href: `/assets/${a.id}/edit` },
-      { r: calcDateDue(a.insurance_due_date), category: 'Insurance', href: `/assets/${a.id}/edit` },
     ]
     for (const { r, category, href } of checks) {
       if (r.status !== 'ok' && r.status !== 'no_data') {

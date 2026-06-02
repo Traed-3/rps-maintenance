@@ -87,7 +87,6 @@ export async function createAsset(_state: ActionState, formData: FormData): Prom
     next_oil_change_mileage: nextOilMileage,
     inspection_due_date: str(formData.get('inspection_due_date')),
     registration_due_date: str(formData.get('registration_due_date')),
-    insurance_due_date: str(formData.get('insurance_due_date')),
     notes: str(formData.get('notes')),
   }).select('id').single()
 
@@ -156,8 +155,7 @@ export async function updateAsset(
       next_oil_change_mileage: nextOilMileage,
       inspection_due_date: str(formData.get('inspection_due_date')),
       registration_due_date: str(formData.get('registration_due_date')),
-      insurance_due_date: str(formData.get('insurance_due_date')),
-      notes: str(formData.get('notes')),
+        notes: str(formData.get('notes')),
     })
     .eq('id', id)
     .eq('company_id', profile.company_id)

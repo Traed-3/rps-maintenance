@@ -43,7 +43,6 @@ type Asset = {
   last_oil_change_mileage: number | null
   inspection_due_date: string | null
   registration_due_date: string | null
-  insurance_due_date: string | null
   notes: string | null
 }
 
@@ -62,6 +61,10 @@ export function AssetForm({
   const [usesHours, setUsesHours] = useState(asset?.uses_hours ?? false)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [selectedTypeId, setSelectedTypeId] = useState(asset?.asset_type_id ?? '')
+  // Controlled date states — browser cannot auto-fill these with today's date
+  const [lastOilDate,      setLastOilDate]      = useState(asset?.last_oil_change_date  ?? '')
+  const [inspectionDate,   setInspectionDate]   = useState(asset?.inspection_due_date   ?? '')
+  const [registrationDate, setRegistrationDate] = useState(asset?.registration_due_date ?? '')
   const v = asset
 
   const mileLabel = usesHours ? 'Hours' : 'Miles'
@@ -71,10 +74,6 @@ export function AssetForm({
   // Oil change: hide for Trailer, Equipment, Machine, Other
   const NO_OIL_TYPES = ['Trailer', 'Equipment', 'Machine', 'Other']
   const showOilChange = !NO_OIL_TYPES.includes(selectedTypeName)
-
-  // Insurance: hide for Equipment, Machine, Trailer, Other
-  const NO_INSURANCE_TYPES = ['Equipment', 'Machine', 'Trailer', 'Other']
-  const showInsurance = !NO_INSURANCE_TYPES.includes(selectedTypeName)
 
   // Registration/Tag: hide for Equipment, Machine, Other (Trailers DO need tags)
   const NO_REGISTRATION_TYPES = ['Equipment', 'Machine', 'Other']
@@ -266,7 +265,8 @@ export function AssetForm({
               name="last_oil_change_date"
               type="date"
               className={inputClass}
-              defaultValue={v?.last_oil_change_date ?? ''}
+              value={lastOilDate}
+              onChange={e => setLastOilDate(e.target.value)}
               autoComplete="off"
             />
           </div>
@@ -295,7 +295,8 @@ export function AssetForm({
               name="inspection_due_date"
               type="date"
               className={inputClass}
-              defaultValue={v?.inspection_due_date ?? ''}
+              value={inspectionDate}
+              onChange={e => setInspectionDate(e.target.value)}
               autoComplete="off"
             />
           </div>
@@ -306,23 +307,13 @@ export function AssetForm({
                 name="registration_due_date"
                 type="date"
                 className={inputClass}
-                defaultValue={v?.registration_due_date ?? ''}
+                value={registrationDate}
+                onChange={e => setRegistrationDate(e.target.value)}
                 autoComplete="off"
               />
             </div>
           )}
-          {showInsurance && (
-            <div>
-              <label className={labelClass}>Insurance Due</label>
-              <input
-                name="insurance_due_date"
-                type="date"
-                className={inputClass}
-                defaultValue={v?.insurance_due_date ?? ''}
-                autoComplete="off"
-              />
-            </div>
-          )}
+
         </div>
       </section>
 

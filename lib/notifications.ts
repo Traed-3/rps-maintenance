@@ -76,7 +76,7 @@ export async function checkOverdueMaintenanceNotifications(
       current_mileage, next_oil_change_mileage,
       next_brake_inspection_date, next_tire_inspection_date,
       inspection_due_date,
-      registration_due_date, insurance_due_date`)
+      registration_due_date`)
     .eq('company_id', companyId)
     .not('status', 'in', '(retired,down,unsafe)')
 
@@ -87,7 +87,6 @@ export async function checkOverdueMaintenanceNotifications(
       { r: calcDateDue(a.next_tire_inspection_date),    label: 'Tire Inspection' },
       { r: calcDateDue(a.inspection_due_date),          label: 'State Inspection' },
       { r: calcDateDue(a.registration_due_date),        label: 'Registration' },
-      { r: calcDateDue(a.insurance_due_date),           label: 'Insurance' },
     ]
 
     for (const { r, label } of checks) {

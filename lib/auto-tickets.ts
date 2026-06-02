@@ -15,7 +15,6 @@ const CHECKS = [
   { key: 'tires',        label: 'Tire Inspection',   priority: 'normal'  },
   { key: 'inspection',   label: 'State Inspection',  priority: 'high'    },
   { key: 'registration', label: 'Registration',      priority: 'normal'  },
-  { key: 'insurance',    label: 'Insurance',         priority: 'high'    },
 ]
 
 export async function createOverdueMaintenanceTickets(
@@ -27,7 +26,7 @@ export async function createOverdueMaintenanceTickets(
     .select(`id, unit_number, current_mileage, next_oil_change_mileage,
       next_brake_inspection_date, next_tire_inspection_date,
       inspection_due_date,
-      registration_due_date, insurance_due_date`)
+      registration_due_date`)
     .eq('company_id', companyId)
     .not('status', 'in', '(retired,down,unsafe)')
 
@@ -42,7 +41,6 @@ export async function createOverdueMaintenanceTickets(
       { r: calcDateDue(asset.next_tire_inspection_date),   label: 'Tire Inspection',  priority: 'normal' },
       { r: calcDateDue(asset.inspection_due_date),         label: 'State Inspection', priority: 'high' },
       { r: calcDateDue(asset.registration_due_date),       label: 'Registration',     priority: 'normal' },
-      { r: calcDateDue(asset.insurance_due_date),          label: 'Insurance',        priority: 'high' },
     ]
 
     for (const { r, label, priority } of dateChecks) {

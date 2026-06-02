@@ -233,13 +233,12 @@ export default async function AssetDetailPage({
         )}
 
         {/* Due Dates */}
-        {(asset.inspection_due_date || asset.registration_due_date || asset.insurance_due_date) && (
+        {(asset.inspection_due_date || asset.registration_due_date) && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-semibold text-gray-900 mb-3">Due Dates</h2>
             <div className="space-y-2">
               <DueDate label="Inspection" date={asset.inspection_due_date} />
               <DueDate label="Registration / Tag" date={asset.registration_due_date} />
-              <DueDate label="Insurance" date={asset.insurance_due_date} />
             </div>
           </div>
         )}

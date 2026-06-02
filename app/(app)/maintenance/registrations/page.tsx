@@ -12,7 +12,7 @@ export default async function RegistrationsPage() {
 
   const { data: assets } = await admin
     .from('assets')
-    .select('id, unit_number, name, make, model, year, status, registration_due_date, insurance_due_date')
+    .select('id, unit_number, name, make, model, year, status, registration_due_date')
     .eq('company_id', profile!.company_id)
     .neq('status', 'retired')
     .order('unit_number')
@@ -23,9 +23,7 @@ export default async function RegistrationsPage() {
   for (const a of assets ?? []) {
     const label = [a.year, a.make, a.model].filter(Boolean).join(' ') || a.name || ''
     const reg = calcDateDue(a.registration_due_date)
-    const ins = calcDateDue(a.insurance_due_date)
     rows.push({ id: a.id, unit_number: a.unit_number, vehicleLabel: label, type: 'Registration / Tag', date: a.registration_due_date, status: reg.status, daysUntil: reg.daysUntil, due: reg })
-    rows.push({ id: a.id, unit_number: a.unit_number, vehicleLabel: label, type: 'Insurance',          date: a.insurance_due_date,    status: ins.status, daysUntil: ins.daysUntil, due: ins })
   }
 
   const filtered = rows.filter(r => r.date)
@@ -36,7 +34,7 @@ export default async function RegistrationsPage() {
       <div className="mb-6 flex items-center gap-3">
         <Link href="/maintenance" className="text-sm text-gray-500 hover:text-gray-700">← Maintenance</Link>
         <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">Registrations &amp; Insurance</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Registrations</h1>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
