@@ -66,9 +66,11 @@ export default async function DashboardPage({
   const weekStart  = new Date(todayStart); weekStart.setDate(todayStart.getDate() - todayStart.getDay())
   const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1)
 
-  const weekEnd = new Date(todayStart); weekEnd.setDate(todayStart.getDate() + 7)
-  const todayStr  = todayStart.toISOString().split('T')[0]
-  const weekEndStr = weekEnd.toISOString().split('T')[0]
+  const weekEnd      = new Date(todayStart); weekEnd.setDate(todayStart.getDate() + 7)
+  const monthEnd     = new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 0)
+  const todayStr     = todayStart.toISOString().split('T')[0]
+  const weekEndStr   = weekEnd.toISOString().split('T')[0]
+  const monthEndStr  = monthEnd.toISOString().split('T')[0]
 
   const [
     { count: openCount },
@@ -84,28 +86,33 @@ export default async function DashboardPage({
     { count: completedMonth },
     { count: overdueTicketCount },
     { count: dueThisWeekTicketCount },
-    { data: dueTickets },
+    // New boxes
+    { data: gpsTickets },
+    { data: oilChangeTickets },
+    { data: partsReceivedTickets },
+    { data: maintenanceAlertTickets },
   ] = await Promise.all([
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)'),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('priority', ['critical', 'safety']).not('status', 'in', '(completed,closed,deferred)'),
-    // Waiting on parts: count tickets where the boolean is set OR status is waiting_parts
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).or('waiting_on_parts.eq.true,status.eq.waiting_parts').not('status', 'in', '(completed,closed,deferred)'),
     admin.from('assets').select('id, unit_number, name, make, model, year, status').eq('company_id', companyId).in('status', ['down', 'unsafe']),
-    // Removed dot_inspection_due_date — DOT inspections are not tracked here
     admin.from('assets').select('id, unit_number, name, make, model, status, current_mileage, next_oil_change_mileage, next_brake_inspection_date, next_tire_inspection_date, inspection_due_date, registration_due_date').eq('company_id', companyId).neq('status', 'retired'),
     admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', showAll ? ALL_STAFF_ROLES : SHOP_ROLES).eq('is_active', true).order('full_name'),
     admin.from('time_clock_entries').select('profile_id, clock_in, clock_out, total_minutes').eq('company_id', companyId).gte('clock_in', todayStart.toISOString()),
-    // Show up to 15 open tickets so all 18 are visible
     admin.from('repair_tickets').select('id, ticket_number, title, status, priority, updated_at, assets(unit_number), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').order('updated_at', { ascending: false }).limit(20),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', todayStart.toISOString()),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', weekStart.toISOString()),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', monthStart.toISOString()),
-    // Tickets with due_date already past (overdue)
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lt('due_date', todayStr),
-    // Tickets with due_date within next 7 days
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr),
-    // Ticket list for "Due This Week" section
-    admin.from('repair_tickets').select('id, ticket_number, title, status, priority, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr).order('due_date'),
+    // GPS Needed box
+    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%GPS Unit Needed%').order('due_date'),
+    // Oil Change Service Due box
+    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%Oil Change Service Due%').order('due_date'),
+    // Parts Received — Need Scheduled (parts ordered + arrived, not yet completed)
+    admin.from('repair_tickets').select('id, ticket_number, title, status, assets(unit_number)').eq('company_id', companyId).eq('parts_ordered', true).eq('waiting_on_parts', false).not('status', 'in', '(completed,closed,deferred,waiting_parts)').order('updated_at', { ascending: false }),
+    // Maintenance Alerts: all open tickets with due_date up to end of this month
+    admin.from('repair_tickets').select('id, ticket_number, title, status, priority, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lte('due_date', monthEndStr).order('due_date'),
   ])
 
   const empIds = (employees ?? []).map(e => e.id)
@@ -192,51 +199,147 @@ export default async function DashboardPage({
         <StatCard label="Shop Hrs Today"    value={(totalShopMins / 60).toFixed(1) + 'h'} icon={Clock} color="gray" href="/shop" />
       </div>
 
-      {/* Tickets Completed Row */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Completed Today"   value={completedToday ?? 0}  icon={CheckCircle} color="green" href="/tickets?status=completed" />
-        <StatCard label="Completed This Week" value={completedWeek ?? 0} icon={CheckCircle} color="green" href="/tickets?status=completed" />
-        <StatCard label="Completed This Month" value={completedMonth ?? 0} icon={CheckCircle} color="green" href="/tickets?status=completed" />
+      {/* ── Dashboard info boxes: Completed + GPS + Oil Change + Parts ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+
+        {/* Completed — stacked */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+            <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide">Tickets Completed</h3>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {[
+              { label: 'Today',      value: completedToday ?? 0 },
+              { label: 'This Week',  value: completedWeek ?? 0 },
+              { label: 'This Month', value: completedMonth ?? 0 },
+            ].map(row => (
+              <Link key={row.label} href="/tickets?status=completed"
+                className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
+                <span className="text-sm text-gray-600">{row.label}</span>
+                <span className="text-lg font-bold text-green-700">{row.value}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* GPS Still Needed */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-blue-700 uppercase tracking-wide">📡 GPS Still Needed</h3>
+            <span className="text-xs font-bold text-blue-600">{gpsTickets?.length ?? 0}</span>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-40 overflow-y-auto">
+            {gpsTickets?.length === 0 && <p className="px-4 py-3 text-xs text-gray-400">All GPS units installed ✓</p>}
+            {(gpsTickets ?? []).map(t => (
+              <Link key={t.id} href={`/tickets/${t.id}`}
+                className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors">
+                <span className="text-sm font-medium text-gray-900">{(t as any).assets?.unit_number ?? '—'}</span>
+                {(t as any).due_date && (
+                  <span className="text-xs text-gray-400">
+                    {new Date((t as any).due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Oil Change Service Due */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-amber-700 uppercase tracking-wide">🔧 Oil Change Due</h3>
+            <span className="text-xs font-bold text-amber-600">{oilChangeTickets?.length ?? 0}</span>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-40 overflow-y-auto">
+            {oilChangeTickets?.length === 0 && <p className="px-4 py-3 text-xs text-gray-400">All oil changes current ✓</p>}
+            {(oilChangeTickets ?? []).map(t => (
+              <Link key={t.id} href={`/tickets/${t.id}`}
+                className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors">
+                <span className="text-sm font-medium text-gray-900">{(t as any).assets?.unit_number ?? '—'}</span>
+                {(t as any).due_date && (
+                  <span className={`text-xs font-semibold ${new Date((t as any).due_date) <= new Date() ? 'text-red-600' : 'text-amber-600'}`}>
+                    {new Date((t as any).due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Parts Received — Need Scheduled */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-2.5 bg-purple-50 border-b border-purple-100 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-purple-700 uppercase tracking-wide">📦 Parts In – Schedule</h3>
+            <span className="text-xs font-bold text-purple-600">{partsReceivedTickets?.length ?? 0}</span>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-40 overflow-y-auto">
+            {partsReceivedTickets?.length === 0 && <p className="px-4 py-3 text-xs text-gray-400">No parts awaiting scheduling</p>}
+            {(partsReceivedTickets ?? []).map(t => (
+              <Link key={t.id} href={`/tickets/${t.id}`}
+                className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
+                  <p className="text-xs text-gray-400">{(t as any).assets?.unit_number ?? '—'}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Row 2 — Maintenance alert bands */}
-      {totalAlerts > 0 && (
+      {/* ── Maintenance Alerts — ticket due_date based ────────────────── */}
+      {(maintenanceAlertTickets ?? []).length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold text-gray-900">Maintenance Alerts</h2>
-            <Link href="/maintenance" className="text-sm text-blue-600 hover:text-blue-800 font-medium">View all {totalAlerts} →</Link>
+            <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+              All tickets →
+            </Link>
           </div>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-            {(Object.entries(bands) as [keyof typeof bands, AlertItem[]][]).map(([band, items]) => {
-              const allInBand = sortedAlerts.filter(a => toBand(a.status) === band)
-              if (allInBand.length === 0) return null
-              const cfg = BAND_CONFIG[band]
-              const styles = BAND_STYLES[band]
-              return (
-                <div key={band} className="rounded-xl border border-gray-200 overflow-hidden">
-                  <div className={cn('px-3 py-2 text-xs font-bold uppercase tracking-wide', styles.header)}>
-                    {cfg.label} · {allInBand.length}
-                  </div>
-                  <div className="divide-y divide-gray-50 bg-white">
-                    {items.map((item, i) => (
-                      <div key={i} className="px-3 py-2 flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <Link href={`/assets/${item.assetId}`} className="text-xs font-semibold text-gray-900 hover:text-blue-600 truncate block">{item.unitNumber}</Link>
-                          <p className="text-xs text-gray-500 truncate">{item.category}</p>
-                        </div>
-                        <Link href={item.href} className="text-xs text-blue-600 hover:text-blue-800 shrink-0 font-medium">Fix →</Link>
+          {(() => {
+            const now = new Date(todayStr)
+            const w7  = new Date(weekEndStr)
+            const w14 = new Date(todayStr); w14.setDate(w14.getDate() + 14)
+            const bands2 = {
+              overdue:          (maintenanceAlertTickets ?? []).filter(t => new Date((t as any).due_date) < now),
+              due_this_week:    (maintenanceAlertTickets ?? []).filter(t => { const d = new Date((t as any).due_date); return d >= now && d <= w7 }),
+              due_next_2_weeks: (maintenanceAlertTickets ?? []).filter(t => { const d = new Date((t as any).due_date); return d > w7 && d <= w14 }),
+              due_this_month:   (maintenanceAlertTickets ?? []).filter(t => { const d = new Date((t as any).due_date); return d > w14 }),
+            }
+            const bandDefs = {
+              overdue:          { label: 'Overdue',        header: 'bg-red-600 text-white' },
+              due_this_week:    { label: 'Due This Week',  header: 'bg-orange-500 text-white' },
+              due_next_2_weeks: { label: 'Due in 2 Weeks', header: 'bg-yellow-400 text-gray-900' },
+              due_this_month:   { label: 'Due This Month', header: 'bg-blue-500 text-white' },
+            }
+            return (
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                {(Object.entries(bands2) as [keyof typeof bands2, typeof maintenanceAlertTickets][]).map(([band, items]) => {
+                  if (!items || items.length === 0) return null
+                  const def = bandDefs[band]
+                  return (
+                    <div key={band} className="rounded-xl border border-gray-200 overflow-hidden">
+                      <div className={cn('px-3 py-2 text-xs font-bold uppercase tracking-wide flex justify-between', def.header)}>
+                        <span>{def.label}</span>
+                        <span>{items.length}</span>
                       </div>
-                    ))}
-                    {allInBand.length > items.length && (
-                      <div className="px-3 py-2">
-                        <Link href="/maintenance" className="text-xs text-gray-400 hover:text-gray-600">+{allInBand.length - items.length} more →</Link>
+                      <div className="divide-y divide-gray-50 bg-white max-h-48 overflow-y-auto">
+                        {items.map(t => (
+                          <div key={t.id} className="px-3 py-2 flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-gray-900 truncate">{(t as any).assets?.unit_number ?? '—'}</p>
+                              <p className="text-xs text-gray-500 truncate">{t.title.replace(/ — .*/, '')}</p>
+                            </div>
+                            <Link href={`/tickets/${t.id}`} className="text-xs text-blue-600 hover:text-blue-800 shrink-0 font-medium">Open →</Link>
+                          </div>
+                        ))}
                       </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </section>
       )}
 
@@ -349,51 +452,6 @@ export default async function DashboardPage({
           </div>
         </div>
       </section>
-
-      {/* Due This Week — tickets with due_date within 7 days */}
-      {(dueTickets ?? []).length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-gray-900">Due This Week</h2>
-            <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">All tickets →</Link>
-          </div>
-          <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
-            <div className="divide-y divide-gray-50">
-              {(dueTickets ?? []).map(t => {
-                const due = new Date((t as any).due_date)
-                const daysUntil = Math.ceil((due.getTime() - todayStart.getTime()) / 86400000)
-                return (
-                  <div key={t.id} className="px-5 py-3 flex items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-gray-400">{t.ticket_number}</span>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
-                          daysUntil === 0 ? 'bg-red-100 text-red-800 border-red-200' :
-                          daysUntil <= 2 ? 'bg-orange-100 text-orange-800 border-orange-200' :
-                          'bg-yellow-100 text-yellow-800 border-yellow-200'
-                        }`}>
-                          {daysUntil === 0 ? 'Today' : `${daysUntil} day${daysUntil !== 1 ? 's' : ''}`}
-                        </span>
-                      </div>
-                      <Link href={`/tickets/${t.id}`} className="text-sm font-medium text-gray-900 hover:text-blue-600 block mt-0.5">
-                        {t.title}
-                      </Link>
-                      {(t as any).assets?.unit_number && (
-                        <p className="text-xs text-gray-400">{(t as any).assets.unit_number}</p>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs text-gray-500">
-                        {due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Row 5 — Due this month + Down assets */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

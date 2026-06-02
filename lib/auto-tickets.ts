@@ -44,7 +44,8 @@ export async function createOverdueMaintenanceTickets(
     ]
 
     for (const { r, label, priority } of dateChecks) {
-      if (r.status === 'overdue' || r.status === 'due_today') {
+      // Create tickets for anything due within the next 30 days or already overdue
+      if (r.status !== 'ok' && r.status !== 'no_data') {
         overdueItems.push({ label, priority })
       }
     }
