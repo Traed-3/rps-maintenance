@@ -66,6 +66,10 @@ export default async function DashboardPage({
   const weekStart  = new Date(todayStart); weekStart.setDate(todayStart.getDate() - todayStart.getDay())
   const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1)
 
+  const weekEnd = new Date(todayStart); weekEnd.setDate(todayStart.getDate() + 7)
+  const todayStr  = todayStart.toISOString().split('T')[0]
+  const weekEndStr = weekEnd.toISOString().split('T')[0]
+
   const [
     { count: openCount },
     { count: criticalCount },
@@ -78,6 +82,9 @@ export default async function DashboardPage({
     { count: completedToday },
     { count: completedWeek },
     { count: completedMonth },
+    { count: overdueTicketCount },
+    { count: dueThisWeekTicketCount },
+    { data: dueTickets },
   ] = await Promise.all([
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)'),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('priority', ['critical', 'safety']).not('status', 'in', '(completed,closed,deferred)'),
@@ -93,6 +100,12 @@ export default async function DashboardPage({
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', todayStart.toISOString()),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', weekStart.toISOString()),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', monthStart.toISOString()),
+    // Tickets with due_date already past (overdue)
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lt('due_date', todayStr),
+    // Tickets with due_date within next 7 days
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr),
+    // Ticket list for "Due This Week" section
+    admin.from('repair_tickets').select('id, ticket_number, title, status, priority, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr).order('due_date'),
   ])
 
   const empIds = (employees ?? []).map(e => e.id)
@@ -173,8 +186,8 @@ export default async function DashboardPage({
         <StatCard label="Critical / Safety" value={criticalCount ?? 0}       icon={AlertTriangle} color="red"    href="/tickets?priority=critical" alert />
         <StatCard label="Vehicles Down"     value={downAssets?.length ?? 0}  icon={Truck}         color="red"    href="/assets?status=down" alert />
         <StatCard label="Waiting on Parts"  value={waitingCount ?? 0}        icon={Package}       color="orange" href="/tickets?status=waiting_parts" />
-        <StatCard label="Overdue Maint."    value={overdueMaintCount}        icon={Wrench}        color="red"    href="/maintenance" alert />
-        <StatCard label="Due This Week"     value={dueThisWeekCount}         icon={Calendar}      color="orange" href="/maintenance" />
+        <StatCard label="Overdue Maint."    value={(overdueMaintCount) + (overdueTicketCount ?? 0)}   icon={Wrench}    color="red"    href="/maintenance" alert />
+        <StatCard label="Due This Week"     value={(dueThisWeekCount) + (dueThisWeekTicketCount ?? 0)} icon={Calendar}  color="orange" href="/tickets" />
         <StatCard label="Clocked In"        value={clockedInCount}           icon={Users}         color="green"  href="/shop" />
         <StatCard label="Shop Hrs Today"    value={(totalShopMins / 60).toFixed(1) + 'h'} icon={Clock} color="gray" href="/shop" />
       </div>
@@ -336,6 +349,51 @@ export default async function DashboardPage({
           </div>
         </div>
       </section>
+
+      {/* Due This Week — tickets with due_date within 7 days */}
+      {(dueTickets ?? []).length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-gray-900">Due This Week</h2>
+            <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">All tickets →</Link>
+          </div>
+          <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
+            <div className="divide-y divide-gray-50">
+              {(dueTickets ?? []).map(t => {
+                const due = new Date((t as any).due_date)
+                const daysUntil = Math.ceil((due.getTime() - todayStart.getTime()) / 86400000)
+                return (
+                  <div key={t.id} className="px-5 py-3 flex items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-gray-400">{t.ticket_number}</span>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                          daysUntil === 0 ? 'bg-red-100 text-red-800 border-red-200' :
+                          daysUntil <= 2 ? 'bg-orange-100 text-orange-800 border-orange-200' :
+                          'bg-yellow-100 text-yellow-800 border-yellow-200'
+                        }`}>
+                          {daysUntil === 0 ? 'Today' : `${daysUntil} day${daysUntil !== 1 ? 's' : ''}`}
+                        </span>
+                      </div>
+                      <Link href={`/tickets/${t.id}`} className="text-sm font-medium text-gray-900 hover:text-blue-600 block mt-0.5">
+                        {t.title}
+                      </Link>
+                      {(t as any).assets?.unit_number && (
+                        <p className="text-xs text-gray-400">{(t as any).assets.unit_number}</p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-gray-500">
+                        {due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Row 5 — Due this month + Down assets */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
