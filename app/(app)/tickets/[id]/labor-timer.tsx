@@ -82,25 +82,33 @@ export function LaborTimer({
       </div>
 
       {/* Active timer */}
-      {isActive && startedAt && (
+      {isActive && startedAt ? (
         <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 mb-4 text-center">
           <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-0.5">
-            ⏱ Timer Running
+            🟢 Clocked In to Ticket
           </p>
           <p className="text-3xl font-bold text-green-700 tabular-nums">{fmt(elapsed)}</p>
         </div>
+      ) : isClockedIn ? (
+        <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 mb-4 text-center">
+          <p className="text-sm text-gray-500">You are not clocked in to this ticket.</p>
+          <p className="text-xs text-gray-400 mt-0.5">Click <strong>Clock In to Ticket</strong> below to start your timer.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-4 text-center">
+          <p className="text-sm text-amber-700">Clock in for your shift first, then you can clock in to this ticket.</p>
+        </div>
       )}
 
-      {/* Action buttons */}
+      {/* Clock In / Out buttons */}
       <div className="flex flex-wrap gap-2 mb-5">
-        {!isActive && (
+        {!isActive && isClockedIn && (
           <button
             onClick={handleStart}
-            disabled={isPending || !isClockedIn}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
-            title={!isClockedIn ? 'Clock in first to start work' : ''}
+            disabled={isPending}
+            className="flex-1 py-3 rounded-xl text-base font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
           >
-            {isPending ? '…' : '▶ Start Work'}
+            {isPending ? '…' : '🟢 Clock In to Ticket'}
           </button>
         )}
         {isActive && (
@@ -108,16 +116,16 @@ export function LaborTimer({
             <button
               onClick={handlePause}
               disabled={isPending}
-              className="px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
             >
-              {isPending ? '…' : '⏸ Pause'}
+              {isPending ? '…' : '⏸ Pause Timer'}
             </button>
             <button
               onClick={handleStop}
               disabled={isPending}
-              className="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
             >
-              {isPending ? '…' : '⏹ Stop & Leave Ticket'}
+              {isPending ? '…' : '🔴 Clock Out from Ticket'}
             </button>
           </>
         )}
