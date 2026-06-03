@@ -36,7 +36,7 @@ export default async function AssetsPage({
 
   let query = admin
     .from('assets')
-    .select('id, unit_number, name, status, year, make, model, current_mileage, asset_type_id')
+    .select('id, unit_number, name, status, year, make, model, current_mileage, asset_type_id, asset_types(name)')
     .eq('company_id', profile!.company_id)
     .order('unit_number')
 
@@ -132,6 +132,7 @@ export default async function AssetsPage({
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Unit #</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Type</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Name / Vehicle</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Mileage</th>
@@ -143,6 +144,19 @@ export default async function AssetsPage({
                   <tr key={asset.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-semibold text-gray-900">
                       {asset.unit_number}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {(() => {
+                        const t = asset.asset_types as { name?: string } | { name?: string }[] | null
+                        const name = Array.isArray(t) ? t[0]?.name : t?.name
+                        return name ? (
+                          <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                            {name}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {asset.name && (
