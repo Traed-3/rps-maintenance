@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-import { Users, Building2, CreditCard, BookOpen } from 'lucide-react'
+import { Users, Building2, CreditCard, BookOpen, Mail } from 'lucide-react'
+import { GmailSyncPanel } from './gmail-sync-panel'
 
 const LINKS = [
   { href: '/settings/users',           icon: Users,       title: 'User Management',    desc: 'Change employee roles, activate or deactivate accounts.' },
@@ -30,7 +31,10 @@ export default async function SettingsPage() {
         <p className="text-sm text-gray-500 mt-0.5">Manage your RPS platform.</p>
       </div>
 
-      <div className="space-y-3">
+      {/* Gmail Sync Panel */}
+      <GmailSyncPanel />
+
+      <div className="space-y-3 mt-6">
         {LINKS.map(l => (
           <Link
             key={l.href}
