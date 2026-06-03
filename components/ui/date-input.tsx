@@ -1,12 +1,17 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 
 /**
- * DateInput — starts as a plain text field showing "Click to select date".
- * On focus it switches to type="date" so the browser calendar opens.
+ * DateInput — starts as a plain text field showing "Tap to select date".
+ * On tap/click/focus it switches to type="date" so the native date picker opens.
  * If cleared or blurred with no value it reverts to text — guaranteeing
  * the browser never auto-inserts today's date.
+ *
+ * iOS Safari fixes applied:
+ * - Removed readOnly (blocks touch/tap events on iPhone)
+ * - Removed showPicker() (not supported on iOS Safari)
+ * - Added onClick alongside onFocus so tapping works on mobile
  */
 export function DateInput({
   name,
@@ -22,12 +27,9 @@ export function DateInput({
   label?: string
 }) {
   const [isDate, setIsDate] = useState(!!value)
-  const ref = useRef<HTMLInputElement>(null)
 
-  function handleFocus() {
+  function handleActivate() {
     setIsDate(true)
-    // Small delay so the browser registers the type change before focusing
-    setTimeout(() => ref.current?.showPicker?.(), 50)
   }
 
   function handleBlur() {
@@ -41,18 +43,17 @@ export function DateInput({
 
   return (
     <input
-      ref={ref}
       type={isDate ? 'date' : 'text'}
       name={name}
       value={isDate ? value : value || ''}
-      placeholder="Click to select date"
+      placeholder="Tap to select date"
       className={className}
-      onFocus={handleFocus}
+      onFocus={handleActivate}
+      onClick={handleActivate}
       onBlur={handleBlur}
       onChange={handleChange}
       autoComplete="off"
-      readOnly={!isDate}
-      style={{ cursor: isDate ? 'auto' : 'pointer' }}
+      style={{ cursor: 'pointer' }}
     />
   )
 }
