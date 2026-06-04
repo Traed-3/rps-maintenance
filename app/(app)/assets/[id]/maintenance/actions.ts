@@ -44,6 +44,28 @@ async function getProfileAndAsset(assetId: string) {
   return { profile, asset, admin }
 }
 
+// Record a mileage-history entry whenever a service updates the asset's mileage
+async function logMileage(
+  admin: ReturnType<typeof createAdminClient>,
+  companyId: string,
+  profileId: string,
+  assetId: string,
+  entryDate: string,
+  mileage: number | null,
+  note: string
+) {
+  if (mileage == null) return
+  await admin.from('mileage_entries').insert({
+    company_id: companyId,
+    asset_id: assetId,
+    entry_date: entryDate,
+    mileage,
+    source: 'manual',
+    notes: note,
+    submitted_by: profileId,
+  })
+}
+
 async function getMaintenanceTypeId(admin: ReturnType<typeof createAdminClient>, companyId: string, name: string) {
   const { data } = await admin
     .from('maintenance_types')
@@ -118,6 +140,8 @@ export async function recordOilChange(
     ...(mileage ? { current_mileage: mileage } : {}),
   }).eq('id', assetId)
 
+  await logMileage(admin, profile.company_id, profile.id, assetId, serviceDate, mileage, 'Oil change service')
+
   revalidatePath(`/assets/${assetId}`)
   redirect(`/assets/${assetId}`)
 }
@@ -185,6 +209,8 @@ export async function recordBrakeService(
     ...(mileage ? { current_mileage: mileage } : {}),
   }).eq('id', assetId)
 
+  await logMileage(admin, profile.company_id, profile.id, assetId, serviceDate, mileage, 'Brake service')
+
   revalidatePath(`/assets/${assetId}`)
   redirect(`/assets/${assetId}`)
 }
@@ -246,6 +272,8 @@ export async function recordTireService(
     next_tire_inspection_date: nextInspectionDate,
     ...(mileage ? { current_mileage: mileage } : {}),
   }).eq('id', assetId)
+
+  await logMileage(admin, profile.company_id, profile.id, assetId, serviceDate, mileage, 'Tire service')
 
   revalidatePath(`/assets/${assetId}`)
   redirect(`/assets/${assetId}`)

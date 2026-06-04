@@ -222,6 +222,10 @@ async function processThread(
     const ticketId = existing.converted_ticket_id
     let updated = false
 
+    // Track current status so a follow-up email can "start" the work
+    const { data: curTicket } = await admin.from('repair_tickets').select('status').eq('id', ticketId).single()
+    let curStatus: string = curTicket?.status ?? 'open'
+
     for (const reply of messages.slice(1)) {
       const replyHeaders = reply.payload?.headers ?? []
       const replyMsgId   = reply.id
@@ -251,10 +255,14 @@ async function processThread(
         updates.parts_ordered  = true
         updates.waiting_on_parts = true
         updates.status         = 'waiting_parts'
+      } else if (replyBody.trim() && ['new', 'open', 'assigned'].includes(curStatus)) {
+        // A follow-up email / update / notes means work has started
+        updates.status = 'in_progress'
       }
 
       if (Object.keys(updates).length) {
         await admin.from('repair_tickets').update(updates).eq('id', ticketId)
+        if (typeof updates.status === 'string') curStatus = updates.status
         updated = true
       }
 
@@ -325,6 +333,9 @@ async function processThread(
     if (s.partsOrdered)  partsOrdered  = true
     if (s.partsReceived) partsReceived = true
   }
+
+  // A thread that already has follow-up emails (and isn't complete) means work has started
+  if (finalStatus !== 'closed' && !partsOrdered && messages.length > 1) finalStatus = 'in_progress'
 
   // Build ticket number using email date
   const ticketNumber = await buildTicketNumber(admin, msgDate, unitNumber)

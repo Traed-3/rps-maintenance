@@ -12,7 +12,6 @@ import {
   Settings,
   LogOut,
   Receipt,
-  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -23,7 +22,6 @@ const navItems = [
   { href: '/assets', label: 'Assets', icon: Truck, active: true },
   { href: '/maintenance', label: 'Maintenance', icon: Wrench, active: true },
   { href: '/tickets', label: 'Tickets', icon: ClipboardList, active: true },
-  { href: '/review', label: 'Email Review', icon: Inbox, active: true },
   { href: '/shop', label: 'Shop', icon: Users, active: true },
   { href: '/expenses', label: 'Expenses', icon: Receipt, active: true },
   { href: '/reports', label: 'Reports', icon: BarChart3, active: true },

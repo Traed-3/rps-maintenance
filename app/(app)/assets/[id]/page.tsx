@@ -8,6 +8,7 @@ import { Pencil, Gauge, Wrench } from 'lucide-react'
 import { revalidatePath } from 'next/cache'
 import { DeleteAssetButton } from './delete-button'
 import { AssetPhotoSection } from '@/components/assets/asset-photo-section'
+import { TicketStatusBadge } from '@/components/tickets/ticket-badges'
 
 function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
   if (value == null || value === '') return null
@@ -72,7 +73,7 @@ export default async function AssetDetailPage({
     .eq('id', user!.id)
     .single()
 
-  const [{ data: asset }, { data: mileageHistory }, { data: maintenanceHistory }, { data: assetPhotos }] = await Promise.all([
+  const [{ data: asset }, { data: mileageHistory }, { data: maintenanceHistory }, { data: assetPhotos }, { data: ticketHistory }] = await Promise.all([
     admin
       .from('assets')
       .select('*, asset_types(name), assigned:profiles!assets_assigned_profile_id_fkey(full_name)')
@@ -93,6 +94,12 @@ export default async function AssetDetailPage({
       .order('performed_date', { ascending: false })
       .limit(20),
     admin.from('asset_photos').select('id, photo_url, caption, is_primary').eq('asset_id', id).order('created_at'),
+    admin
+      .from('repair_tickets')
+      .select('id, ticket_number, title, status, priority, date_completed, created_at')
+      .eq('asset_id', id)
+      .order('created_at', { ascending: false })
+      .limit(100),
   ])
 
   async function saveAssetPhoto(photoUrl: string, caption: string) {
@@ -118,6 +125,10 @@ export default async function AssetDetailPage({
   const canDelete = ['owner', 'manager'].includes(profile?.role ?? '')
 
   const vehicleLabel = [asset.year, asset.make, asset.model].filter(Boolean).join(' ')
+
+  // State inspections don't apply to hours-based assets or machines/equipment
+  const typeName = (asset as any).asset_types?.name ?? ''
+  const inspectionNA = !!(asset as any).uses_hours || ['Machine', 'Equipment'].includes(typeName)
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -233,11 +244,18 @@ export default async function AssetDetailPage({
         )}
 
         {/* Due Dates */}
-        {(asset.inspection_due_date || asset.registration_due_date) && (
+        {(inspectionNA || asset.inspection_due_date || asset.registration_due_date) && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-semibold text-gray-900 mb-3">Due Dates</h2>
             <div className="space-y-2">
-              <DueDate label="Inspection" date={asset.inspection_due_date} />
+              {inspectionNA ? (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500">
+                  <span className="font-medium">State Inspection</span>
+                  <span>N/A — {(asset as any).uses_hours ? 'hours-based' : typeName.toLowerCase()}</span>
+                </div>
+              ) : (
+                <DueDate label="State Inspection" date={asset.inspection_due_date} />
+              )}
               <DueDate label="Registration / Tag" date={asset.registration_due_date} />
             </div>
           </div>
@@ -288,6 +306,42 @@ export default async function AssetDetailPage({
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Repair Ticket History — every ticket (incl. closed email tickets) */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-gray-900">Repair Ticket History</h2>
+            <span className="text-xs text-gray-400">{ticketHistory?.length ?? 0} total</span>
+          </div>
+          {!ticketHistory?.length ? (
+            <p className="text-sm text-gray-400 text-center py-4">No tickets for this asset yet.</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {ticketHistory.map((t) => {
+                const done = t.status === 'closed' || t.status === 'completed'
+                const dateStr = done && t.date_completed ? t.date_completed : t.created_at
+                return (
+                  <Link
+                    key={t.id}
+                    href={`/tickets/${t.id}`}
+                    className="flex items-start justify-between gap-3 py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        <span className="font-mono">{t.ticket_number}</span>
+                        {' · '}
+                        {done ? 'Completed ' : 'Opened '}
+                        {new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <TicketStatusBadge status={t.status} />
+                  </Link>
+                )
+              })}
             </div>
           )}
         </div>
