@@ -46,6 +46,11 @@ export default async function TicketsPage({
   // Default: hide closed/completed unless explicitly filtered
   if (!status) {
     query = query.not('status', 'in', `(${CLOSED_STATUSES.join(',')})`)
+  } else if (status === 'waiting_parts') {
+    // Match the same logic as the dashboard count: waiting_on_parts flag OR status
+    query = query
+      .or('waiting_on_parts.eq.true,status.eq.waiting_parts')
+      .not('status', 'in', `(${CLOSED_STATUSES.join(',')})`)
   } else {
     query = query.eq('status', status)
   }

@@ -86,6 +86,10 @@ export async function updateTicket(id: string, _state: ActionState, formData: Fo
   const assigneeIds = formData.getAll('assigned_to').map(v => (v as string).trim()).filter(Boolean)
   const primaryAssignee = assigneeIds[0] ?? null
 
+  const waitingOnParts = bool(formData.get('waiting_on_parts'))
+  // If waiting on parts, parts have already been ordered — clear the "needs ordering" flag
+  const partsNeeded = waitingOnParts ? false : bool(formData.get('parts_needed'))
+
   const { error } = await admin.from('repair_tickets').update({
     asset_id:      str(formData.get('asset_id')),
     assigned_to:   primaryAssignee,
@@ -94,9 +98,9 @@ export async function updateTicket(id: string, _state: ActionState, formData: Fo
     source:        str(formData.get('source')) ?? 'manual',
     priority:      str(formData.get('priority')) ?? 'normal',
     safety_status: str(formData.get('safety_status')) ?? 'none',
-    parts_needed:  bool(formData.get('parts_needed')),
+    parts_needed:  partsNeeded,
     parts_ordered: bool(formData.get('parts_ordered')),
-    waiting_on_parts: bool(formData.get('waiting_on_parts')),
+    waiting_on_parts: waitingOnParts,
     parts_notes:   str(formData.get('parts_notes')),
     vendor:        str(formData.get('vendor')),
   }).eq('id', id).eq('company_id', profile.company_id)
@@ -128,6 +132,15 @@ export async function changeTicketStatus(id: string, nextStatus: string) {
 
   const admin = createAdminClient()
   const updates: Record<string, unknown> = { status: nextStatus }
+
+  if (nextStatus === 'waiting_parts') {
+    // Sync the flag: clicking "Waiting on Parts" button means we're waiting — clear the ordering list
+    updates.waiting_on_parts = true
+    updates.parts_needed = false
+  } else if (['in_progress', 'completed', 'closed'].includes(nextStatus)) {
+    // Parts arrived / work resumed / ticket done — clear the waiting flag
+    updates.waiting_on_parts = false
+  }
 
   if (nextStatus === 'completed') {
     updates.date_completed = new Date().toISOString().split('T')[0]
