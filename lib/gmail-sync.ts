@@ -110,6 +110,7 @@ export interface SyncResult {
   created:       number
   updated:       number
   skipped:       number
+  review:        number   // unmatched assets parked in the review queue
   errors:        string[]
 }
 
@@ -118,7 +119,7 @@ export async function syncGmailToTickets(options: {
   maxThreads?: number
 }): Promise<SyncResult> {
   const admin = createAdminClient()
-  const result: SyncResult = { processed: 0, created: 0, updated: 0, skipped: 0, errors: [] }
+  const result: SyncResult = { processed: 0, created: 0, updated: 0, skipped: 0, review: 0, errors: [] }
 
   // Query: inbox (open) + historical (archived/completed from 2024)
   const afterDate = options.historical ? '2024/01/01' : ''
@@ -167,6 +168,7 @@ export async function syncGmailToTickets(options: {
         const r = await processThread(admin, threadId, isInbox)
         if (r === 'created') result.created++
         else if (r === 'updated') result.updated++
+        else if (r === 'review') result.review++
         else result.skipped++
 
       } catch (e: any) {
@@ -184,7 +186,7 @@ async function processThread(
   admin: ReturnType<typeof createAdminClient>,
   threadId: string,
   isInbox: boolean
-): Promise<'created' | 'updated' | 'skipped'> {
+): Promise<'created' | 'updated' | 'skipped' | 'review'> {
 
   // Check if thread already has a converted ticket
   const { data: existing } = await admin
@@ -283,6 +285,26 @@ async function processThread(
     }
 
     return updated ? 'updated' : 'skipped'
+  }
+
+  // Thread already parked in the review queue (pending) or rejected — leave it alone
+  if (existing) return 'skipped'
+
+  // ── Unmatched asset → park in review queue (do NOT create an orphan ticket) ─
+  if (!assetId && !isPersonalVehicle(unitNumber)) {
+    await admin.from('gmail_imports').insert({
+      company_id:       COMPANY_ID,
+      gmail_message_id: firstMsg.id,
+      gmail_thread_id:  threadId,
+      subject,
+      sender:           senderEmail,
+      received_at:      msgDate.toISOString(),
+      body_preview:     body.slice(0, 500),
+      status:           'pending',
+      detected_asset:   unitNumber,
+      raw_payload:      { title: title || subject, body: body.trim().slice(0, 3000) },
+    })
+    return 'review'
   }
 
   // ── New thread — create ticket ─────────────────────────────────────────────

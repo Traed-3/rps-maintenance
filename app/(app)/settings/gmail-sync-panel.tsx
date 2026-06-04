@@ -66,6 +66,7 @@ export function GmailSyncPanel() {
           <div className="text-xs text-green-700 space-y-0.5">
             <p>✅ {result.created} new tickets created</p>
             <p>🔄 {result.updated} tickets updated</p>
+            {result.review > 0 && <p>📥 {result.review} parked in Email Review (unmatched)</p>}
             <p>⏭️ {result.skipped} already up to date</p>
             <p className="text-green-500 mt-1">{result.timestamp ? new Date(result.timestamp).toLocaleString() : ''}</p>
             {result.errors?.length > 0 && (
