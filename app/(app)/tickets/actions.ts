@@ -196,6 +196,31 @@ export async function togglePartsFlag(
   revalidatePath(`/tickets/${id}`)
 }
 
+// ── Delete ticket (owner / manager only) ───────────────────────────────────────
+
+export async function deleteTicket(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !['owner', 'manager'].includes(profile.role)) return
+
+  const admin = createAdminClient()
+
+  // Remove dependent rows first so FK constraints don't block the delete
+  await admin.from('repair_ticket_comments').delete().eq('ticket_id', id)
+  await admin.from('repair_ticket_attachments').delete().eq('ticket_id', id)
+  await admin.from('repair_ticket_assignments').delete().eq('ticket_id', id)
+  await admin.from('labor_entries').delete().eq('ticket_id', id)
+  // Detach any imported emails that point at this ticket
+  await admin.from('gmail_imports').update({ converted_ticket_id: null, status: 'pending' }).eq('converted_ticket_id', id)
+  // Clear it from any employee's "currently working on" pointer
+  await admin.from('employee_statuses').update({ current_ticket_id: null }).eq('current_ticket_id', id)
+
+  await admin.from('repair_tickets').delete().eq('id', id).eq('company_id', profile.company_id)
+
+  revalidatePath('/tickets')
+  revalidatePath('/dashboard')
+  redirect('/tickets')
+}
+
 // ── Add comment ───────────────────────────────────────────────────────────────
 
 export async function addComment(_state: ActionState, formData: FormData): Promise<ActionState> {

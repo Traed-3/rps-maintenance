@@ -8,6 +8,7 @@ import { Pencil } from 'lucide-react'
 import { changeTicketStatus, addComment } from '../actions'
 import { CommentForm } from './comment-form'
 import { StatusButtons } from './status-buttons'
+import { DeleteTicketButton } from './delete-button'
 import { LaborTimer } from './labor-timer'
 import { TicketPhotoUpload } from '@/components/tickets/ticket-photo-upload'
 import { revalidatePath } from 'next/cache'
@@ -75,6 +76,7 @@ export default async function TicketDetailPage({
   if (!ticket) notFound()
 
   const canManage = ['owner', 'manager', 'shop_manager'].includes(profile?.role ?? '')
+  const canDelete = ['owner', 'manager'].includes(profile?.role ?? '')
   const actions = STATUS_ACTIONS[ticket.status] ?? []
 
   async function handleStatusChange(nextStatus: string) {
@@ -294,6 +296,14 @@ export default async function TicketDetailPage({
               )}
             </div>
           </div>
+
+          {canDelete && (
+            <div className="bg-white rounded-xl border border-red-200 p-5">
+              <h2 className="font-semibold text-gray-900 mb-1">Danger Zone</h2>
+              <p className="text-xs text-gray-500 mb-3">Permanently delete this ticket. Owners and managers only.</p>
+              <DeleteTicketButton id={id} ticketNumber={ticket.ticket_number} />
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -22,6 +22,7 @@ import {
   parseSender,
   detectStatus,
   isPersonalVehicle,
+  personalVehicleInitials,
   generateTicketNumber,
 } from '@/lib/gmail-parser'
 
@@ -45,9 +46,9 @@ async function findOrCreateAsset(
 
   if (asset) return asset.id
 
-  // Auto-create personal vehicle assets (PVXX format)
+  // Auto-create personal vehicle assets (initials + PV, e.g. PWPV)
   if (isPersonalVehicle(unitNumber)) {
-    const initials = unitNumber.slice(2).toUpperCase()
+    const initials = personalVehicleInitials(unitNumber)
     const { data: newAsset } = await admin
       .from('assets')
       .insert({

@@ -24,35 +24,73 @@ export function parseSubject(subject: string): ParsedSubject {
 
 // ── Body extraction ───────────────────────────────────────────────────────────
 
+/**
+ * Strip HTML tags + decode common entities so email bodies don't carry raw
+ * markup into ticket notes. Safe to run on plain text too (no-op if no tags).
+ */
+export function stripHtml(input: string): string {
+  if (!input) return ''
+  let s = input
+  // Drop style/script blocks entirely
+  s = s.replace(/<style[\s\S]*?<\/style>/gi, '')
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, '')
+  s = s.replace(/<!--[\s\S]*?-->/g, '')
+  // Turn block-level tags / breaks into newlines
+  s = s.replace(/<\s*br\s*\/?>/gi, '\n')
+  s = s.replace(/<\/\s*(p|div|tr|li|h[1-6]|table|blockquote)\s*>/gi, '\n')
+  // Remove inline image/file placeholders like <IMG_1234.jpeg>
+  s = s.replace(/<[^>\s]+\.(jpe?g|png|heic|gif|pdf)>/gi, '')
+  // Remove all remaining well-formed tags
+  s = s.replace(/<[^>]+>/g, '')
+  // Remove a dangling/truncated tag at the very end (no closing '>')
+  s = s.replace(/<\s*\/?[a-zA-Z][^\n>]*$/g, '')
+  // Decode the handful of entities that show up in real emails
+  s = s
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;|&rsquo;|&lsquo;/gi, "'")
+    .replace(/&[#a-z0-9]+;/gi, '')
+  // Tidy whitespace
+  s = s.replace(/\r/g, '').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n')
+  return s.trim()
+}
+
+function decode(b64?: string): string {
+  if (!b64) return ''
+  try { return Buffer.from(b64, 'base64url').toString('utf-8') } catch { return '' }
+}
+
+/** Recursively collect the first body of a given mime type. */
+function findPart(payload: any, mime: string): string {
+  if (!payload) return ''
+  if (payload.mimeType === mime && payload.body?.data) return decode(payload.body.data)
+  for (const part of payload.parts ?? []) {
+    const found = findPart(part, mime)
+    if (found.trim()) return found
+  }
+  return ''
+}
+
 export function extractBody(payload: any): string {
   if (!payload) return ''
 
-  // Direct body data
-  if (payload.body?.data) {
-    try {
-      return Buffer.from(payload.body.data, 'base64url').toString('utf-8')
-    } catch {
-      return ''
-    }
-  }
+  // 1) Prefer text/plain anywhere in the tree
+  const plain = payload.mimeType === 'text/plain' && payload.body?.data
+    ? decode(payload.body.data)
+    : findPart(payload, 'text/plain')
+  if (plain.trim()) return stripHtml(plain)
 
-  // Multipart — prefer text/plain
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/plain' && part.body?.data) {
-        try {
-          return Buffer.from(part.body.data, 'base64url').toString('utf-8')
-        } catch {}
-      }
-    }
-    // Recurse into nested parts
-    for (const part of payload.parts) {
-      const body = extractBody(part)
-      if (body.trim()) return body
-    }
-  }
+  // 2) Fall back to text/html (stripped of markup)
+  const html = payload.mimeType === 'text/html' && payload.body?.data
+    ? decode(payload.body.data)
+    : findPart(payload, 'text/html')
+  if (html.trim()) return stripHtml(html)
 
-  return ''
+  // 3) Last resort: whatever direct body exists
+  return stripHtml(decode(payload.body?.data))
 }
 
 // ── Header helpers ────────────────────────────────────────────────────────────
@@ -121,9 +159,14 @@ export function detectStatus(text: string): DetectedStatus {
 
 // ── Personal vehicle detection ────────────────────────────────────────────────
 
-/** Returns true if unit number looks like a personal vehicle (PVXX) */
+/** Returns true if unit number looks like a personal vehicle (initials + PV, e.g. PWPV) */
 export function isPersonalVehicle(unitNumber: string): boolean {
-  return /^PV[A-Z]{2,4}$/i.test(unitNumber)
+  return /^[A-Z]{2,4}PV$/i.test(unitNumber)
+}
+
+/** Extract the employee initials from a personal-vehicle unit number (PWPV → PW) */
+export function personalVehicleInitials(unitNumber: string): string {
+  return unitNumber.toUpperCase().replace(/PV$/i, '')
 }
 
 // ── Ticket number generation (date-based format MDDYY + unit) ─────────────────
