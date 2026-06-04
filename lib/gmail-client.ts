@@ -90,6 +90,12 @@ export async function listLabels(): Promise<any[]> {
   return data.labels ?? []
 }
 
+/** Download a message attachment's bytes (returns a Buffer) */
+export async function getAttachment(messageId: string, attachmentId: string): Promise<Buffer> {
+  const data = await gmailFetch(`/messages/${messageId}/attachments/${attachmentId}`)
+  return Buffer.from(data.data, 'base64url')
+}
+
 /** Mark a message as read */
 export async function markAsRead(id: string): Promise<void> {
   const token = await getAccessToken()

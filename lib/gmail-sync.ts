@@ -13,6 +13,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   listMessages,
   getThread,
+  getAttachment,
   markAsRead,
 } from '@/lib/gmail-client'
 import {
@@ -64,6 +65,65 @@ async function findOrCreateAsset(
   }
 
   return null
+}
+
+// ── Attachment helpers ────────────────────────────────────────────────────────
+
+type GmailAttachment = { attachmentId: string; filename: string; mimeType: string }
+
+/** Walk a message payload and collect image/PDF attachments. */
+function collectAttachments(payload: any): GmailAttachment[] {
+  const out: GmailAttachment[] = []
+  function walk(p: any) {
+    if (!p) return
+    const fn  = p.filename
+    const aid = p.body?.attachmentId
+    const mt  = p.mimeType ?? ''
+    if (fn && aid && (/^image\//i.test(mt) || /application\/pdf/i.test(mt))) {
+      out.push({ attachmentId: aid, filename: fn, mimeType: mt })
+    }
+    for (const part of p.parts ?? []) walk(part)
+  }
+  walk(payload)
+  return out
+}
+
+/** Download a message's attachments and attach them to a ticket (idempotent by filename). */
+async function syncMessageAttachments(
+  admin: ReturnType<typeof createAdminClient>,
+  messageId: string,
+  payload: any,
+  ticketId: string
+): Promise<number> {
+  let added = 0
+  for (const att of collectAttachments(payload)) {
+    try {
+      const { data: exists } = await admin
+        .from('repair_ticket_attachments')
+        .select('id').eq('ticket_id', ticketId).eq('file_name', att.filename).maybeSingle()
+      if (exists) continue
+
+      const buf  = await getAttachment(messageId, att.attachmentId)
+      const safe = att.filename.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `gmail/${ticketId}/${Date.now()}-${safe}`
+
+      const { error: upErr } = await admin.storage
+        .from('ticket-attachments')
+        .upload(path, buf, { contentType: att.mimeType || 'application/octet-stream', upsert: false })
+      if (upErr) continue
+
+      const { data: urlData } = admin.storage.from('ticket-attachments').getPublicUrl(path)
+      await admin.from('repair_ticket_attachments').insert({
+        ticket_id:   ticketId,
+        uploaded_by: null,
+        file_url:    urlData.publicUrl,
+        file_name:   att.filename,
+        file_type:   att.mimeType || null,
+      })
+      added++
+    } catch { /* skip bad attachment, keep going */ }
+  }
+  return added
 }
 
 // ── Reporter helpers ──────────────────────────────────────────────────────────
@@ -180,6 +240,36 @@ export async function syncGmailToTickets(options: {
   return result
 }
 
+// ── Backfill: attach existing email tickets' photos/files ─────────────────────
+
+export async function backfillAttachments(opts: { max?: number; offset?: number }): Promise<{ scanned: number; attached: number; nextOffset: number; done: boolean }> {
+  const admin = createAdminClient()
+  const max = opts.max ?? 25
+  const offset = opts.offset ?? 0
+
+  const { data: tickets } = await admin
+    .from('repair_tickets')
+    .select('id, gmail_thread_id')
+    .eq('company_id', COMPANY_ID)
+    .eq('source', 'gmail')
+    .not('gmail_thread_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + max - 1)
+
+  let attached = 0
+  const scanned = (tickets ?? []).length
+  for (const t of tickets ?? []) {
+    try {
+      const thread = await getThread(t.gmail_thread_id as string)
+      for (const msg of thread.messages ?? []) {
+        attached += await syncMessageAttachments(admin, msg.id, msg.payload, t.id)
+      }
+    } catch { /* skip unreadable thread */ }
+  }
+
+  return { scanned, attached, nextOffset: offset + scanned, done: scanned < max }
+}
+
 // ── Per-thread processing ─────────────────────────────────────────────────────
 
 async function processThread(
@@ -290,6 +380,9 @@ async function processThread(
         converted_ticket_id: ticketId,
         detected_asset:      unitNumber,
       })
+
+      // Attach any photos / files from this reply to the ticket
+      await syncMessageAttachments(admin, replyMsgId, reply.payload, ticketId)
     }
 
     return updated ? 'updated' : 'skipped'
@@ -408,6 +501,11 @@ async function processThread(
         created_at:  replyDate.toISOString(),
       })
     }
+  }
+
+  // Attach any photos / files from every message in the thread to the ticket
+  for (const msg of messages) {
+    await syncMessageAttachments(admin, msg.id, msg.payload, ticket.id)
   }
 
   // Mark original message as read

@@ -56,7 +56,7 @@ export default async function TicketDetailPage({
       .eq('ticket_id', id)
       .eq('is_active', true),
     admin.from('repair_ticket_attachments')
-      .select('id, file_url, file_name')
+      .select('id, file_url, file_name, file_type')
       .eq('ticket_id', id)
       .order('created_at', { ascending: true }),
   ])
@@ -175,28 +175,43 @@ export default async function TicketDetailPage({
             </div>
           )}
 
-          {/* Completion photos (up to 4) */}
-          {(ticket.status === 'in_progress' || ticket.status === 'completed' || ticket.status === 'closed') && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-900 mb-1">Completion Photos</h2>
-              <p className="text-xs text-gray-500 mb-3">Attach up to {MAX_PHOTOS} photos of the completed work. ({photos.length}/{MAX_PHOTOS})</p>
+          {/* Photos & attachments (email attachments + up to 4 completion photos) */}
+          {(() => {
+            const canUpload = ticket.status === 'in_progress' || ticket.status === 'completed' || ticket.status === 'closed'
+            if (photos.length === 0 && !canUpload) return null
+            const isImage = (p: any) => !p.file_type || /^image\//i.test(p.file_type)
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h2 className="font-semibold text-gray-900 mb-1">Photos &amp; Attachments</h2>
+                <p className="text-xs text-gray-500 mb-3">Email photos/files attach here automatically. You can also add up to {MAX_PHOTOS} completion photos.</p>
 
-              {photos.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-                  {photos.map((p) => (
-                    <a key={p.id} href={p.file_url} target="_blank" rel="noopener noreferrer" className="block aspect-square rounded-lg overflow-hidden border border-gray-200 hover:opacity-90">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.file_url} alt={p.file_name} className="w-full h-full object-cover" />
-                    </a>
-                  ))}
-                </div>
-              )}
+                {photos.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                    {photos.map((p) => (
+                      <a key={p.id} href={p.file_url} target="_blank" rel="noopener noreferrer"
+                         className="block aspect-square rounded-lg overflow-hidden border border-gray-200 hover:opacity-90 bg-gray-50">
+                        {isImage(p) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.file_url} alt={p.file_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center">
+                            <span className="text-2xl">📄</span>
+                            <span className="text-[10px] text-gray-500 truncate w-full mt-1">{p.file_name}</span>
+                          </div>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                )}
 
-              {photos.length < MAX_PHOTOS
-                ? <TicketPhotoUpload ticketId={id} onSave={saveTicketPhoto} />
-                : <p className="text-xs text-green-600 font-medium">Maximum of {MAX_PHOTOS} photos attached.</p>}
-            </div>
-          )}
+                {canUpload && (
+                  photos.length < MAX_PHOTOS
+                    ? <TicketPhotoUpload ticketId={id} onSave={saveTicketPhoto} />
+                    : <p className="text-xs text-green-600 font-medium">Maximum of {MAX_PHOTOS} completion photos attached.</p>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Labor time tracking */}
           <LaborTimer
