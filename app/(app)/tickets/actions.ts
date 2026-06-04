@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { findSimilarOpenTicket } from '@/lib/ticket-dedup'
 
 type ActionState = { error: string } | null
 
@@ -34,6 +35,17 @@ export async function createTicket(_state: ActionState, formData: FormData): Pro
   if (!title) return { error: 'Title is required.' }
 
   const admin = createAdminClient()
+
+  // Block accidental duplicates: same asset + same problem already open
+  const assetId = str(formData.get('asset_id'))
+  const allowDuplicate = formData.get('allow_duplicate') === 'on'
+  if (assetId && !allowDuplicate) {
+    const dup = await findSimilarOpenTicket(admin, profile.company_id, assetId, title)
+    if (dup) {
+      return { error: `Possible duplicate of ${dup.ticket_number} — “${dup.title}”. If it's the same problem, update that ticket instead. If it's genuinely different, reword the title and try again.` }
+    }
+  }
+
   // Support multiple assignees — getAll returns all values for the same key
   const assigneeIds = formData.getAll('assigned_to').map(v => (v as string).trim()).filter(Boolean)
   const primaryAssignee = assigneeIds[0] ?? null
