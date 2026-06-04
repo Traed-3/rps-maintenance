@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { ImageUpload } from '@/components/ui/image-upload'
 
 export function TicketPhotoUpload({
@@ -10,32 +11,31 @@ export function TicketPhotoUpload({
   ticketId: string
   onSave: (fileUrl: string, fileName: string) => Promise<void>
 }) {
+  const router = useRouter()
   const [url, setUrl] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [resetKey, setResetKey] = useState(0)
 
   async function handleSave() {
     if (!url) return
     setSaving(true)
     const fileName = url.split('/').pop() ?? 'photo.jpg'
     await onSave(url, fileName)
-    setSaved(true)
+    // Reset so another photo can be added; refresh to show the new thumbnail
+    setUrl(null)
+    setResetKey((k) => k + 1)
     setSaving(false)
-  }
-
-  if (saved) {
-    return (
-      <div className="text-sm text-green-600 font-medium">✓ Photo saved to ticket</div>
-    )
+    router.refresh()
   }
 
   return (
     <div className="space-y-3">
       <ImageUpload
+        key={resetKey}
         bucket="ticket-attachments"
         value={url}
         onChange={setUrl}
-        label="Upload Completion Photo"
+        label="Add Completion Photo"
       />
       {url && (
         <button

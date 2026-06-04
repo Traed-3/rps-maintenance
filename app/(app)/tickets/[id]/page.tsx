@@ -26,7 +26,7 @@ export default async function TicketDetailPage({
 
   const { data: profile } = await admin.from('profiles').select('id, company_id, role').eq('id', user!.id).single()
 
-  const [{ data: ticket }, { data: comments }, { data: laborHistory }, { data: empStatus }, { data: allAssignees }] = await Promise.all([
+  const [{ data: ticket }, { data: comments }, { data: laborHistory }, { data: empStatus }, { data: allAssignees }, { data: attachments }] = await Promise.all([
     admin.from('repair_tickets')
       .select(`
         *,
@@ -55,7 +55,14 @@ export default async function TicketDetailPage({
       .select('profile_id, profiles(full_name, role)')
       .eq('ticket_id', id)
       .eq('is_active', true),
+    admin.from('repair_ticket_attachments')
+      .select('id, file_url, file_name')
+      .eq('ticket_id', id)
+      .order('created_at', { ascending: true }),
   ])
+
+  const MAX_PHOTOS = 4
+  const photos = attachments ?? []
 
   // Is the current user actively working on THIS ticket?
   const isActiveOnThisTicket =
@@ -168,12 +175,26 @@ export default async function TicketDetailPage({
             </div>
           )}
 
-          {/* Completion photo */}
+          {/* Completion photos (up to 4) */}
           {(ticket.status === 'in_progress' || ticket.status === 'completed' || ticket.status === 'closed') && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-900 mb-3">Completion Photo</h2>
-              <p className="text-xs text-gray-500 mb-3">Upload a photo of the completed work.</p>
-              <TicketPhotoUpload ticketId={id} onSave={saveTicketPhoto} />
+              <h2 className="font-semibold text-gray-900 mb-1">Completion Photos</h2>
+              <p className="text-xs text-gray-500 mb-3">Attach up to {MAX_PHOTOS} photos of the completed work. ({photos.length}/{MAX_PHOTOS})</p>
+
+              {photos.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                  {photos.map((p) => (
+                    <a key={p.id} href={p.file_url} target="_blank" rel="noopener noreferrer" className="block aspect-square rounded-lg overflow-hidden border border-gray-200 hover:opacity-90">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.file_url} alt={p.file_name} className="w-full h-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {photos.length < MAX_PHOTOS
+                ? <TicketPhotoUpload ticketId={id} onSave={saveTicketPhoto} />
+                : <p className="text-xs text-green-600 font-medium">Maximum of {MAX_PHOTOS} photos attached.</p>}
             </div>
           )}
 
