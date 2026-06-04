@@ -34,7 +34,9 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  const publicPaths = ['/login', '/auth/', '/api/auth/']
+  // /api/gmail/* routes enforce their own CRON_SECRET, so they bypass the
+  // login session check (lets the external auto-sync cron + backfill run).
+  const publicPaths = ['/login', '/auth/', '/api/auth/', '/api/gmail/']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
 
   if (!user && !isPublic) {
