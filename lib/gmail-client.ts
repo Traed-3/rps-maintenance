@@ -84,6 +84,20 @@ export async function getThread(id: string): Promise<any> {
   return gmailFetch(`/threads/${id}`, { format: 'full' })
 }
 
+/** List thread IDs matching a query (e.g. "in:inbox") */
+export async function listThreadIds(query: string): Promise<string[]> {
+  const ids: string[] = []
+  let pageToken: string | undefined
+  do {
+    const params: Record<string, string> = { q: query, maxResults: '100' }
+    if (pageToken) params.pageToken = pageToken
+    const data = await gmailFetch('/threads', params)
+    if (data.threads) ids.push(...data.threads.map((t: any) => t.id))
+    pageToken = data.nextPageToken
+  } while (pageToken)
+  return ids
+}
+
 /** List all labels (used for per-asset folders) */
 export async function listLabels(): Promise<any[]> {
   const data = await gmailFetch('/labels')

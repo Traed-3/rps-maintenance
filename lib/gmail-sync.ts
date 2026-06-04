@@ -14,6 +14,7 @@ import {
   listMessages,
   getThread,
   getAttachment,
+  listThreadIds,
   markAsRead,
 } from '@/lib/gmail-client'
 import {
@@ -30,6 +31,12 @@ import {
 const COMPANY_ID = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 // Employee Vehicle asset type ID
 const EMPLOYEE_VEHICLE_TYPE_ID = '289b1400-4a45-46f2-829b-9748b70c66b6'
+const TERMINAL_STATUSES = ['closed', 'completed', 'deferred']
+
+/** Automated Google emails (security alerts, etc.) are never tickets. */
+function isGoogleSender(email: string): boolean {
+  return /@(?:[a-z0-9.-]*\.)?google(?:mail)?\.com$/i.test(email)
+}
 
 // ── Asset helpers ─────────────────────────────────────────────────────────────
 
@@ -237,6 +244,14 @@ export async function syncGmailToTickets(options: {
     }
   }
 
+  // Reconcile archived threads: close finished tickets + catch missed "complete" replies
+  try {
+    const inboxThreadIds = new Set(await listThreadIds('in:inbox'))
+    await refreshArchivedOpenTickets(admin, inboxThreadIds, result)
+  } catch (e: any) {
+    result.errors.push(`Archived refresh failed: ${e.message}`)
+  }
+
   return result
 }
 
@@ -268,6 +283,59 @@ export async function backfillAttachments(opts: { max?: number; offset?: number 
   }
 
   return { scanned, attached, nextOffset: offset + scanned, done: scanned < max }
+}
+
+// ── Archived-thread reconciliation ────────────────────────────────────────────
+//
+// The regular sync only reads `in:inbox`, so if a "Complete" reply arrives and
+// the thread is then archived, the inbox sync never sees it. This pass walks
+// every open Gmail-sourced ticket whose thread is NOT in the inbox and:
+//   1) processes any unseen replies (a "complete" reply → close + notes), then
+//   2) if it's still open, treats "archived" as "done" and marks it completed.
+// (We never archive anything ourselves — archiving is the owner's job.)
+
+async function refreshArchivedOpenTickets(
+  admin: ReturnType<typeof createAdminClient>,
+  inboxThreadIds: Set<string>,
+  result: SyncResult
+) {
+  const { data: openTickets } = await admin
+    .from('repair_tickets')
+    .select('id, gmail_thread_id, status')
+    .eq('company_id', COMPANY_ID)
+    .eq('source', 'gmail')
+    .not('gmail_thread_id', 'is', null)
+    .not('status', 'in', '(closed,completed,deferred)')
+
+  for (const t of openTickets ?? []) {
+    const threadId = t.gmail_thread_id as string
+    if (inboxThreadIds.has(threadId)) continue   // inbox threads handled by the main loop
+
+    try {
+      // 1) Pick up any replies the inbox-only sync missed (e.g. a "complete" reply)
+      await processThread(admin, threadId, false)
+
+      // 2) Still open + archived ⇒ it's finished
+      const { data: tk } = await admin.from('repair_tickets').select('status').eq('id', t.id).single()
+      if (tk && !TERMINAL_STATUSES.includes(tk.status)) {
+        const thread = await getThread(threadId)
+        const msgs: any[] = thread.messages ?? []
+        const last = msgs[msgs.length - 1]
+        const note = last ? extractBody(last.payload).trim().slice(0, 1000) : ''
+        const dateStr = last
+          ? new Date(getHeader(last.payload?.headers ?? [], 'Date') || Date.now()).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0]
+        await admin.from('repair_tickets').update({
+          status:           'completed',
+          date_completed:   dateStr,
+          completion_notes: note || 'Email archived by staff — marked complete.',
+        }).eq('id', t.id)
+        result.updated++
+      }
+    } catch (e: any) {
+      result.errors.push(`Refresh ${threadId}: ${e.message}`)
+    }
+  }
 }
 
 // ── Per-thread processing ─────────────────────────────────────────────────────
@@ -335,8 +403,9 @@ async function processThread(
       const updates: Record<string, unknown> = {}
 
       if (status.isComplete) {
-        updates.status         = 'closed'
-        updates.date_completed = new Date(getHeader(replyHeaders, 'Date') || Date.now()).toISOString().split('T')[0]
+        updates.status          = 'closed'
+        updates.date_completed   = new Date(getHeader(replyHeaders, 'Date') || Date.now()).toISOString().split('T')[0]
+        if (replyBody.trim()) updates.completion_notes = replyBody.trim().slice(0, 1000)
       } else if (status.partsReceived) {
         updates.parts_ordered     = true
         updates.waiting_on_parts  = false
@@ -390,6 +459,22 @@ async function processThread(
 
   // Thread already parked in the review queue (pending) or rejected — leave it alone
   if (existing) return 'skipped'
+
+  // ── Ignore automated Google emails (security alerts, etc.) entirely ─────────
+  if (isGoogleSender(senderEmail)) {
+    await admin.from('gmail_imports').insert({
+      company_id:       COMPANY_ID,
+      gmail_message_id: firstMsg.id,
+      gmail_thread_id:  threadId,
+      subject,
+      sender:           senderEmail,
+      received_at:      msgDate.toISOString(),
+      body_preview:     '',
+      status:           'rejected',
+      detected_asset:   unitNumber,
+    })
+    return 'skipped'
+  }
 
   // ── Unmatched asset → park in review queue (do NOT create an orphan ticket) ─
   if (!assetId && !isPersonalVehicle(unitNumber)) {
