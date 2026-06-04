@@ -51,18 +51,33 @@ export async function createOverdueMaintenanceTickets(
     }
 
     for (const item of overdueItems) {
-      // Check if an open ticket already exists for this asset + type
-      const { data: existing } = await admin
-        .from('repair_tickets')
-        .select('id')
-        .eq('asset_id', asset.id)
-        .eq('company_id', companyId)
-        .ilike('title', `%${item.label}%`)
-        .not('status', 'in', '(completed,closed,deferred)')
-        .limit(1)
-        .maybeSingle()
+      // Synonyms so we don't duplicate a manually-entered ticket for the same thing
+      // (e.g. a manual "Service Due" already covers the auto "Oil Change").
+      const SYNONYMS: Record<string, string[]> = {
+        'Oil Change':       ['oil change', 'service due', 'service needed', 'ocd'],
+        'State Inspection': ['state inspection', 'inspection due', 'needs inspect', 'failed inspection', 'va inspection'],
+        'Registration':     ['registration', 'tag due', 'license'],
+        'Brake Inspection': ['brake'],
+        'Tire Inspection':  ['tire'],
+      }
+      const patterns = SYNONYMS[item.label] ?? [item.label]
 
-      if (existing) continue // already has an open ticket
+      // Check if an open ticket already exists for this asset + (any synonym of) type
+      let existing: { id: string } | null = null
+      for (const pat of patterns) {
+        const { data } = await admin
+          .from('repair_tickets')
+          .select('id')
+          .eq('asset_id', asset.id)
+          .eq('company_id', companyId)
+          .ilike('title', `%${pat}%`)
+          .not('status', 'in', '(completed,closed,deferred)')
+          .limit(1)
+          .maybeSingle()
+        if (data) { existing = data; break }
+      }
+
+      if (existing) continue // already has an open ticket for this (or an equivalent) item
 
       // Create the ticket
       await admin.from('repair_tickets').insert({
