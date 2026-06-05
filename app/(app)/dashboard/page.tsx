@@ -6,7 +6,7 @@ import { TicketStatusBadge, PriorityBadge } from '@/components/tickets/ticket-ba
 import { StatusBadge } from '@/components/assets/status-badge'
 import { calcDateDue, calcOilChangeDue, toBand, BAND_CONFIG, sortByUrgency, type DueStatus } from '@/lib/maintenance'
 import { checkOverdueMaintenanceNotifications, checkForgotClockOut } from '@/lib/notifications'
-import { createOverdueMaintenanceTickets, rollStaleOverdueMaintenance } from '@/lib/auto-tickets'
+import { createOverdueMaintenanceTickets } from '@/lib/auto-tickets'
 import { ClipboardList, AlertTriangle, Truck, Package, Wrench, Calendar, Users, Clock, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { revalidatePath } from 'next/cache'
@@ -175,10 +175,7 @@ export default async function DashboardPage({
   // Fire-and-forget background tasks
   checkOverdueMaintenanceNotifications(admin, companyId).catch(() => {})
   checkForgotClockOut(admin, companyId).catch(() => {})
-  // Roll >60-day-overdue maintenance forward (assumed complete) BEFORE auto-creating tickets
-  rollStaleOverdueMaintenance(admin, companyId)
-    .then(() => createOverdueMaintenanceTickets(admin, companyId))
-    .catch(() => {})
+  createOverdueMaintenanceTickets(admin, companyId).catch(() => {})
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
