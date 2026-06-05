@@ -4,15 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export const ALERT_TYPES = [
+const ALERT_TYPES = [
   'maintenance_overdue',
   'asset_unsafe',
   'clock_out_reminder',
   'ticket_assigned',
   'new_ticket',
 ] as const
-
-export type AlertType = typeof ALERT_TYPES[number]
 
 export async function saveAlertPreferences(formData: FormData) {
   const supabase = await createClient()

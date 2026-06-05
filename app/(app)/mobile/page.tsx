@@ -60,14 +60,14 @@ export default async function MobilePage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <div className="bg-blue-600 text-white px-6 pt-10 pb-8">
+      <div className="text-white px-6 pt-10 pb-8" style={{ backgroundColor: '#16243d' }}>
         <div className="flex items-center gap-2 mb-4">
           <span className="inline-flex items-center justify-center bg-white rounded-lg p-1">
             <Image src="/logo-mark.png" alt="" width={32} height={32} className="h-7 w-7" />
           </span>
           <span className="font-semibold tracking-tight text-white/95">RPS Maintenance</span>
         </div>
-        <p className="text-blue-200 text-sm">{greeting}</p>
+        <p className="text-white/60 text-sm">{greeting}</p>
         <h1 className="text-2xl font-bold mt-0.5">{firstName}</h1>
 
         {/* Status pill */}
@@ -82,7 +82,7 @@ export default async function MobilePage() {
         </div>
 
         {todayMins > 0 && (
-          <p className="text-blue-200 text-xs mt-2">
+          <p className="text-white/60 text-xs mt-2">
             {Math.floor(todayMins / 60)}h {todayMins % 60}m today
           </p>
         )}
