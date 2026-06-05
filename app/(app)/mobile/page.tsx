@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
@@ -60,6 +61,12 @@ export default async function MobilePage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="bg-blue-600 text-white px-6 pt-10 pb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="inline-flex items-center justify-center bg-white rounded-lg p-1">
+            <Image src="/logo-mark.png" alt="" width={32} height={32} className="h-7 w-7" />
+          </span>
+          <span className="font-semibold tracking-tight text-white/95">RPS Maintenance</span>
+        </div>
         <p className="text-blue-200 text-sm">{greeting}</p>
         <h1 className="text-2xl font-bold mt-0.5">{firstName}</h1>
 

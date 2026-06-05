@@ -48,10 +48,10 @@ export default function AppNav({ email }: { email: string }) {
           <Image
             src="/logo-full.png"
             alt="RPS Maintenance"
-            width={200}
-            height={91}
+            width={220}
+            height={100}
             priority
-            className="h-11 w-auto"
+            className="h-14 w-auto"
           />
         </div>
 

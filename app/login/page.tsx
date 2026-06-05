@@ -11,10 +11,10 @@ export default function LoginPage() {
           <Image
             src="/logo-full.png"
             alt="RPS Maintenance"
-            width={300}
-            height={136}
+            width={320}
+            height={145}
             priority
-            className="mx-auto w-64 h-auto"
+            className="mx-auto w-72 h-auto"
           />
           <p className="mt-3 text-sm text-gray-500">Fleet &amp; Shop Operations</p>
         </div>
