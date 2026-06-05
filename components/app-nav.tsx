@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -43,9 +44,15 @@ export default function AppNav({ email }: { email: string }) {
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-60 flex-col bg-white border-r border-gray-200 min-h-screen">
         {/* Brand */}
-        <div className="px-5 py-4 border-b border-gray-200">
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">RPS</p>
-          <p className="text-sm font-bold text-gray-900 leading-tight">Maintenance</p>
+        <div className="px-4 py-4 border-b border-gray-200">
+          <Image
+            src="/logo-full.png"
+            alt="RPS Maintenance"
+            width={200}
+            height={91}
+            priority
+            className="h-11 w-auto"
+          />
         </div>
 
         {/* Nav links */}
