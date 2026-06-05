@@ -9,6 +9,59 @@ import { calcDateDue, calcOilChangeDue } from '@/lib/maintenance'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
+/**
+ * Treat date-based maintenance that is MORE THAN 60 DAYS overdue as completed:
+ * the asset is on the road, so an annual item that far past due was actually done
+ * but never logged. Roll the due date forward to the next future cycle and mark
+ * any open reminder ticket done. Keeps the "maintenance due" list reflecting reality.
+ */
+export async function rollStaleOverdueMaintenance(admin: AdminClient, companyId: string) {
+  const now = new Date()
+  const today  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const cutoff = new Date(today); cutoff.setUTCDate(cutoff.getUTCDate() - 60)
+  const cutoffStr = cutoff.toISOString().split('T')[0]
+
+  const fields: { col: string; ticketTitle: string | null }[] = [
+    { col: 'inspection_due_date',        ticketTitle: 'State Inspection' },
+    { col: 'registration_due_date',      ticketTitle: 'Registration' },
+    { col: 'next_brake_inspection_date', ticketTitle: null },
+    { col: 'next_tire_inspection_date',  ticketTitle: null },
+  ]
+
+  for (const f of fields) {
+    const { data: rows } = await admin
+      .from('assets')
+      .select(`id, ${f.col}`)
+      .eq('company_id', companyId)
+      .neq('status', 'retired')
+      .not(f.col, 'is', null)
+      .lt(f.col, cutoffStr)
+
+    for (const r of (rows ?? []) as any[]) {
+      const oldStr = r[f.col] as string
+      const due = new Date(oldStr + 'T00:00:00Z')
+      const m = due.getUTCMonth(), d = due.getUTCDate()
+      let next = new Date(Date.UTC(today.getUTCFullYear(), m, d))
+      if (next <= today) next = new Date(Date.UTC(today.getUTCFullYear() + 1, m, d))
+      const newStr = next.toISOString().split('T')[0]
+
+      await admin.from('assets').update({ [f.col]: newStr }).eq('id', r.id)
+
+      if (f.ticketTitle) {
+        await admin.from('repair_tickets')
+          .update({
+            status: 'completed',
+            date_completed: oldStr,
+            completion_notes: `${f.ticketTitle} assumed complete (was >60 days overdue).`,
+          })
+          .eq('asset_id', r.id).eq('company_id', companyId)
+          .ilike('title', `${f.ticketTitle}%`)
+          .not('status', 'in', '(closed,completed,deferred)')
+      }
+    }
+  }
+}
+
 const CHECKS = [
   { key: 'oil',          label: 'Oil Change',        priority: 'normal'  },
   { key: 'brakes',       label: 'Brake Inspection',  priority: 'high'    },
