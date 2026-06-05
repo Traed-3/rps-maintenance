@@ -18,12 +18,18 @@ const STATUS_FILTERS = [
 
 const CLOSED_STATUSES = ['completed', 'closed', 'deferred']
 
+const DUE_LABELS: Record<string, string> = {
+  overdue: 'Overdue',
+  week:    'Due This Week',
+  month:   'Due This Month',
+}
+
 export default async function TicketsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; priority?: string; q?: string }>
+  searchParams: Promise<{ status?: string; priority?: string; q?: string; due?: string }>
 }) {
-  const { status = '', priority = '', q = '' } = await searchParams
+  const { status = '', priority = '', q = '', due = '' } = await searchParams
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -43,9 +49,27 @@ export default async function TicketsPage({
     .eq('company_id', profile!.company_id)
     .order('updated_at', { ascending: false })
 
-  // Default: hide closed/completed unless explicitly filtered
-  if (!status) {
-    query = query.not('status', 'in', `(${CLOSED_STATUSES.join(',')})`)
+  // Status / due-date filtering
+  if (due) {
+    // Due-date views (match the dashboard maintenance-due cards) — open tickets only
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().split('T')[0]
+    query = query.not('status', 'in', `(${CLOSED_STATUSES.join(',')})`).not('due_date', 'is', null)
+    if (due === 'overdue') {
+      query = query.lt('due_date', todayStr)
+    } else if (due === 'week') {
+      const wk = new Date(today); wk.setDate(wk.getDate() + 7)
+      query = query.gte('due_date', todayStr).lte('due_date', wk.toISOString().split('T')[0])
+    } else if (due === 'month') {
+      const me = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+      query = query.gte('due_date', todayStr).lte('due_date', me.toISOString().split('T')[0])
+    }
+  } else if (!status) {
+    // Default open list — hide closed and the Registration / State-Inspection reminders
+    query = query
+      .not('status', 'in', `(${CLOSED_STATUSES.join(',')})`)
+      .not('title', 'ilike', 'Registration%')
+      .not('title', 'ilike', 'State Inspection%')
   } else if (status === 'waiting_parts') {
     // Match the same logic as the dashboard count: waiting_on_parts flag OR status
     query = query
@@ -55,8 +79,11 @@ export default async function TicketsPage({
     query = query.eq('status', status)
   }
 
-  if (priority) query = query.eq('priority', priority)
-  if (q)        query = query.or(`title.ilike.%${q}%,ticket_number.ilike.%${q}%`)
+  // Critical/Safety card counts both priorities together
+  if (priority === 'critical') query = query.in('priority', ['critical', 'safety'])
+  else if (priority)           query = query.eq('priority', priority)
+
+  if (q) query = query.or(`title.ilike.%${q}%,ticket_number.ilike.%${q}%`)
 
   const { data: tickets } = await query
   const canCreate = ['owner', 'manager', 'shop_manager'].includes(profile?.role ?? '')
@@ -66,10 +93,12 @@ export default async function TicketsPage({
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Repair Tickets</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {due ? DUE_LABELS[due] ?? 'Repair Tickets' : 'Repair Tickets'}
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {tickets?.length ?? 0} ticket{tickets?.length !== 1 ? 's' : ''}
-            {status || priority || q ? ' (filtered)' : ' open'}
+            {due ? '' : (status || priority || q ? ' (filtered)' : ' open')}
           </p>
         </div>
         {canCreate && (
@@ -90,6 +119,7 @@ export default async function TicketsPage({
           />
           {status   && <input type="hidden" name="status"   value={status} />}
           {priority && <input type="hidden" name="priority" value={priority} />}
+          {due      && <input type="hidden" name="due"      value={due} />}
           <button type="submit" className="px-4 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
             Search
           </button>

@@ -161,8 +161,6 @@ export default async function DashboardPage({
     }
   }
   const sortedAlerts = sortByUrgency(alerts)
-  const overdueMaintCount = new Set(alerts.filter(a => toBand(a.status) === 'overdue').map(a => a.assetId)).size
-  const dueThisWeekCount  = new Set(alerts.filter(a => toBand(a.status) === 'due_this_week').map(a => a.assetId)).size
   const totalAlerts = sortedAlerts.length
 
   const bands = {
@@ -213,8 +211,8 @@ export default async function DashboardPage({
         <StatCard label="Critical / Safety" value={criticalCount ?? 0}       icon={AlertTriangle} color="red"    href="/tickets?priority=critical" alert />
         <StatCard label="Vehicles Down"     value={downAssets?.length ?? 0}  icon={Truck}         color="red"    href="/assets?status=down" alert />
         <StatCard label="Waiting on Parts"  value={waitingCount ?? 0}        icon={Package}       color="orange" href="/tickets?status=waiting_parts" />
-        <StatCard label="Overdue Maint."    value={(overdueMaintCount) + (overdueTicketCount ?? 0)}   icon={Wrench}    color="red"    href="/maintenance" alert />
-        <StatCard label="Due This Week"     value={(dueThisWeekCount) + (dueThisWeekTicketCount ?? 0)} icon={Calendar}  color="orange" href="/tickets" />
+        <StatCard label="Overdue Maint."    value={overdueTicketCount ?? 0}   icon={Wrench}    color="red"    href="/tickets?due=overdue" alert />
+        <StatCard label="Due This Week"     value={dueThisWeekTicketCount ?? 0} icon={Calendar}  color="orange" href="/tickets?due=week" />
         <StatCard label="Clocked In"        value={clockedInCount}           icon={Users}         color="green"  href="/shop" />
         <StatCard label="Shop Hrs Today"    value={(totalShopMins / 60).toFixed(1) + 'h'} icon={Clock} color="gray" href="/shop" />
       </div>

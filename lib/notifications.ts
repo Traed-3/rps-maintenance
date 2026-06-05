@@ -127,13 +127,14 @@ export async function notifyAssetUnsafe(
 }
 
 // ── Rule: forgot to clock out ─────────────────────────────────────────────────
-// Called from dashboard. Notifies if employee has been clocked in > 10 hours.
+// Called from dashboard. Reminds the employee directly once they have been
+// clocked in for more than 12 hours with no clock-out recorded.
 
 export async function checkForgotClockOut(
   admin: AdminClient,
   companyId: string
 ) {
-  const cutoff = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString()
+  const cutoff = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
 
   const { data: staleEntries } = await admin
     .from('time_clock_entries')
@@ -143,10 +144,9 @@ export async function checkForgotClockOut(
     .lte('clock_in', cutoff)
 
   for (const e of staleEntries ?? []) {
-    const name = (e as any).profiles?.full_name ?? 'An employee'
     const hoursAgo = Math.floor((Date.now() - new Date(e.clock_in).getTime()) / 3600000)
 
-    // Dedup by profile + type (one per day per employee)
+    // Dedup by profile + type (one per ~day per employee)
     const yesterday = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString()
     const { data: existing } = await admin
       .from('notifications')
@@ -159,13 +159,14 @@ export async function checkForgotClockOut(
 
     if (existing) continue
 
+    // Goes to the employee themselves
     await admin.from('notifications').insert({
       company_id:   companyId,
       recipient_id: e.profile_id,
       type:         'clock_out_reminder',
-      title:        `${name} may have forgotten to clock out`,
-      message:      `Clocked in ${hoursAgo}+ hours ago with no clock-out recorded.`,
-      link:         `/shop/employees/${e.profile_id}`,
+      title:        'Did you forget to clock out?',
+      message:      `You've been clocked in for ${hoursAgo}+ hours. Please go to RPS Maintenance and clock out now.`,
+      link:         `/shop/clock`,
     })
   }
 }
