@@ -13,6 +13,7 @@ import {
   Settings,
   LogOut,
   Receipt,
+  Home,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -101,25 +102,28 @@ export default function AppNav({ email }: { email: string }) {
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50">
-        {navItems
-          .filter((i) => i.active)
-          .slice(0, 5)
-          .map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium transition-colors',
-                  isActive ? 'text-blue-600' : 'text-gray-500'
-                )}
-              >
-                <item.icon className="w-5 h-5" />
-                {item.label}
-              </Link>
-            )
-          })}
+        {[
+          { href: '/mobile',    label: 'Home',     icon: Home },
+          { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+          { href: '/assets',    label: 'Assets',    icon: Truck },
+          { href: '/tickets',   label: 'Tickets',   icon: ClipboardList },
+          { href: '/shop',      label: 'Shop',      icon: Users },
+        ].map((item) => {
+          const isActive = pathname === item.href || (item.href !== '/mobile' && pathname.startsWith(item.href + '/'))
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium transition-colors',
+                isActive ? 'text-blue-600' : 'text-gray-500'
+              )}
+            >
+              <item.icon className="w-5 h-5" />
+              {item.label}
+            </Link>
+          )
+        })}
       </nav>
     </>
   )
