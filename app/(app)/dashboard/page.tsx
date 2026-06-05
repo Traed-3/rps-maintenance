@@ -70,9 +70,11 @@ export default async function DashboardPage({
 
   const weekEnd      = new Date(todayStart); weekEnd.setDate(todayStart.getDate() + 7)
   const monthEnd     = new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 0)
-  const todayStr     = todayStart.toISOString().split('T')[0]
-  const weekEndStr   = weekEnd.toISOString().split('T')[0]
-  const monthEndStr  = monthEnd.toISOString().split('T')[0]
+  const todayStr      = todayStart.toISOString().split('T')[0]
+  const weekStartStr  = weekStart.toISOString().split('T')[0]
+  const monthStartStr = monthStart.toISOString().split('T')[0]
+  const weekEndStr    = weekEnd.toISOString().split('T')[0]
+  const monthEndStr   = monthEnd.toISOString().split('T')[0]
 
   const [
     { count: openCount },
@@ -103,9 +105,9 @@ export default async function DashboardPage({
     admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', showAll ? ALL_STAFF_ROLES : SHOP_ROLES).eq('is_active', true).order('full_name'),
     admin.from('time_clock_entries').select('profile_id, clock_in, clock_out, total_minutes').eq('company_id', companyId).gte('clock_in', todayStart.toISOString()),
     admin.from('repair_tickets').select('id, ticket_number, title, status, priority, updated_at, assets(unit_number), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('title', 'ilike', 'Registration%').not('title', 'ilike', 'State Inspection%').order('updated_at', { ascending: false }).limit(20),
-    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', todayStart.toISOString()),
-    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', weekStart.toISOString()),
-    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('updated_at', monthStart.toISOString()),
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('date_completed', todayStr),
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('date_completed', weekStartStr),
+    admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('date_completed', monthStartStr),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lt('due_date', todayStr),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr),
     // GPS Needed box
