@@ -44,6 +44,9 @@ type Asset = {
   last_oil_change_mileage: number | null
   inspection_due_date: string | null
   registration_due_date: string | null
+  auto_ticket_inspection?: boolean
+  auto_ticket_registration?: boolean
+  auto_ticket_oil_change?: boolean
   notes: string | null
 }
 
@@ -280,6 +283,12 @@ export function AssetForm({
             />
           </div>
         </div>
+        <label className="flex items-center gap-2 mt-3 text-sm text-gray-700">
+          <input type="checkbox" name="auto_ticket_oil_change"
+            defaultChecked={asset ? !!asset.auto_ticket_oil_change : true}
+            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+          Auto-generate a ticket when the oil change is due
+        </label>
       </section>
 
       {/* Due Dates */}
@@ -296,6 +305,12 @@ export function AssetForm({
               onChange={setInspectionDate}
               className={inputClass}
             />
+            <label className="flex items-center gap-2 mt-2 text-sm text-gray-700">
+              <input type="checkbox" name="auto_ticket_inspection"
+                defaultChecked={asset ? !!asset.auto_ticket_inspection : true}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              Auto-generate a ticket when due
+            </label>
           </div>
           {showRegistration && (
             <div>
@@ -306,6 +321,12 @@ export function AssetForm({
                 onChange={setRegistrationDate}
                 className={inputClass}
               />
+              <label className="flex items-center gap-2 mt-2 text-sm text-gray-700">
+                <input type="checkbox" name="auto_ticket_registration"
+                  defaultChecked={asset ? !!asset.auto_ticket_registration : false}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                Auto-generate a ticket when due
+              </label>
             </div>
           )}
 

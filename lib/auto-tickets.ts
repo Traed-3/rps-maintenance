@@ -26,7 +26,8 @@ export async function createOverdueMaintenanceTickets(
     .select(`id, unit_number, current_mileage, next_oil_change_mileage,
       next_brake_inspection_date, next_tire_inspection_date,
       inspection_due_date,
-      registration_due_date`)
+      registration_due_date,
+      auto_ticket_inspection, auto_ticket_registration, auto_ticket_oil_change`)
     .eq('company_id', companyId)
     .not('status', 'in', '(retired,down,unsafe)')
 
@@ -34,16 +35,20 @@ export async function createOverdueMaintenanceTickets(
     const overdueItems: { label: string; priority: string }[] = []
 
     const oil = calcOilChangeDue(asset.current_mileage, asset.next_oil_change_mileage)
-    if (oil.status === 'overdue') overdueItems.push({ label: 'Oil Change', priority: 'normal' })
+    if (oil.status === 'overdue' && (asset as any).auto_ticket_oil_change !== false) {
+      overdueItems.push({ label: 'Oil Change', priority: 'normal' })
+    }
 
+    // Per-asset toggles control which due-date types auto-create tickets
     const dateChecks = [
-      { r: calcDateDue(asset.next_brake_inspection_date),  label: 'Brake Inspection', priority: 'high' },
-      { r: calcDateDue(asset.next_tire_inspection_date),   label: 'Tire Inspection',  priority: 'normal' },
-      { r: calcDateDue(asset.inspection_due_date),         label: 'State Inspection', priority: 'high' },
-      { r: calcDateDue(asset.registration_due_date),       label: 'Registration',     priority: 'normal' },
+      { r: calcDateDue(asset.next_brake_inspection_date),  label: 'Brake Inspection', priority: 'high',   enabled: true },
+      { r: calcDateDue(asset.next_tire_inspection_date),   label: 'Tire Inspection',  priority: 'normal', enabled: true },
+      { r: calcDateDue(asset.inspection_due_date),         label: 'State Inspection', priority: 'high',   enabled: (asset as any).auto_ticket_inspection   !== false },
+      { r: calcDateDue(asset.registration_due_date),       label: 'Registration',     priority: 'normal', enabled: (asset as any).auto_ticket_registration !== false },
     ]
 
-    for (const { r, label, priority } of dateChecks) {
+    for (const { r, label, priority, enabled } of dateChecks) {
+      if (!enabled) continue
       // Create tickets for anything due within the next 30 days or already overdue
       if (r.status !== 'ok' && r.status !== 'no_data') {
         overdueItems.push({ label, priority })

@@ -87,6 +87,9 @@ export async function createAsset(_state: ActionState, formData: FormData): Prom
     next_oil_change_mileage: nextOilMileage,
     inspection_due_date: str(formData.get('inspection_due_date')),
     registration_due_date: str(formData.get('registration_due_date')),
+    auto_ticket_inspection:   formData.get('auto_ticket_inspection') === 'on',
+    auto_ticket_registration: formData.get('auto_ticket_registration') === 'on',
+    auto_ticket_oil_change:   formData.get('auto_ticket_oil_change') === 'on',
     notes: str(formData.get('notes')),
   }).select('id').single()
 
@@ -155,6 +158,9 @@ export async function updateAsset(
       next_oil_change_mileage: nextOilMileage,
       inspection_due_date: str(formData.get('inspection_due_date')),
       registration_due_date: str(formData.get('registration_due_date')),
+      auto_ticket_inspection:   formData.get('auto_ticket_inspection') === 'on',
+      auto_ticket_registration: formData.get('auto_ticket_registration') === 'on',
+      auto_ticket_oil_change:   formData.get('auto_ticket_oil_change') === 'on',
         notes: str(formData.get('notes')),
     })
     .eq('id', id)
