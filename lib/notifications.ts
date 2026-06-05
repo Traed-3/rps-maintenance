@@ -2,10 +2,13 @@
  * In-app notification helpers.
  * All notifications are inserted into the notifications table.
  * Deduplication: skip if same type + entity was notified in the last 20 hours.
+ * Email / push delivery: driven by each user's alert_preferences row.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calcDateDue, calcOilChangeDue } from '@/lib/maintenance'
+import { sendAlertEmail } from '@/lib/email'
+import { sendPushNotification } from '@/lib/push'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -32,9 +35,9 @@ async function notify(
     link?: string
     relatedAssetId?: string | null
     relatedTicketId?: string | null
-    dedupAssetId?: string  // skip if this asset+type notified recently
+    dedupAssetId?: string
   }
-) {
+): Promise<boolean> {
   // Dedup: don't re-notify for the same asset + type within 20 hours
   if (dedupAssetId) {
     const cutoff = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString()
@@ -48,7 +51,7 @@ async function notify(
       .limit(1)
       .maybeSingle()
 
-    if (existing) return
+    if (existing) return false
   }
 
   await admin.from('notifications').insert({
@@ -61,10 +64,69 @@ async function notify(
     related_asset_id:  relatedAssetId ?? null,
     related_ticket_id: relatedTicketId ?? null,
   })
+
+  return true
+}
+
+// ── Deliver via email + push based on user prefs ──────────────────────────────
+
+async function deliverAlert(
+  admin: AdminClient,
+  {
+    recipientIds,
+    type,
+    title,
+    message,
+    link,
+  }: {
+    recipientIds: string[]
+    type: string
+    title: string
+    message?: string
+    link?: string
+  }
+) {
+  for (const profileId of recipientIds) {
+    const [{ data: prefs }, { data: profile }] = await Promise.all([
+      admin.from('alert_preferences')
+        .select('email_enabled, push_enabled')
+        .eq('profile_id', profileId)
+        .eq('alert_type', type)
+        .maybeSingle(),
+      admin.from('profiles')
+        .select('email')
+        .eq('id', profileId)
+        .single(),
+    ])
+
+    if (prefs?.email_enabled && profile?.email) {
+      sendAlertEmail({ to: profile.email, subject: title, title, message: message ?? '', link }).catch(() => {})
+    }
+
+    if (prefs?.push_enabled) {
+      const { data: subs } = await admin
+        .from('push_subscriptions')
+        .select('endpoint, p256dh, auth_key')
+        .eq('profile_id', profileId)
+
+      for (const sub of subs ?? []) {
+        sendPushNotification(sub, { title, message: message ?? '', link }).catch(() => {})
+      }
+    }
+  }
+}
+
+async function getManagerIds(admin: AdminClient, companyId: string): Promise<string[]> {
+  const { data } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('company_id', companyId)
+    .in('role', ['owner', 'manager', 'shop_manager'])
+    .eq('is_active', true)
+  return data?.map((p: { id: string }) => p.id) ?? []
 }
 
 // ── Rule: overdue maintenance ─────────────────────────────────────────────────
-// Called from dashboard load. Creates one notification per overdue asset.
 
 export async function checkOverdueMaintenanceNotifications(
   admin: AdminClient,
@@ -80,6 +142,8 @@ export async function checkOverdueMaintenanceNotifications(
     .eq('company_id', companyId)
     .not('status', 'in', '(retired,down,unsafe)')
 
+  const managerIds = await getManagerIds(admin, companyId)
+
   for (const a of assets ?? []) {
     const checks = [
       { r: calcOilChangeDue(a.current_mileage, a.next_oil_change_mileage), label: 'Oil Change' },
@@ -91,22 +155,27 @@ export async function checkOverdueMaintenanceNotifications(
 
     for (const { r, label } of checks) {
       if (r.status === 'overdue' || r.status === 'due_today') {
-        await notify(admin, {
+        const title   = `${label} overdue — ${a.unit_number}`
+        const message = r.label
+        const inserted = await notify(admin, {
           companyId,
           type:           'maintenance_overdue',
-          title:          `${label} overdue — ${a.unit_number}`,
-          message:        r.label,
+          title,
+          message,
           link:           `/assets/${a.id}`,
           relatedAssetId: a.id,
-          dedupAssetId:   `${a.id}_${label}`,  // unique per asset+type
+          dedupAssetId:   `${a.id}_${label}`,
         })
+
+        if (inserted) {
+          await deliverAlert(admin, { recipientIds: managerIds, type: 'maintenance_overdue', title, message, link: `/assets/${a.id}` })
+        }
       }
     }
   }
 }
 
 // ── Rule: unsafe / down asset ─────────────────────────────────────────────────
-// Called from updateAsset when status changes to unsafe or down.
 
 export async function notifyAssetUnsafe(
   admin: AdminClient,
@@ -115,20 +184,83 @@ export async function notifyAssetUnsafe(
   unitNumber: string,
   newStatus: string
 ) {
-  await notify(admin, {
+  const title   = `${unitNumber} marked ${newStatus.toUpperCase()}`
+  const message = `${unitNumber} has been set to "${newStatus}" and may need immediate attention.`
+  const link    = `/assets/${assetId}`
+
+  const inserted = await notify(admin, {
     companyId,
     type:           'asset_unsafe',
-    title:          `${unitNumber} marked ${newStatus.toUpperCase()}`,
-    message:        `${unitNumber} has been set to "${newStatus}" and may need immediate attention.`,
-    link:           `/assets/${assetId}`,
+    title,
+    message,
+    link,
     relatedAssetId: assetId,
     dedupAssetId:   assetId,
   })
+
+  if (inserted) {
+    const managerIds = await getManagerIds(admin, companyId)
+    await deliverAlert(admin, { recipientIds: managerIds, type: 'asset_unsafe', title, message, link })
+  }
+}
+
+// ── Rule: new repair ticket ───────────────────────────────────────────────────
+
+export async function notifyNewTicket(
+  admin: AdminClient,
+  companyId: string,
+  ticketId: string,
+  ticketNumber: string,
+  assetUnit: string
+) {
+  const title   = `New ticket — ${ticketNumber}`
+  const message = `A new repair ticket was opened for ${assetUnit}.`
+  const link    = `/tickets/${ticketId}`
+
+  const inserted = await notify(admin, {
+    companyId,
+    type:            'new_ticket',
+    title,
+    message,
+    link,
+    relatedTicketId: ticketId,
+  })
+
+  if (inserted) {
+    const managerIds = await getManagerIds(admin, companyId)
+    await deliverAlert(admin, { recipientIds: managerIds, type: 'new_ticket', title, message, link })
+  }
+}
+
+// ── Rule: ticket assigned ─────────────────────────────────────────────────────
+
+export async function notifyTicketAssigned(
+  admin: AdminClient,
+  companyId: string,
+  ticketId: string,
+  ticketNumber: string,
+  assigneeId: string
+) {
+  const title   = `Ticket assigned — ${ticketNumber}`
+  const message = `You have been assigned to repair ticket ${ticketNumber}.`
+  const link    = `/tickets/${ticketId}`
+
+  const inserted = await notify(admin, {
+    companyId,
+    recipientId:     assigneeId,
+    type:            'ticket_assigned',
+    title,
+    message,
+    link,
+    relatedTicketId: ticketId,
+  })
+
+  if (inserted) {
+    await deliverAlert(admin, { recipientIds: [assigneeId], type: 'ticket_assigned', title, message, link })
+  }
 }
 
 // ── Rule: forgot to clock out ─────────────────────────────────────────────────
-// Called from dashboard. Reminds the employee directly once they have been
-// clocked in for more than 12 hours with no clock-out recorded.
 
 export async function checkForgotClockOut(
   admin: AdminClient,
@@ -138,7 +270,7 @@ export async function checkForgotClockOut(
 
   const { data: staleEntries } = await admin
     .from('time_clock_entries')
-    .select('id, profile_id, clock_in, profiles(full_name)')
+    .select('id, profile_id, clock_in')
     .eq('company_id', companyId)
     .is('clock_out', null)
     .lte('clock_in', cutoff)
@@ -146,7 +278,6 @@ export async function checkForgotClockOut(
   for (const e of staleEntries ?? []) {
     const hoursAgo = Math.floor((Date.now() - new Date(e.clock_in).getTime()) / 3600000)
 
-    // Dedup by profile + type (one per ~day per employee)
     const yesterday = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString()
     const { data: existing } = await admin
       .from('notifications')
@@ -159,14 +290,19 @@ export async function checkForgotClockOut(
 
     if (existing) continue
 
-    // Goes to the employee themselves
+    const title   = 'Did you forget to clock out?'
+    const message = `You've been clocked in for ${hoursAgo}+ hours. Please go to RPS Maintenance and clock out now.`
+    const link    = '/shop/clock'
+
     await admin.from('notifications').insert({
       company_id:   companyId,
       recipient_id: e.profile_id,
       type:         'clock_out_reminder',
-      title:        'Did you forget to clock out?',
-      message:      `You've been clocked in for ${hoursAgo}+ hours. Please go to RPS Maintenance and clock out now.`,
-      link:         `/shop/clock`,
+      title,
+      message,
+      link,
     })
+
+    await deliverAlert(admin, { recipientIds: [e.profile_id], type: 'clock_out_reminder', title, message, link })
   }
 }

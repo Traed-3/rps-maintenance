@@ -46,6 +46,24 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* ── RPS Brand: override Tailwind blue → brand navy ── */
+  --color-blue-50:  #eef1f7;
+  --color-blue-100: #d4dbe9;
+  --color-blue-200: #a9b8d0;
+  --color-blue-300: #7595b7;
+  --color-blue-400: #4d6f9e;
+  --color-blue-500: #2d4e7a;
+  --color-blue-600: #1e3558;
+  --color-blue-700: #16243d;
+  --color-blue-800: #0d1727;
+  --color-blue-900: #080e18;
+  --color-blue-950: #040810;
+
+  /* ── RPS Brand green accent ── */
+  --color-rps-green:       #72c143;
+  --color-rps-green-light: #eef7e7;
+  --color-rps-green-dark:  #4e8a2c;
 }
 
 :root {
@@ -55,7 +73,7 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.22 0.065 255);   /* #16243d brand navy */
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -66,7 +84,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.35 0.065 255);      /* brand navy, slightly lighter for focus rings */
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
