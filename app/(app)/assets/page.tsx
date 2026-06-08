@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/assets/status-badge'
+import { ClickableRow } from '@/components/clickable-row'
 import { Button } from '@/components/ui/button'
 import { Plus, Search } from 'lucide-react'
 
@@ -141,7 +142,7 @@ export default async function AssetsPage({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {assets.map((asset) => (
-                  <tr key={asset.id} className="hover:bg-gray-50 transition-colors">
+                  <ClickableRow key={asset.id} href={`/assets/${asset.id}`}>
                     <td className="px-4 py-3 font-semibold text-gray-900">
                       {asset.unit_number}
                     </td>
@@ -175,14 +176,9 @@ export default async function AssetsPage({
                         : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/assets/${asset.id}`}
-                        className="text-blue-600 hover:text-blue-800 font-medium text-xs"
-                      >
-                        View →
-                      </Link>
+                      <span className="text-blue-600 font-medium text-xs">View →</span>
                     </td>
-                  </tr>
+                  </ClickableRow>
                 ))}
               </tbody>
             </table>
