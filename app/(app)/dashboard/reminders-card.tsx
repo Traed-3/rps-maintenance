@@ -74,29 +74,25 @@ export function RemindersCard({
               const k = kind(r.title)
               const overdue = r.dueDate ? new Date(r.dueDate) < new Date() : false
               return (
-                <div key={r.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 mt-0.5 ${
-                      k === 'registration'
-                        ? 'bg-blue-50 text-blue-700 border-blue-100'
-                        : 'bg-amber-50 text-amber-700 border-amber-100'
-                    }`}>
-                      {k === 'registration' ? 'Registration' : 'State Insp.'}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-gray-900">{r.unit ?? '—'}</span>
-                        {r.dueDate && (
-                          <span className={`text-xs ${overdue ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
-                            Due {new Date(r.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            {overdue ? ' · overdue' : ''}
-                          </span>
-                        )}
+                <div key={r.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${
+                    k === 'registration'
+                      ? 'bg-blue-50 text-blue-700 border-blue-100'
+                      : 'bg-amber-50 text-amber-700 border-amber-100'
+                  }`}>
+                    {k === 'registration' ? 'Registration' : 'State Insp.'}
+                  </span>
+                  <span className="font-semibold text-gray-900 shrink-0">{r.unit ?? '—'}</span>
+                  <div className="flex-1 min-w-0 text-right">
+                    {r.dueDate && (
+                      <div className={`text-xs ${overdue ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
+                        Due {new Date(r.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {overdue ? ' · overdue' : ''}
                       </div>
-                      <p className="text-xs text-gray-500 truncate">
-                        {r.description || (k === 'registration' ? 'Registration / tag renewal' : 'State safety inspection')}
-                      </p>
-                    </div>
+                    )}
+                    <p className="text-xs text-gray-500 truncate">
+                      {r.description || (k === 'registration' ? 'Registration / tag renewal' : 'State safety inspection')}
+                    </p>
                   </div>
                   <button
                     onClick={() => handleDone(r.id)}
