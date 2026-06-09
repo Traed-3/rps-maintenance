@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ClickableRow } from '@/components/clickable-row'
+import { ClickableItem } from '@/components/clickable-item'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { StatCard } from '@/components/dashboard/stat-card'
@@ -344,13 +345,13 @@ export default async function DashboardPage({
                       </div>
                       <div className="divide-y divide-gray-50 bg-white max-h-48 overflow-y-auto">
                         {items.map(t => (
-                          <div key={t.id} className="px-3 py-2 flex items-start justify-between gap-2">
+                          <ClickableItem key={t.id} href={`/tickets/${t.id}`} className="px-3 py-2 flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-gray-900 truncate">{(t as any).assets?.unit_number ?? '—'}</p>
                               <p className="text-xs text-gray-500 truncate">{t.title.replace(/ — .*/, '')}</p>
                             </div>
-                            <Link href={`/tickets/${t.id}`} className="text-xs text-blue-600 hover:text-blue-800 shrink-0 font-medium">Open →</Link>
-                          </div>
+                            <span className="text-xs text-blue-600 shrink-0 font-medium">Open →</span>
+                          </ClickableItem>
                         ))}
                       </div>
                     </div>
@@ -492,13 +493,13 @@ export default async function DashboardPage({
               ? <p className="px-5 py-6 text-center text-sm text-gray-400">Nothing due this month.</p>
               : <div className="divide-y divide-gray-50">
                   {sortedAlerts.filter(a => toBand(a.status) === 'due_this_month').slice(0, 8).map((item, i) => (
-                    <div key={i} className="px-4 py-3 flex items-center justify-between">
+                    <ClickableItem key={i} href={`/assets/${item.assetId}`} className="px-4 py-3 flex items-center justify-between">
                       <div>
-                        <Link href={`/assets/${item.assetId}`} className="text-sm font-semibold text-gray-900 hover:text-blue-600">{item.unitNumber}</Link>
+                        <span className="text-sm font-semibold text-gray-900">{item.unitNumber}</span>
                         <p className="text-xs text-gray-500">{item.category} · {item.detail}</p>
                       </div>
                       <Link href={item.href} className="text-xs text-blue-600 hover:text-blue-800 font-medium shrink-0 ml-3">Record →</Link>
-                    </div>
+                    </ClickableItem>
                   ))}
                 </div>
             }
