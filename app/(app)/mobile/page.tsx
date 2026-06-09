@@ -44,6 +44,8 @@ export default async function MobilePage() {
   }, 0)
 
   const isClockedIn = empStatus?.clock_status === 'clocked_in'
+  const activeTicket = (empStatus as any)?.repair_tickets
+  const isWorkingTicket = isClockedIn && empStatus?.current_status === 'working_on_ticket' && !!activeTicket?.id
   const isManager = ['owner', 'manager', 'shop_manager'].includes(profile?.role ?? '')
 
   // Assigned tickets count
@@ -70,16 +72,27 @@ export default async function MobilePage() {
         <p className="text-white/60 text-sm">{greeting}</p>
         <h1 className="text-2xl font-bold mt-0.5">{firstName}</h1>
 
-        {/* Status pill */}
-        <div className={cn(
-          'inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full text-sm font-semibold',
-          isClockedIn ? 'bg-green-500/30 text-green-100' : 'bg-white/20 text-white/80'
-        )}>
-          <span className={cn('w-2 h-2 rounded-full', isClockedIn ? 'bg-green-300' : 'bg-white/50')} />
-          {isClockedIn
-            ? STATUS_LABELS[empStatus?.current_status ?? ''] ?? 'Clocked In'
-            : 'Clocked Out'}
-        </div>
+        {/* Status pill — tap to open the active ticket when working one */}
+        {isWorkingTicket ? (
+          <Link
+            href={`/tickets/${activeTicket.id}`}
+            className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full text-sm font-semibold bg-green-500/30 text-green-100 hover:bg-green-500/45 transition-colors"
+          >
+            <span className="w-2 h-2 rounded-full bg-green-300" />
+            {STATUS_LABELS['working_on_ticket']}
+            <span className="opacity-80">→</span>
+          </Link>
+        ) : (
+          <div className={cn(
+            'inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full text-sm font-semibold',
+            isClockedIn ? 'bg-green-500/30 text-green-100' : 'bg-white/20 text-white/80'
+          )}>
+            <span className={cn('w-2 h-2 rounded-full', isClockedIn ? 'bg-green-300' : 'bg-white/50')} />
+            {isClockedIn
+              ? STATUS_LABELS[empStatus?.current_status ?? ''] ?? 'Clocked In'
+              : 'Clocked Out'}
+          </div>
+        )}
 
         {todayMins > 0 && (
           <p className="text-white/60 text-xs mt-2">
