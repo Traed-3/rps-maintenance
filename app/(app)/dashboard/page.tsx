@@ -121,7 +121,7 @@ export default async function DashboardPage({
     // Maintenance Alerts: all open tickets with due_date up to end of this month
     admin.from('repair_tickets').select('id, ticket_number, title, status, priority, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lte('due_date', monthEndStr).not('title', 'ilike', 'Registration%').not('title', 'ilike', 'State Inspection%').order('due_date'),
     // Reminders: Registration + State Inspection due (kept out of the main ticket list)
-    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').or('title.ilike.Registration*,title.ilike.State Inspection*').order('due_date', { nullsFirst: false }),
+    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number, make, model, name, registration_due_date, inspection_due_date)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').or('title.ilike.Registration*,title.ilike.State Inspection*').order('due_date', { nullsFirst: false }),
   ])
 
   const empIds = (employees ?? []).map(e => e.id)
@@ -435,12 +435,17 @@ export default async function DashboardPage({
       </section>
 
       {/* Reminders — Registration + State Inspection (kept separate from tickets) */}
-      <RemindersCard reminders={(reminderTickets ?? []).map(t => ({
-        id: t.id,
-        title: t.title,
-        unit: (t as any).assets?.unit_number ?? null,
-        dueDate: (t as any).due_date ?? null,
-      }))} onComplete={completeReminder} />
+      <RemindersCard reminders={(reminderTickets ?? []).map(t => {
+        const a = (t as any).assets
+        const isReg = /^registration/i.test(t.title)
+        return {
+          id: t.id,
+          title: t.title,
+          unit: a?.unit_number ?? null,
+          description: [a?.make, a?.model].filter(Boolean).join(' ') || a?.name || null,
+          dueDate: (isReg ? a?.registration_due_date : a?.inspection_due_date) ?? (t as any).due_date ?? null,
+        }
+      })} onComplete={completeReminder} />
 
       {/* Row 4 — Open tickets */}
       <section>
