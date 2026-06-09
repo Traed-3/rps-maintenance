@@ -147,6 +147,25 @@ set of authorized inboxes can avoid the costly third-party security assessment.
 
 ---
 
+## UI CONVENTIONS — STANDARD (follow for ALL new/edited tables)
+
+**Clickable rows.** Any table whose rows represent a navigable record (an asset, ticket,
+employee, expense, etc.) MUST make the WHOLE row clickable — not just a "View →" link.
+
+- Use `<ClickableRow href="/path/{id}">…cells…</ClickableRow>` from
+  `components/clickable-row.tsx` in place of the data `<tr>` (leave the header `<tr>` alone).
+- `ClickableRow` already: navigates on click + Enter, shows a pointer cursor + hover/focus
+  highlight, and **ignores clicks on nested `a` / `button` / `input` / `select` / `textarea` /
+  `label` / `[role="button"]` / `[data-no-row-nav]`** and on text selection — so per-row
+  action buttons/links (edit, delete, status, "Record →") keep working without extra code.
+- Keep a small "View →" (or "Record →"/"Update →") cue in the last cell as an affordance; it
+  can be a plain `<span>` since the whole row navigates.
+- Applied across: assets, tickets, expenses, shop, shop/employees, dashboard (Open Tickets +
+  Employee Status), and all maintenance lists (oil-changes, brakes, tires, inspections,
+  registrations). New tables must match this.
+
+---
+
 ## SESSION RULES
 
 1. Trae is a coding newbie — explain commands and where to click; give copy-paste-ready blocks.

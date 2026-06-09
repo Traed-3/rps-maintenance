@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
@@ -54,7 +55,7 @@ export default async function ShopEmployeesPage() {
             {(employees ?? []).map((emp) => {
               const s = statusMap[emp.id]
               return (
-                <tr key={emp.id} className="hover:bg-gray-50">
+                <ClickableRow key={emp.id} href={`/shop/employees/${emp.id}`}>
                   <td className="px-4 py-3">
                     <Link href={`/shop/employees/${emp.id}`} className="font-medium text-gray-900 hover:text-blue-600">
                       {emp.full_name}
@@ -81,7 +82,7 @@ export default async function ShopEmployeesPage() {
                   <td className="px-4 py-3 text-right">
                     <Link href={`/shop/employees/${emp.id}`} className="text-xs font-medium text-blue-600 hover:text-blue-800">View →</Link>
                   </td>
-                </tr>
+                </ClickableRow>
               )
             })}
           </tbody>

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { TicketStatusBadge, PriorityBadge } from '@/components/tickets/ticket-badges'
@@ -173,7 +174,7 @@ export default async function TicketsPage({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {tickets.map((t) => (
-                  <tr key={t.id} className="hover:bg-gray-50 transition-colors">
+                  <ClickableRow key={t.id} href={`/tickets/${t.id}`}>
                     <td className="px-4 py-3 font-mono text-xs text-gray-500">{t.ticket_number}</td>
                     <td className="px-4 py-3">
                       <Link href={`/tickets/${t.id}`} className="font-medium text-gray-900 hover:text-blue-600">
@@ -202,7 +203,7 @@ export default async function TicketsPage({
                         View →
                       </Link>
                     </td>
-                  </tr>
+                  </ClickableRow>
                 ))}
               </tbody>
             </table>

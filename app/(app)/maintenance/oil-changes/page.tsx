@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { DueBadge } from '@/components/maintenance/due-badge'
@@ -49,7 +50,7 @@ export default async function OilChangesPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {sorted.map((a) => (
-                <tr key={a.id} className="hover:bg-gray-50 transition-colors">
+                <ClickableRow key={a.id} href={`/assets/${a.id}`}>
                   <td className="px-4 py-3 font-semibold text-gray-900">
                     <Link href={`/assets/${a.id}`} className="hover:text-blue-600">{a.unit_number}</Link>
                   </td>
@@ -75,7 +76,7 @@ export default async function OilChangesPage() {
                       Record →
                     </Link>
                   </td>
-                </tr>
+                </ClickableRow>
               ))}
             </tbody>
           </table>

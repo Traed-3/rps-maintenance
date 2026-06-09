@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { DueBadge } from '@/components/maintenance/due-badge'
@@ -55,7 +56,7 @@ export default async function InspectionsPage() {
               {sorted.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">No inspection dates set. Edit an asset to add them.</td></tr>
               ) : sorted.map((r, i) => (
-                <tr key={i} className="hover:bg-gray-50">
+                <ClickableRow key={i} href={`/assets/${r.id}`}>
                   <td className="px-4 py-3 font-semibold text-gray-900">
                     <Link href={`/assets/${r.id}`} className="hover:text-blue-600">{r.unit_number}</Link>
                   </td>
@@ -68,7 +69,7 @@ export default async function InspectionsPage() {
                   <td className="px-4 py-3 text-right">
                     <Link href={`/assets/${r.id}/edit`} className="text-xs font-medium text-blue-600 hover:text-blue-800">Update →</Link>
                   </td>
-                </tr>
+                </ClickableRow>
               ))}
             </tbody>
           </table>

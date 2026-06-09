@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { StatCard } from '@/components/dashboard/stat-card'
@@ -403,7 +404,7 @@ export default async function DashboardPage({
                   const s = statusMap[emp.id]
                   const mins = hoursToday[emp.id] ?? 0
                   return (
-                    <tr key={emp.id} className="hover:bg-gray-50">
+                    <ClickableRow key={emp.id} href={`/shop/employees/${emp.id}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full shrink-0 bg-green-500" />
@@ -420,7 +421,7 @@ export default async function DashboardPage({
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs hidden lg:table-cell">{s?.status_updated_at ? minsAgo(s.status_updated_at) : '—'}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{mins > 0 ? fmtMins(mins) : '—'}</td>
-                    </tr>
+                    </ClickableRow>
                   )
                 })}
                 {(employees ?? []).filter(emp => statusMap[emp.id]?.clock_status === 'clocked_in').length === 0 && (
@@ -462,7 +463,7 @@ export default async function DashboardPage({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {recentTickets?.map(t => (
-                  <tr key={t.id} className="hover:bg-gray-50">
+                  <ClickableRow key={t.id} href={`/tickets/${t.id}`}>
                     <td className="px-4 py-3 font-mono text-xs text-gray-400">{t.ticket_number}</td>
                     <td className="px-4 py-3"><Link href={`/tickets/${t.id}`} className="font-medium text-gray-900 hover:text-blue-600">{t.title}</Link></td>
                     <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{(t as any).assets?.unit_number ?? '—'}</td>
@@ -470,7 +471,7 @@ export default async function DashboardPage({
                     <td className="px-4 py-3 hidden sm:table-cell"><PriorityBadge priority={t.priority} /></td>
                     <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{(t as any).profiles?.full_name ?? <span className="text-gray-400">Unassigned</span>}</td>
                     <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">{new Date(t.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
-                  </tr>
+                  </ClickableRow>
                 ))}
                 {!recentTickets?.length && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-400">No open tickets. 🎉</td></tr>}
               </tbody>

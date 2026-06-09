@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
@@ -128,7 +129,7 @@ export default async function ShopPage() {
                 const s = statusMap[emp.id]
                 const mins = hoursToday[emp.id] ?? 0
                 return (
-                  <tr key={emp.id} className="hover:bg-gray-50">
+                  <ClickableRow key={emp.id} href={`/shop/employees/${emp.id}`}>
                     <td className="px-4 py-3">
                       <Link href={`/shop/employees/${emp.id}`} className="font-medium text-gray-900 hover:text-blue-600">
                         {emp.full_name}
@@ -156,7 +157,7 @@ export default async function ShopPage() {
                     <td className="px-4 py-3 text-right font-medium text-gray-900">
                       {mins > 0 ? minutesToHHMM(mins) : '—'}
                     </td>
-                  </tr>
+                  </ClickableRow>
                 )
               })}
               {!employees?.length && (

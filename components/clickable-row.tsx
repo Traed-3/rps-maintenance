@@ -18,17 +18,22 @@ export function ClickableRow({
 }) {
   const router = useRouter()
 
-  function go() {
+  function handleClick(e: React.MouseEvent<HTMLTableRowElement>) {
+    // Don't hijack clicks on nested interactive elements (links, buttons, inputs, etc.)
+    const target = e.target as HTMLElement
+    if (target.closest('a, button, input, select, textarea, label, [role="button"], [data-no-row-nav]')) return
+    // Don't navigate if the user is selecting text
+    if (typeof window !== 'undefined' && window.getSelection()?.toString()) return
     router.push(href)
   }
 
   return (
     <tr
-      onClick={go}
+      onClick={handleClick}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (e.key === 'Enter') {
           e.preventDefault()
-          go()
+          router.push(href)
         }
       }}
       role="link"

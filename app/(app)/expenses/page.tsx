@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { Plus, Fuel, Receipt } from 'lucide-react'
@@ -114,7 +115,7 @@ export default async function ExpensesPage({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {expenses.map(e => (
-                  <tr key={e.id} className="hover:bg-gray-50">
+                  <ClickableRow key={e.id} href={`/expenses/${e.id}`}>
                     <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
                       {new Date(e.expense_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </td>
@@ -138,7 +139,7 @@ export default async function ExpensesPage({
                     <td className="px-4 py-3 text-right">
                       <Link href={`/expenses/${e.id}`} className="text-xs text-blue-600 hover:text-blue-800 font-medium">View →</Link>
                     </td>
-                  </tr>
+                  </ClickableRow>
                 ))}
               </tbody>
               <tfoot>
