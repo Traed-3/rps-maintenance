@@ -267,11 +267,12 @@ export async function addComment(_state: ActionState, formData: FormData): Promi
 
   if (error) return { error: error.message }
 
-  // Auto-flag parts state from comment text. Keeps the Waiting on Parts list
-  // accurate when shop staff write a note like "need to order one" instead of
-  // clicking the checkbox. Same rule lives in lib/gmail-sync.ts for incoming emails.
+  // Auto-flag state from comment text. Keeps the dashboard accurate when staff
+  // write notes like "need to order one" or "complete" instead of clicking a
+  // status button. Same rule lives in lib/gmail-sync.ts for incoming emails.
   const detected = detectStatus(comment)
-  if (detected.partsReceived || detected.partsOrdered || detected.partsNeeded) {
+  const shouldReact = detected.isComplete || detected.partsReceived || detected.partsOrdered || detected.partsNeeded
+  if (shouldReact) {
     const { data: cur } = await admin
       .from('repair_tickets')
       .select('status')
@@ -282,7 +283,13 @@ export async function addComment(_state: ActionState, formData: FormData): Promi
     const finalized = cur && ['completed', 'closed', 'deferred'].includes(cur.status)
     if (cur && !finalized) {
       const updates: Record<string, unknown> = {}
-      if (detected.partsReceived) {
+      // "complete" wins — closes the ticket and records who wrote it
+      if (detected.isComplete) {
+        updates.status           = 'completed'
+        updates.date_completed   = new Date().toISOString().split('T')[0]
+        updates.completed_by     = profile.id
+        if (comment.trim()) updates.completion_notes = comment.trim().slice(0, 1000)
+      } else if (detected.partsReceived) {
         updates.parts_needed     = false
         updates.parts_ordered    = true
         updates.waiting_on_parts = false

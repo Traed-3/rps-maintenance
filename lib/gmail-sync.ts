@@ -403,9 +403,11 @@ async function processThread(
       const updates: Record<string, unknown> = {}
 
       if (status.isComplete) {
-        updates.status          = 'closed'
+        updates.status          = 'completed'
         updates.date_completed   = new Date(getHeader(replyHeaders, 'Date') || Date.now()).toISOString().split('T')[0]
         if (replyBody.trim()) updates.completion_notes = replyBody.trim().slice(0, 1000)
+        const completedById = await findReporter(admin, replyEmail)
+        if (completedById) updates.completed_by = completedById
       } else if (status.partsReceived) {
         updates.parts_needed      = false
         updates.parts_ordered     = true
@@ -508,13 +510,19 @@ async function processThread(
   let partsOrdered  = false
   let partsReceived = false
   let dateCompleted: string | null = null
+  let completedBy:   string | null = null
 
   for (const msg of messages) {
     const s = detectStatus(extractBody(msg.payload))
     if (s.isComplete) {
-      finalStatus  = 'closed'
+      finalStatus  = 'completed'
       dateCompleted = new Date(getHeader(msg.payload?.headers ?? [], 'Date') || Date.now())
         .toISOString().split('T')[0]
+      // Resolve who sent the completion message → completed_by
+      const fromHdr = getHeader(msg.payload?.headers ?? [], 'From')
+      const { email: completerEmail } = parseSender(fromHdr)
+      const completerId = await findReporter(admin, completerEmail)
+      if (completerId) completedBy = completerId
     }
     if (s.partsNeeded)   partsNeeded   = true
     if (s.partsOrdered)  partsOrdered  = true
@@ -560,6 +568,7 @@ async function processThread(
     gmail_message_id:    firstMsg.id,
     gmail_thread_id:     threadId,
     date_completed:      dateCompleted,
+    completed_by:        completedBy,
     // Backdate creation to email date
     created_at:          msgDate.toISOString(),
   }).select('id').single()
