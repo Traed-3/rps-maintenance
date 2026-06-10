@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { syncGmailToTickets } from '@/lib/gmail-sync'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { notifyGmailSyncError } from '@/lib/notifications'
+
+const COMPANY_ID = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 
 /**
  * GET /api/gmail/sync
@@ -31,6 +35,17 @@ export async function GET(request: NextRequest) {
   try {
     const result = await syncGmailToTickets({ historical, maxThreads })
 
+    // If the refresh token died, the per-thread errors will say "Gmail token
+    // error: invalid_grant ...". Surface that as an in-app + email notification
+    // for managers so the next cron tick doesn't silently keep failing.
+    const tokenError = result.errors.find(e =>
+      /invalid_grant|expired or revoked|Gmail token error/i.test(e)
+    )
+    if (tokenError) {
+      const admin = createAdminClient()
+      await notifyGmailSyncError(admin, COMPANY_ID, tokenError).catch(() => {})
+    }
+
     return NextResponse.json({
       ok: true,
       timestamp: new Date().toISOString(),
@@ -39,6 +54,10 @@ export async function GET(request: NextRequest) {
     })
   } catch (e: any) {
     console.error('[Gmail Sync Error]', e)
+    if (/invalid_grant|expired or revoked|Gmail token error/i.test(e.message ?? '')) {
+      const admin = createAdminClient()
+      await notifyGmailSyncError(admin, COMPANY_ID, e.message).catch(() => {})
+    }
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
   }
 }

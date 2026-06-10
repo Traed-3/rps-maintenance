@@ -126,6 +126,46 @@ async function getManagerIds(admin: AdminClient, companyId: string): Promise<str
   return data?.map((p: { id: string }) => p.id) ?? []
 }
 
+// ── Rule: Gmail sync failure (e.g. revoked refresh token) ─────────────────────
+
+export async function notifyGmailSyncError(
+  admin: AdminClient,
+  companyId: string,
+  errorMessage: string,
+) {
+  // Dedup: at most one notification per 4 hours so the 3-min cron doesn't spam
+  const cutoff = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()
+  const { data: existing } = await admin
+    .from('notifications')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('type', 'gmail_sync_error')
+    .gte('created_at', cutoff)
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) return false
+
+  const managerIds = await getManagerIds(admin, companyId)
+  const title   = 'Gmail sync is broken'
+  const message = `New emails are NOT being imported. Run "npm run refresh-gmail" locally and then update Vercel. (${errorMessage})`
+  const link    = '/settings'
+
+  for (const recipientId of managerIds) {
+    await notify(admin, {
+      companyId,
+      recipientId,
+      type: 'gmail_sync_error',
+      title,
+      message,
+      link,
+    })
+  }
+
+  await deliverAlert(admin, { recipientIds: managerIds, type: 'gmail_sync_error', title, message, link })
+  return true
+}
+
 // ── Rule: overdue maintenance ─────────────────────────────────────────────────
 
 export async function checkOverdueMaintenanceNotifications(
