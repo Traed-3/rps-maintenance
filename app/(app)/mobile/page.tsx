@@ -3,6 +3,8 @@ import Image from 'next/image'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
+import { ShareAppButton } from '@/components/mobile/share-app-button'
+import { SignOutLink } from '@/components/mobile/sign-out-link'
 
 const STATUS_LABELS: Record<string, string> = {
   clocked_out: 'Clocked Out', at_shop: 'At Shop',
@@ -178,12 +180,16 @@ export default async function MobilePage() {
         </div>
       </div>
 
-      {/* Install hint for iOS */}
-      <div className="px-6 pb-8 text-center">
+      {/* Install hint + share + sign out */}
+      <div className="px-6 pb-24 text-center space-y-3">
         <p className="text-xs text-gray-400">
           Add to Home Screen for quick access:{' '}
           <span className="font-medium">tap Share → Add to Home Screen</span>
         </p>
+        <div className="flex items-center justify-center gap-6">
+          <ShareAppButton />
+          <SignOutLink />
+        </div>
       </div>
     </div>
   )

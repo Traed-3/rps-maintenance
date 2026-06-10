@@ -114,7 +114,8 @@ export function parseSender(fromHeader: string): ParsedSender {
 // ── Status keyword detection ──────────────────────────────────────────────────
 
 export interface DetectedStatus {
-  partsOrdered:  boolean
+  partsNeeded:   boolean   // parts identified as needed (may not yet be ordered)
+  partsOrdered:  boolean   // parts have been explicitly ordered
   partsReceived: boolean   // parts in / arrived / received → ready to schedule
   isComplete:    boolean
   isScheduled:   boolean
@@ -122,17 +123,88 @@ export interface DetectedStatus {
   rawKeyword:    string | null
 }
 
+// Phrasings that mean parts have been ORDERED and we're now waiting for them.
+// Shop convention: status updates start with "Update X ordered" where X can be
+// "part", "parts", or any specific component name. Patterns here are deliberately
+// broad — false-positive risk in a maintenance ticket is low.
+const PARTS_ORDERED_PATTERNS: RegExp[] = [
+  // Bare "ordered" anywhere — catches "Update part ordered", "Update sending unit
+  // ordered", "Update new O2 sensors ordered", "Update passenger manifold ordered",
+  // etc. Anchored to word boundaries to avoid matching inside other words.
+  /\bordered\b/i,
+  /\bre[\s-]?ordered\b/i,
+  // Explicit phrasings (kept for clarity / future ref even though \bordered\b covers them)
+  /parts?\s+on\s+order/i,
+  /placed?\s+(?:an?\s+|the\s+)?order/i,
+  /placing\s+(?:an?\s+|the\s+)?order/i,
+  /back[\s-]?order(?:ed)?/i,
+  /on\s+back\s*order/i,
+  /parts?\s+shipped/i,
+]
+
+// Broader phrasings that mean parts are BLOCKING the work — covers pre-order
+// ("need to order"), in-flight ("on the way"), and waiting variants. Anything
+// here sends the ticket to the Waiting on Parts list.
+const PARTS_NEEDED_PATTERNS: RegExp[] = [
+  /parts?\s+needed/i,
+  /need(?:s|ed|ing)?\s+(?:a\s+|the\s+|some\s+|new\s+|replacement\s+)?parts?/i,
+  /need(?:s|ed|ing)?\s+to\s+(?:be\s+)?(?:order|get|grab|buy|pick\s*up)/i,
+  /(?:have|has|got|gotta|going|gonna|will)\s+to\s+order/i,
+  /ordering\s+(?:the\s+|a\s+|some\s+|new\s+|replacement\s+)?parts?/i,
+  /waiting\s+(?:on|for)\s+(?:the\s+|a\s+|some\s+)?parts?/i,
+  /awaiting\s+parts?/i,
+  /parts?\s+(?:not|aren't|are\s+not|isn't|is\s+not)\s+(?:in|here|available)/i,
+  /parts?\s+coming/i,
+  /parts?\s+on\s+(?:the\s+)?way/i,
+  /parts?\s+eta/i,
+  /eta\s+(?:on|for|of)\s+(?:the\s+|a\s+)?parts?/i,
+  /parts?\s+(?:will|should|expected\s+to)\s+(?:arrive|be\s+(?:in|here))/i,
+  /missing\s+(?:a\s+|the\s+|some\s+)?parts?/i,
+]
+
+const PARTS_RECEIVED_PATTERNS: RegExp[] = [
+  /parts?\s+received/i,
+  /received\s+(?:the\s+|a\s+)?parts?/i,
+  /parts?\s+are\s+(?:in|here)\b/i,
+  /parts?\s+(?:in|here)\s+now/i,
+  /parts?\s+arrived/i,
+  /parts?\s+came\s+in/i,
+  /parts?\s+delivered/i,
+  /got\s+(?:the\s+|a\s+)?(?:new\s+|replacement\s+)?parts?/i,
+  /picked\s+up\s+(?:the\s+|a\s+)?parts?/i,
+  // Shop convention: "Update part @ shop", "Update parts at Shop", "Update part in Shop"
+  // — all mean the part arrived and is sitting at the shop ready to install.
+  /parts?\s*@\s*(?:the\s+)?shop/i,
+  /parts?\s+at\s+(?:the\s+)?shop/i,
+  /parts?\s+in\s+(?:the\s+)?shop/i,
+  // Bare "@ shop" / "at the shop" preceded by "Update" — common terse form
+  /\bupdate[\s:]*[^.\n]{0,40}@\s*(?:the\s+)?shop/i,
+  /\bupdate[\s:]*[^.\n]{0,40}\bat\s+(?:the\s+)?shop\b/i,
+  /\bupdate[\s:]*[^.\n]{0,40}\bin\s+(?:the\s+)?shop\b/i,
+]
+
 export function detectStatus(text: string): DetectedStatus {
-  const t = text.toLowerCase()
+  if (!text) {
+    return {
+      partsNeeded: false, partsOrdered: false, partsReceived: false,
+      isComplete: false, isScheduled: false, scheduledNote: null, rawKeyword: null,
+    }
+  }
 
-  const partsOrdered =
-    /parts?\s+ordered|ordered\s+the\s+parts?|parts?\s+on\s+order/i.test(text)
+  const partsReceived = PARTS_RECEIVED_PATTERNS.some(r => r.test(text))
 
-  const partsReceived =
-    /parts?\s+(?:received|in|arrived)|parts?\s+are\s+in|received\s+parts?|parts?\s+came\s+in/i.test(text)
+  // "Received" takes precedence — if parts are in, we're no longer waiting.
+  const partsOrdered  = !partsReceived && PARTS_ORDERED_PATTERNS.some(r => r.test(text))
+
+  // partsNeeded is a superset that catches everything parts-related that isn't
+  // already received: "need to order", "waiting on parts", "ordering", "on backorder",
+  // "parts coming", "ETA next week", etc. Any match here puts the ticket on the
+  // Waiting on Parts list.
+  const partsNeeded = !partsReceived &&
+    (partsOrdered || PARTS_NEEDED_PATTERNS.some(r => r.test(text)))
 
   const isComplete =
-    /\bcomplete\b|\bcompleted\b|job\s+complete|work\s+complete|repair\s+complete|done\b/i.test(text)
+    /\bcomplete\b|\bcompleted\b|job\s+complete|work\s+complete|repair\s+complete|\bdone\b|\bfinished\b|\binstalled\b|\breplaced\b/i.test(text)
 
   const scheduledMatch = text.match(
     /(?:alignment|inspection|repair|service|appointment)?\s*scheduled(?:\s+for)?\s+([^\n.]+)|needs?\s+scheduled/i
@@ -144,10 +216,12 @@ export function detectStatus(text: string): DetectedStatus {
     isComplete    && 'complete',
     partsReceived && 'parts received/in',
     partsOrdered  && 'parts ordered',
+    partsNeeded && !partsOrdered && 'parts needed',
     isScheduled   && 'scheduled',
   ].filter(Boolean)
 
   return {
+    partsNeeded,
     partsOrdered,
     partsReceived,
     isComplete,

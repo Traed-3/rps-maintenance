@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { findSimilarOpenTicket } from '@/lib/ticket-dedup'
+import { detectStatus } from '@/lib/gmail-parser'
 
 type ActionState = { error: string } | null
 
@@ -265,6 +266,42 @@ export async function addComment(_state: ActionState, formData: FormData): Promi
   })
 
   if (error) return { error: error.message }
+
+  // Auto-flag parts state from comment text. Keeps the Waiting on Parts list
+  // accurate when shop staff write a note like "need to order one" instead of
+  // clicking the checkbox. Same rule lives in lib/gmail-sync.ts for incoming emails.
+  const detected = detectStatus(comment)
+  if (detected.partsReceived || detected.partsOrdered || detected.partsNeeded) {
+    const { data: cur } = await admin
+      .from('repair_tickets')
+      .select('status')
+      .eq('id', ticketId)
+      .eq('company_id', profile.company_id)
+      .maybeSingle()
+
+    const finalized = cur && ['completed', 'closed', 'deferred'].includes(cur.status)
+    if (cur && !finalized) {
+      const updates: Record<string, unknown> = {}
+      if (detected.partsReceived) {
+        updates.parts_needed     = false
+        updates.parts_ordered    = true
+        updates.waiting_on_parts = false
+      } else if (detected.partsOrdered) {
+        updates.parts_needed     = false
+        updates.parts_ordered    = true
+        updates.waiting_on_parts = true
+        if (['new', 'open', 'assigned'].includes(cur.status)) updates.status = 'waiting_parts'
+      } else {
+        updates.parts_needed     = true
+        updates.waiting_on_parts = true
+        if (['new', 'open', 'assigned'].includes(cur.status)) updates.status = 'waiting_parts'
+      }
+      await admin.from('repair_tickets').update(updates)
+        .eq('id', ticketId).eq('company_id', profile.company_id)
+      revalidatePath('/tickets')
+      revalidatePath('/dashboard')
+    }
+  }
 
   revalidatePath(`/tickets/${ticketId}`)
   return null

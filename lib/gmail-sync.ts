@@ -407,13 +407,20 @@ async function processThread(
         updates.date_completed   = new Date(getHeader(replyHeaders, 'Date') || Date.now()).toISOString().split('T')[0]
         if (replyBody.trim()) updates.completion_notes = replyBody.trim().slice(0, 1000)
       } else if (status.partsReceived) {
+        updates.parts_needed      = false
         updates.parts_ordered     = true
         updates.waiting_on_parts  = false
       } else if (status.partsOrdered) {
-        updates.parts_needed   = true
-        updates.parts_ordered  = true
+        updates.parts_needed     = false
+        updates.parts_ordered    = true
         updates.waiting_on_parts = true
-        updates.status         = 'waiting_parts'
+        if (['new', 'open', 'assigned'].includes(curStatus)) updates.status = 'waiting_parts'
+      } else if (status.partsNeeded) {
+        // Parts mentioned but no explicit "ordered" — still belongs on the Waiting on
+        // Parts list. Don't touch parts_ordered (we don't know if they've been ordered yet).
+        updates.parts_needed     = true
+        updates.waiting_on_parts = true
+        if (['new', 'open', 'assigned'].includes(curStatus)) updates.status = 'waiting_parts'
       } else if (replyBody.trim() && ['new', 'open', 'assigned'].includes(curStatus)) {
         // A follow-up email / update / notes means work has started
         updates.status = 'in_progress'
@@ -497,6 +504,7 @@ async function processThread(
 
   // Determine initial status from ALL messages
   let finalStatus: string = isInbox ? 'open' : 'closed'
+  let partsNeeded   = false
   let partsOrdered  = false
   let partsReceived = false
   let dateCompleted: string | null = null
@@ -508,12 +516,21 @@ async function processThread(
       dateCompleted = new Date(getHeader(msg.payload?.headers ?? [], 'Date') || Date.now())
         .toISOString().split('T')[0]
     }
+    if (s.partsNeeded)   partsNeeded   = true
     if (s.partsOrdered)  partsOrdered  = true
     if (s.partsReceived) partsReceived = true
   }
 
-  // A thread that already has follow-up emails (and isn't complete) means work has started
-  if (finalStatus !== 'closed' && !partsOrdered && messages.length > 1) finalStatus = 'in_progress'
+  // Anything parts-related that hasn't been received yet = pending → Waiting on Parts list
+  const partsPending = (partsNeeded || partsOrdered) && !partsReceived
+
+  // Status: parts-pending wins over "in_progress" assumption; otherwise a thread with
+  // follow-up emails that isn't complete means work has started.
+  if (finalStatus !== 'closed' && partsPending) {
+    finalStatus = 'waiting_parts'
+  } else if (finalStatus !== 'closed' && messages.length > 1) {
+    finalStatus = 'in_progress'
+  }
 
   // Build ticket number using email date
   const ticketNumber = await buildTicketNumber(admin, msgDate, unitNumber)
@@ -529,9 +546,9 @@ async function processThread(
     source:              'gmail',
     priority:            'normal',
     status:              finalStatus,
-    parts_needed:        partsOrdered || partsReceived,
-    parts_ordered:       partsOrdered || partsReceived,
-    waiting_on_parts:    partsOrdered && !partsReceived,
+    parts_needed:        partsPending && !partsOrdered,        // identified but not yet ordered
+    parts_ordered:       partsOrdered || partsReceived,         // we have placed an order
+    waiting_on_parts:    partsPending,                          // anything not received
     gmail_message_id:    firstMsg.id,
     gmail_thread_id:     threadId,
     date_completed:      dateCompleted,
