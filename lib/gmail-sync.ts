@@ -532,6 +532,14 @@ async function processThread(
     finalStatus = 'in_progress'
   }
 
+  // Archived threads with no explicit "Complete" keyword still need a completion date
+  // so they show up in dashboard counts. Fall back to the last message date.
+  if (finalStatus === 'closed' && !dateCompleted) {
+    const last = messages[messages.length - 1]
+    const lastDateStr = last ? getHeader(last.payload?.headers ?? [], 'Date') : null
+    dateCompleted = new Date(lastDateStr || Date.now()).toISOString().split('T')[0]
+  }
+
   // Build ticket number using email date
   const ticketNumber = await buildTicketNumber(admin, msgDate, unitNumber)
 
