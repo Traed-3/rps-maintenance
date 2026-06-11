@@ -301,7 +301,12 @@ export function generateTicketNumber(date: Date, unitNumber: string, existing: s
   const m    = date.getMonth() + 1
   const d    = date.getDate()
   const y    = date.getFullYear().toString().slice(-2)
-  const base = `${m}${d}${y}${unitNumber}`
+  const datePrefix = `${m}${d}${y}`
+  // Units with spaces (e.g. facilities like "225 Garage") get a clean, readable
+  // number: drop the spaces, uppercase, and separate from the date with a dash.
+  const base = /\s/.test(unitNumber)
+    ? `${datePrefix}-${unitNumber.replace(/\s+/g, '').toUpperCase()}`
+    : `${datePrefix}${unitNumber}`
 
   if (!existing.includes(base)) return base
 
