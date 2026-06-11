@@ -31,7 +31,7 @@ export default async function UsersSettingsPage() {
       <div className="mb-6 flex items-center gap-3">
         <Link href="/settings" className="text-sm text-gray-500 hover:text-gray-700">← Settings</Link>
         <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+        <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">User Management</h1>
       </div>
 
       <div className="mb-6">
@@ -47,7 +47,7 @@ export default async function UsersSettingsPage() {
         </ol>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
@@ -125,7 +125,7 @@ export default async function UsersSettingsPage() {
         </table>
       </div>
 
-      <div className="mt-6 bg-gray-50 rounded-xl border border-gray-200 p-5 text-sm text-gray-600">
+      <div className="mt-6 bg-gray-50 rounded-2xl border border-gray-200 shadow-sm p-5 text-sm text-gray-600">
         <p className="font-semibold text-gray-900 mb-2">Role descriptions:</p>
         <div className="space-y-1.5">
           <p><strong>Owner</strong> — Full access. Can manage users, settings, and see everything.</p>

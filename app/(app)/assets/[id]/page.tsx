@@ -143,7 +143,7 @@ export default async function AssetDetailPage({
       <div className="mt-3 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{asset.unit_number}</h1>
+            <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">{asset.unit_number}</h1>
             <StatusBadge status={asset.status} />
           </div>
           {vehicleLabel && <p className="text-gray-500 mt-0.5">{vehicleLabel}</p>}
@@ -195,7 +195,7 @@ export default async function AssetDetailPage({
 
       <div className="mt-6 space-y-5">
         {/* Asset Info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <h2 className="font-semibold text-gray-900 mb-2">Asset Info</h2>
           <div className="divide-y divide-gray-50">
             <InfoRow label="Asset Type" value={(asset as any).asset_types?.name} />
@@ -224,7 +224,7 @@ export default async function AssetDetailPage({
 
         {/* Oil Change */}
         {!isProperty && (asset.last_oil_change_date || asset.oil_change_interval_miles) && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
             <h2 className="font-semibold text-gray-900 mb-2">Oil Change / Service</h2>
             <div className="divide-y divide-gray-50">
               <InfoRow label="Last Service Date" value={asset.last_oil_change_date} />
@@ -253,7 +253,7 @@ export default async function AssetDetailPage({
 
         {/* Due Dates */}
         {(isProperty || inspectionNA || asset.inspection_due_date || asset.registration_due_date) && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
             <h2 className="font-semibold text-gray-900 mb-3">Due Dates</h2>
             <div className="space-y-2">
               {isProperty ? (
@@ -276,7 +276,7 @@ export default async function AssetDetailPage({
 
         {/* Notes */}
         {asset.notes && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
             <h2 className="font-semibold text-gray-900 mb-2">Notes</h2>
             <p className="text-sm text-gray-600 whitespace-pre-wrap">{asset.notes}</p>
           </div>
@@ -284,7 +284,7 @@ export default async function AssetDetailPage({
 
         {/* Maintenance History — vehicles/equipment only */}
         {!isProperty && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <h2 className="font-semibold text-gray-900 mb-3">Maintenance History</h2>
           {!maintenanceHistory?.length ? (
             <p className="text-sm text-gray-400 text-center py-4">
@@ -326,7 +326,7 @@ export default async function AssetDetailPage({
         )}
 
         {/* Repair Ticket History — every ticket (incl. closed email tickets) */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-gray-900">Repair Ticket History</h2>
             <span className="text-xs text-gray-400">{ticketHistory?.length ?? 0} total</span>
@@ -363,7 +363,7 @@ export default async function AssetDetailPage({
 
         {/* Mileage History — vehicles/equipment only */}
         {!isProperty && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-gray-900">
               {(asset as any).uses_hours ? 'Hours History' : 'Mileage History'}

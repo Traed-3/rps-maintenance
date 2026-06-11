@@ -30,14 +30,14 @@ export default async function MobileMileagePage() {
         </div>
 
         {/* Asset picker */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <p className="text-sm font-medium text-gray-700 mb-3">Select a vehicle:</p>
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {(assets ?? []).map(a => (
               <Link
                 key={a.id}
                 href={`/assets/${a.id}/mileage`}
-                className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                className="flex items-center justify-between w-full px-4 py-3 rounded-2xl border border-gray-200 shadow-sm hover:border-blue-400 hover:bg-blue-50 transition-colors"
               >
                 <div>
                   <p className="font-semibold text-gray-900">{a.unit_number}</p>

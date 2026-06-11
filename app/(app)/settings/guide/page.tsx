@@ -37,7 +37,7 @@ export default function GuidePage() {
       <div className="mb-6 flex items-center gap-3">
         <Link href="/settings" className="text-sm text-gray-500 hover:text-gray-700">← Settings</Link>
         <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">User Guide</h1>
+        <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">User Guide</h1>
       </div>
 
       {/* Tab-style navigation */}
@@ -183,7 +183,7 @@ export default function GuidePage() {
         </Section>
       </div>
 
-      <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 text-sm text-gray-600 text-center">
+      <div className="bg-gray-50 rounded-2xl border border-gray-200 shadow-sm p-5 text-sm text-gray-600 text-center">
         <p>Need help? Contact Trae at <strong>finance.trae@proton.me</strong></p>
       </div>
     </div>

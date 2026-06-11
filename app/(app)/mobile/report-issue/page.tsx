@@ -28,7 +28,7 @@ export default async function ReportIssuePage() {
           <Link href="/mobile" className="text-sm text-blue-600">← Home</Link>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <ReportIssueForm action={createTicket} assets={assets ?? []} />
         </div>
       </div>

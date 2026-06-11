@@ -29,7 +29,7 @@ export default async function SettingsPage() {
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Settings</h1>
         <p className="text-sm text-gray-500 mt-0.5">Manage your RPS platform.</p>
       </div>
 
@@ -40,7 +40,7 @@ export default async function SettingsPage() {
           <Link
             key={l.href}
             href={l.href}
-            className="flex items-center gap-4 bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-400 hover:shadow-sm transition-all"
+            className="flex items-center gap-4 bg-white rounded-2xl border border-gray-200 shadow-sm p-5 hover:border-gray-400 hover:shadow-sm transition-all"
           >
             <div className="p-2.5 rounded-lg bg-gray-100 border border-gray-200">
               <l.icon className="w-5 h-5 text-gray-600" />

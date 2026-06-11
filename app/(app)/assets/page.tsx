@@ -57,7 +57,7 @@ export default async function AssetsPage({
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Assets</h1>
+          <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Assets</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {assets?.length ?? 0} asset{assets?.length !== 1 ? 's' : ''}
             {status || q ? ' (filtered)' : ''}
@@ -114,7 +114,7 @@ export default async function AssetsPage({
 
       {/* Asset table */}
       {!assets?.length ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
           <p className="text-gray-400 text-sm">
             {q || status ? 'No assets match your filters.' : 'No assets yet. Add your first one!'}
           </p>
@@ -128,7 +128,7 @@ export default async function AssetsPage({
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

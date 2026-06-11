@@ -66,7 +66,11 @@ export default async function MobilePage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <div className="text-white px-6 pt-10 pb-8" style={{ backgroundColor: '#16243d' }}>
+      <div className="relative overflow-hidden text-white px-6 pt-10 pb-8 rounded-b-3xl shadow-lg"
+        style={{ background: 'linear-gradient(135deg, #16243d 0%, #1e3558 55%, #2d4e7a 100%)' }}>
+        <div className="pointer-events-none absolute -top-16 -right-10 w-52 h-52 rounded-full bg-blue-300/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 -left-8 w-52 h-52 rounded-full bg-green-400/10 blur-3xl" />
+        <div className="relative">
         <div className="flex items-center gap-2 mb-4">
           <span className="inline-flex items-center justify-center bg-white rounded-lg p-1">
             <Image src="/logo-mark.png" alt="" width={32} height={32} className="h-7 w-7" />
@@ -103,6 +107,7 @@ export default async function MobilePage() {
             {Math.floor(todayMins / 60)}h {todayMins % 60}m today
           </p>
         )}
+        </div>
       </div>
 
       {/* Active ticket banner */}

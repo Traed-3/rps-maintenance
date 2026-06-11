@@ -52,7 +52,7 @@ export default async function ExpensesPage({
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Expenses & Receipts</h1>
+          <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Expenses & Receipts</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             ${monthTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} spent this month
           </p>
@@ -97,7 +97,7 @@ export default async function ExpensesPage({
       </form>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         {!expenses?.length ? (
           <p className="px-5 py-10 text-center text-sm text-gray-400">No expenses found.</p>
         ) : (

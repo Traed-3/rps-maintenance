@@ -72,7 +72,7 @@ export default async function GeneralTimePage() {
           </div>
         )}
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
           <GeneralTimeForm
             action={logGeneralTime}
             disabled={!isClockedIn}
@@ -82,7 +82,7 @@ export default async function GeneralTimePage() {
 
         {/* Recent entries */}
         {recent && recent.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
             <h2 className="font-semibold text-gray-900 text-sm mb-3">Recent Entries</h2>
             <div className="space-y-2">
               {recent.map((e) => (

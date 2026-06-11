@@ -49,7 +49,7 @@ export default async function TimeEntriesPage({
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Time Entries</h1>
+          <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Time Entries</h1>
           <p className="text-sm text-gray-500 mt-0.5">Last 30 days</p>
         </div>
         <div className="flex gap-2">
@@ -87,7 +87,7 @@ export default async function TimeEntriesPage({
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

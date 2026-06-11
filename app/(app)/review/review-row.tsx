@@ -47,7 +47,7 @@ export function ReviewRow({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
       {/* Email summary */}
       <div className="flex flex-wrap items-center gap-2 mb-1">
         <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-100">

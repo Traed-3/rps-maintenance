@@ -73,7 +73,7 @@ export function LaborTimer({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-gray-900">Labor Time</h2>
         <span className="text-sm font-semibold text-gray-700">

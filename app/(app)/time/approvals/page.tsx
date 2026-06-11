@@ -35,11 +35,11 @@ export default async function ApprovalsPage() {
       <div className="mb-6 flex items-center gap-3">
         <Link href="/time" className="text-sm text-gray-500 hover:text-gray-700">← Time Entries</Link>
         <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
+        <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Pending Approvals</h1>
       </div>
 
       {!entries?.length ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
           <p className="text-4xl mb-3">✅</p>
           <p className="font-semibold text-gray-900">All caught up!</p>
           <p className="text-sm text-gray-500 mt-1">No time entries pending approval.</p>
@@ -47,7 +47,7 @@ export default async function ApprovalsPage() {
       ) : (
         <>
           <p className="text-sm text-gray-500 mb-4">{entries.length} entr{entries.length !== 1 ? 'ies' : 'y'} pending approval.</p>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="divide-y divide-gray-50">
               {entries.map(e => {
                 const emp = (e as any).profiles

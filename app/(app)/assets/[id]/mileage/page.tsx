@@ -67,7 +67,7 @@ export default async function MileagePage({
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
         <MileageForm action={action} today={today} usesHours={(asset as any).uses_hours} />
       </div>
     </div>

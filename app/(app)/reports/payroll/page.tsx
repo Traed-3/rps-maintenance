@@ -151,7 +151,7 @@ export default async function PayrollPage({
             <span>/</span>
             <span>Payroll</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Payroll Report</h1>
+          <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Payroll Report</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {label} · {start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </p>
@@ -190,11 +190,11 @@ export default async function PayrollPage({
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 text-center">
           <p className="text-2xl font-bold text-gray-900">{fmtHours(totalAllMins)}</p>
           <p className="text-xs font-medium text-gray-500 mt-0.5">Total Hours</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 text-center">
           <p className="text-2xl font-bold text-gray-900">{(entries ?? []).filter(e => e.clock_out).length}</p>
           <p className="text-xs font-medium text-gray-500 mt-0.5">Completed Shifts</p>
         </div>
@@ -205,7 +205,7 @@ export default async function PayrollPage({
       </div>
 
       {/* Weekly grid */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900 text-sm">Hours by Employee</h2>
           {unapprovedCount > 0 && (
@@ -281,7 +281,7 @@ export default async function PayrollPage({
       </div>
 
       {/* Detailed entries */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
           <h2 className="font-semibold text-gray-900 text-sm">Time Entry Detail</h2>
         </div>

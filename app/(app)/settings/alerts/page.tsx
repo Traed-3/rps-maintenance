@@ -72,7 +72,7 @@ export default async function AlertsPage() {
       <div className="mb-6 flex items-center gap-3">
         <Link href="/settings" className="text-sm text-gray-500 hover:text-gray-700">← Settings</Link>
         <span className="text-gray-300">/</span>
-        <h1 className="text-2xl font-bold text-gray-900">Alerts &amp; Notifications</h1>
+        <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Alerts &amp; Notifications</h1>
       </div>
 
       <p className="text-sm text-gray-500 mb-8">
@@ -81,7 +81,7 @@ export default async function AlertsPage() {
 
       {/* Preferences table */}
       <form action={saveAlertPreferences}>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           {/* Column headers */}
           <div className="flex items-center px-5 py-3 border-b border-gray-100 bg-gray-50">
             <div className="flex-1" />

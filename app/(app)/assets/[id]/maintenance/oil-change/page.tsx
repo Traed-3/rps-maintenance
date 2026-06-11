@@ -72,7 +72,7 @@ export default async function OilChangePage({
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
         <OilChangeForm
           action={action}
           today={today}

@@ -63,7 +63,7 @@ export default async function TiresPage({
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
         <TiresForm action={action} today={today} currentMileage={asset.current_mileage} />
       </div>
     </div>

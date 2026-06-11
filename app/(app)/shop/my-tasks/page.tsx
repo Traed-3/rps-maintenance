@@ -72,7 +72,7 @@ export default async function MyTasksPage() {
         )}
 
         {tickets.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
             <p className="text-gray-400 text-sm">No tickets assigned to you.</p>
           </div>
         ) : (

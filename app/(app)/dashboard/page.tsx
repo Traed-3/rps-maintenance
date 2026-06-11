@@ -378,7 +378,7 @@ export default async function DashboardPage({
                   if (!items || items.length === 0) return null
                   const def = bandDefs[band]
                   return (
-                    <div key={band} className="rounded-xl border border-gray-200 overflow-hidden">
+                    <div key={band} className="rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                       <div className={cn('px-3 py-2 text-xs font-bold uppercase tracking-wide flex justify-between', def.header)}>
                         <span>{def.label}</span>
                         <span>{items.length}</span>

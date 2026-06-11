@@ -43,7 +43,7 @@ export default function ReportsPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+        <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Reports</h1>
         <p className="text-sm text-gray-500 mt-0.5">Data and exports for RPS operations.</p>
       </div>
 
@@ -52,7 +52,7 @@ export default function ReportsPage() {
           <Link
             key={r.href}
             href={r.href}
-            className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-400 hover:shadow-sm transition-all flex items-start gap-4"
+            className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 hover:border-gray-400 hover:shadow-sm transition-all flex items-start gap-4"
           >
             <div className={`p-2.5 rounded-lg border shrink-0 ${r.color}`}>
               <r.icon className="w-5 h-5" />

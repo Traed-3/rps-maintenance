@@ -95,7 +95,7 @@ export default async function ShopPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Shop</h1>
+          <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Shop</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {clockedInCount} of {employees?.length ?? 0} employee{employees?.length !== 1 ? 's' : ''} clocked in
           </p>
@@ -109,7 +109,7 @@ export default async function ShopPage() {
       </div>
 
       {/* Live employee status table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
           <h2 className="font-semibold text-gray-900 text-sm">Live Employee Status</h2>
         </div>
@@ -169,7 +169,7 @@ export default async function ShopPage() {
       </div>
 
       {/* Open tickets */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900 text-sm">Active Tickets</h2>
           <Link href="/tickets" className="text-xs text-blue-600 hover:text-blue-800 font-medium">View all →</Link>

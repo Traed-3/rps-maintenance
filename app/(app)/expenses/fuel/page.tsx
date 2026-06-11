@@ -32,13 +32,13 @@ export default async function FuelPage() {
         <p className="text-sm text-gray-500 mt-0.5">Log a fill-up. Mileage auto-updates the asset record.</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-6">
         <FuelForm action={createFuelEntry} assets={assets ?? []} paymentMethods={paymentMethods ?? []} today={today} />
       </div>
 
       {/* Recent fuel entries */}
       {recentFuel && recentFuel.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
             <h2 className="font-semibold text-sm text-gray-900">Recent Fill-Ups</h2>
           </div>

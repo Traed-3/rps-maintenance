@@ -77,9 +77,9 @@ export default function AppNav({ email, role }: { email: string; role?: string }
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                  'flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all',
                   isActive
-                    ? 'bg-blue-50 text-blue-700'
+                    ? 'bg-gradient-to-r from-[#16243d] to-[#2d4e7a] text-white shadow-md shadow-blue-900/20'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 )}
               >
