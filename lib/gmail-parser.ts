@@ -302,11 +302,11 @@ export function generateTicketNumber(date: Date, unitNumber: string, existing: s
   const d    = date.getDate()
   const y    = date.getFullYear().toString().slice(-2)
   const datePrefix = `${m}${d}${y}`
-  // Units with spaces (e.g. facilities like "225 Garage") get a clean, readable
-  // number: drop the spaces, uppercase, and separate from the date with a dash.
-  const base = /\s/.test(unitNumber)
-    ? `${datePrefix}-${unitNumber.replace(/\s+/g, '').toUpperCase()}`
-    : `${datePrefix}${unitNumber}`
+  const cleanUnit = unitNumber.replace(/\s+/g, '').toUpperCase()
+  // A dash separates the date from units that would otherwise run into it:
+  // anything with a space, or starting with a digit (e.g. "225GARAGE" → 6526-225GARAGE).
+  const needsDash = /\s/.test(unitNumber) || /^\d/.test(cleanUnit)
+  const base = needsDash ? `${datePrefix}-${cleanUnit}` : `${datePrefix}${unitNumber}`
 
   if (!existing.includes(base)) return base
 
