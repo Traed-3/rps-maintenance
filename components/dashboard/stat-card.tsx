@@ -32,16 +32,16 @@ export function StatCard({
   const c = COLOR_MAP[color]
   const content = (
     <div className={cn(
-      'rounded-xl border p-5 flex items-center gap-4 transition-all',
+      'rounded-2xl border p-5 flex items-center gap-4 shadow-sm transition-all duration-200',
       c.bg, c.border,
-      href && 'hover:shadow-sm cursor-pointer',
+      href && 'hover:shadow-md hover:-translate-y-0.5 cursor-pointer',
       alert && Number(value) > 0 && 'ring-2 ring-red-300'
     )}>
-      <div className={cn('p-2.5 rounded-lg bg-white shadow-sm', c.border, 'border')}>
+      <div className={cn('p-2.5 rounded-xl bg-white shadow-sm', c.border, 'border')}>
         <Icon className={cn('w-5 h-5', c.icon)} />
       </div>
       <div className="min-w-0">
-        <p className="text-2xl font-bold text-gray-900 tabular-nums">{value}</p>
+        <p className="text-2xl font-bold text-gray-900 tabular-nums tracking-tight">{value}</p>
         <p className={cn('text-xs font-medium mt-0.5', c.text)}>{label}</p>
       </div>
     </div>

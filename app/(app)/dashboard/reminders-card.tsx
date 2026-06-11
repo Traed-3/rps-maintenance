@@ -65,7 +65,7 @@ export function RemindersCard({
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         {shown.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-gray-400">No reminders. 🎉</p>
         ) : (

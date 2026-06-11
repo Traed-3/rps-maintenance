@@ -239,16 +239,23 @@ export default async function DashboardPage({
     <div className="p-6 max-w-7xl mx-auto space-y-8">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Good {greeting}, {profile?.full_name?.split(' ')[0]}.{' '}
-          {totalAlerts > 0 && (
-            <Link href="/maintenance" className="text-orange-600 font-medium underline decoration-orange-300 underline-offset-2 hover:text-orange-700 hover:decoration-orange-500">
-              {totalAlerts} maintenance item{totalAlerts !== 1 ? 's' : ''} need attention.
-            </Link>
-          )}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Dashboard</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
+            Good {greeting}, {profile?.full_name?.split(' ')[0]}
+          </h1>
+        </div>
+        {totalAlerts > 0 ? (
+          <Link href="/maintenance" className="inline-flex items-center gap-2 rounded-full bg-orange-50 border border-orange-200 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 hover:border-orange-300 transition-colors shadow-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {totalAlerts} maintenance item{totalAlerts !== 1 ? 's' : ''} need attention
+          </Link>
+        ) : (
+          <span className="inline-flex items-center gap-2 rounded-full bg-green-50 border border-green-200 px-4 py-2 text-sm font-medium text-green-700">
+            <CheckCircle className="w-4 h-4 shrink-0" /> All caught up
+          </span>
+        )}
       </div>
 
       {/* Row 1 — Summary cards */}
@@ -270,7 +277,7 @@ export default async function DashboardPage({
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
 
         {/* Completed — stacked */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
             <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide">Tickets Completed</h3>
           </div>
@@ -290,7 +297,7 @@ export default async function DashboardPage({
         </div>
 
         {/* Oil Change Service Due */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
             <h3 className="text-xs font-bold text-amber-700 uppercase tracking-wide">🔧 Oil Change Due</h3>
             <span className="text-xs font-bold text-amber-600">{oilChangeTickets?.length ?? 0}</span>
@@ -312,7 +319,7 @@ export default async function DashboardPage({
         </div>
 
         {/* Parts Received — Need Scheduled */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-4 py-2.5 bg-purple-50 border-b border-purple-100 flex items-center justify-between">
             <h3 className="text-xs font-bold text-purple-700 uppercase tracking-wide">📦 Parts In – Schedule</h3>
             <span className="text-xs font-bold text-purple-600">{partsReceivedTickets?.length ?? 0}</span>
@@ -411,7 +418,7 @@ export default async function DashboardPage({
             <Link href="/shop" className="text-sm text-blue-600 hover:text-blue-800 font-medium">Shop →</Link>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -479,7 +486,7 @@ export default async function DashboardPage({
             <h2 className="text-base font-bold text-gray-900">Maintenance Due This Month</h2>
             <Link href="/maintenance" className="text-sm text-blue-600 hover:text-blue-800 font-medium">All →</Link>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             {sortedAlerts.filter(a => toBand(a.status) === 'due_this_month').length === 0
               ? <p className="px-5 py-6 text-center text-sm text-gray-400">Nothing due this month.</p>
               : <div className="divide-y divide-gray-50">
@@ -502,7 +509,7 @@ export default async function DashboardPage({
             <h2 className="text-base font-bold text-gray-900">Assets Down</h2>
             <Link href="/assets?status=down" className="text-sm text-blue-600 hover:text-blue-800 font-medium">Assets →</Link>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             {!downAssets?.length
               ? <p className="px-5 py-6 text-center text-sm text-gray-400">No assets currently down. ✅</p>
               : <div className="divide-y divide-gray-50">
@@ -527,7 +534,7 @@ export default async function DashboardPage({
           <h2 className="text-base font-bold text-gray-900">Open Tickets</h2>
           <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">View all →</Link>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
