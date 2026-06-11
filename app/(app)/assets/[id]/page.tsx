@@ -129,6 +129,8 @@ export default async function AssetDetailPage({
   // State inspections don't apply to hours-based assets or machines/equipment
   const typeName = (asset as any).asset_types?.name ?? ''
   const inspectionNA = !!(asset as any).uses_hours || ['Machine', 'Equipment'].includes(typeName)
+  // Buildings / facilities are "property" — no mileage, service, or due dates.
+  const isProperty = typeName === 'Building / Facility' || asset.status === 'property'
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -148,12 +150,14 @@ export default async function AssetDetailPage({
           {asset.name && <p className="text-sm text-gray-400">{asset.name}</p>}
         </div>
         <div className="flex gap-2 shrink-0">
+          {!isProperty && (
           <Link href={`/assets/${id}/mileage`}>
             <Button variant="outline" className="gap-2">
               <Gauge className="w-4 h-4" />
               {(asset as any).uses_hours ? 'Add Hours' : 'Add Mileage'}
             </Button>
           </Link>
+          )}
           {canManage && (
             <Link href={`/assets/${id}/edit`}>
               <Button variant="outline" className="gap-2">
@@ -165,7 +169,8 @@ export default async function AssetDetailPage({
         </div>
       </div>
 
-      {/* Quick service actions */}
+      {/* Quick service actions — vehicles/equipment only */}
+      {!isProperty && (
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
           href={`/assets/${id}/maintenance/oil-change`}
@@ -186,6 +191,7 @@ export default async function AssetDetailPage({
           <Wrench className="w-3.5 h-3.5" /> Tire Service
         </Link>
       </div>
+      )}
 
       <div className="mt-6 space-y-5">
         {/* Asset Info */}
@@ -200,7 +206,9 @@ export default async function AssetDetailPage({
             <InfoRow label="Model" value={asset.model} />
             <InfoRow label="VIN / Serial Number" value={asset.vin} />
             <InfoRow label="License Plate" value={asset.license_plate} />
-            {(asset as any).uses_hours ? (
+            {isProperty ? (
+              <InfoRow label="Mileage" value="N/A" />
+            ) : (asset as any).uses_hours ? (
               <InfoRow
                 label="Current Hours"
                 value={(asset as any).current_hours != null ? `${Number((asset as any).current_hours).toLocaleString()} hrs` : null}
@@ -215,7 +223,7 @@ export default async function AssetDetailPage({
         </div>
 
         {/* Oil Change */}
-        {(asset.last_oil_change_date || asset.oil_change_interval_miles) && (
+        {!isProperty && (asset.last_oil_change_date || asset.oil_change_interval_miles) && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-semibold text-gray-900 mb-2">Oil Change / Service</h2>
             <div className="divide-y divide-gray-50">
@@ -244,11 +252,16 @@ export default async function AssetDetailPage({
         )}
 
         {/* Due Dates */}
-        {(inspectionNA || asset.inspection_due_date || asset.registration_due_date) && (
+        {(isProperty || inspectionNA || asset.inspection_due_date || asset.registration_due_date) && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-semibold text-gray-900 mb-3">Due Dates</h2>
             <div className="space-y-2">
-              {inspectionNA ? (
+              {isProperty ? (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500">
+                  <span className="font-medium">Inspection / Registration</span>
+                  <span>N/A — property asset</span>
+                </div>
+              ) : inspectionNA ? (
                 <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500">
                   <span className="font-medium">State Inspection</span>
                   <span>N/A — {(asset as any).uses_hours ? 'hours-based' : typeName.toLowerCase()}</span>
@@ -269,7 +282,8 @@ export default async function AssetDetailPage({
           </div>
         )}
 
-        {/* Maintenance History */}
+        {/* Maintenance History — vehicles/equipment only */}
+        {!isProperty && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="font-semibold text-gray-900 mb-3">Maintenance History</h2>
           {!maintenanceHistory?.length ? (
@@ -309,6 +323,7 @@ export default async function AssetDetailPage({
             </div>
           )}
         </div>
+        )}
 
         {/* Repair Ticket History — every ticket (incl. closed email tickets) */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -346,7 +361,8 @@ export default async function AssetDetailPage({
           )}
         </div>
 
-        {/* Mileage History */}
+        {/* Mileage History — vehicles/equipment only */}
+        {!isProperty && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-gray-900">
@@ -410,6 +426,7 @@ export default async function AssetDetailPage({
             </div>
           )}
         </div>
+        )}
 
         {/* Asset Photos */}
         <AssetPhotoSection assetId={id} initialPhotos={assetPhotos ?? []} onSave={saveAssetPhoto} />
