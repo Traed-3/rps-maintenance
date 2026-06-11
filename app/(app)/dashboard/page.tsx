@@ -67,6 +67,11 @@ export default async function DashboardPage({
   const companyId = profile!.company_id
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
 
+  // Non-vehicle asset types whose open tickets belong on the Misc Tasks list
+  const { data: miscTypes } = await admin.from('asset_types').select('id')
+    .eq('company_id', companyId).in('name', ['Building / Facility', 'Equipment', 'Machine'])
+  const miscTypeIds = (miscTypes ?? []).map(t => t.id)
+
   const weekStart  = new Date(todayStart); weekStart.setDate(todayStart.getDate() - todayStart.getDay())
   const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1)
 
@@ -125,8 +130,8 @@ export default async function DashboardPage({
     admin.from('repair_tickets').select('id, ticket_number, title, status, priority, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lte('due_date', monthEndStr).not('title', 'ilike', 'Registration%').not('title', 'ilike', 'State Inspection%').order('due_date'),
     // Reminders: Registration + State Inspection due (kept out of the main ticket list)
     admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number, make, model, name, registration_due_date, inspection_due_date)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').or('title.ilike.Registration*,title.ilike.State Inspection*').order('due_date', { nullsFirst: false }),
-    // Misc Tasks: open tickets attached to a Property (Building/Facility) asset
-    admin.from('repair_tickets').select('id, ticket_number, title, status, assets!inner(unit_number, status)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').eq('assets.status', 'property').order('updated_at', { ascending: false }).limit(30),
+    // Misc Tasks: open tickets on non-vehicle assets (Property / Equipment / Machine)
+    admin.from('repair_tickets').select('id, ticket_number, title, status, assets!inner(unit_number, asset_type_id)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').in('assets.asset_type_id', miscTypeIds.length ? miscTypeIds : ['00000000-0000-0000-0000-000000000000']).order('updated_at', { ascending: false }).limit(50),
   ])
 
   const empIds = (employees ?? []).map(e => e.id)
@@ -498,7 +503,7 @@ export default async function DashboardPage({
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-base font-bold text-gray-900">Misc Tasks</h2>
-            <p className="text-xs text-gray-400">Property &amp; facility jobs (buildings, shop, equipment fixtures)</p>
+            <p className="text-xs text-gray-400">Open jobs on property, equipment &amp; machine assets</p>
           </div>
           <span className="text-xs text-gray-400">{(miscTasks ?? []).length} item{(miscTasks ?? []).length !== 1 ? 's' : ''}</span>
         </div>
@@ -548,7 +553,7 @@ export default async function DashboardPage({
 
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-gray-900">Assets Down / Unsafe</h2>
+            <h2 className="text-base font-bold text-gray-900">Assets Down</h2>
             <Link href="/assets?status=down" className="text-sm text-blue-600 hover:text-blue-800 font-medium">Assets →</Link>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
