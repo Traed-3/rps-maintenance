@@ -13,6 +13,7 @@ import { ClipboardList, AlertTriangle, Truck, Package, Wrench, Calendar, Users, 
 import { cn } from '@/lib/utils'
 import { revalidatePath } from 'next/cache'
 import { RemindersCard } from './reminders-card'
+import { AssignControl } from '@/components/tickets/assign-control'
 
 const STATUS_LABELS: Record<string, string> = {
   clocked_out: 'Clocked Out', at_shop: 'At Shop', working_on_ticket: 'Working on Ticket',
@@ -72,6 +73,12 @@ export default async function DashboardPage({
     .eq('company_id', companyId).in('name', ['Building / Facility', 'Equipment', 'Machine'])
   const miscTypeIds = (miscTypes ?? []).map(t => t.id)
 
+  const canAssign = ['owner', 'manager', 'shop_manager'].includes(profile?.role ?? '')
+  const { data: assignable } = await admin.from('profiles').select('id, full_name')
+    .eq('company_id', companyId).eq('is_active', true)
+    .in('role', ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech'])
+    .order('full_name')
+
   const weekStart  = new Date(todayStart); weekStart.setDate(todayStart.getDate() - todayStart.getDay())
   const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1)
 
@@ -112,7 +119,7 @@ export default async function DashboardPage({
     admin.from('assets').select('id, unit_number, name, make, model, status, current_mileage, next_oil_change_mileage, next_brake_inspection_date, next_tire_inspection_date, inspection_due_date, registration_due_date').eq('company_id', companyId).neq('status', 'retired'),
     admin.from('profiles').select('id, full_name, role').eq('company_id', companyId).in('role', showAll ? ALL_STAFF_ROLES : SHOP_ROLES).eq('is_active', true).order('full_name'),
     admin.from('time_clock_entries').select('profile_id, clock_in, clock_out, total_minutes').eq('company_id', companyId).gte('clock_in', todayStart.toISOString()),
-    admin.from('repair_tickets').select('id, ticket_number, title, status, priority, updated_at, assets(unit_number), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('title', 'ilike', 'Registration%').not('title', 'ilike', 'State Inspection%').order('updated_at', { ascending: false }).limit(20),
+    admin.from('repair_tickets').select('id, ticket_number, title, status, priority, updated_at, assigned_to, assets(unit_number), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('title', 'ilike', 'Registration%').not('title', 'ilike', 'State Inspection%').order('updated_at', { ascending: false }).limit(20),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('date_completed', todayStr),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('date_completed', weekStartStr),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('date_completed', monthStartStr),
@@ -474,7 +481,13 @@ export default async function DashboardPage({
                     <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{(t as any).assets?.unit_number ?? '—'}</td>
                     <td className="px-4 py-3"><TicketStatusBadge status={t.status} /></td>
                     <td className="px-4 py-3 hidden sm:table-cell"><PriorityBadge priority={t.priority} /></td>
-                    <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{(t as any).profiles?.full_name ?? <span className="text-gray-400">Unassigned</span>}</td>
+                    <td className="px-4 py-3 text-gray-600 hidden lg:table-cell text-xs">
+                      {canAssign ? (
+                        <AssignControl ticketId={t.id} currentId={(t as any).assigned_to ?? null} currentName={(t as any).profiles?.full_name ?? null} employees={assignable ?? []} />
+                      ) : (
+                        (t as any).profiles?.full_name ?? <span className="text-gray-400">Unassigned</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">{new Date(t.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                   </ClickableRow>
                 ))}
