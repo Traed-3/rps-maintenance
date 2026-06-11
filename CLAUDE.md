@@ -173,4 +173,4 @@ employee, expense, etc.) MUST make the WHOLE row clickable — not just a "View 
 3. This is Next.js 16 / React 19 — confirm current APIs from node_modules/next docs before coding.
 4. Always confirm before any destructive database operation (dropping columns, deleting rows).
 5. Build/change one piece at a time and keep the app deployable.
-6. Right now (pre-dad-demo) Trae does NOT want app changes — hold edits until he approves.
+6. Trae actively requests and approves changes during sessions — implement them directly. (The old pre-dad-demo "hold all edits" freeze is lifted.) Still confirm before destructive DB operations per rule 4.
