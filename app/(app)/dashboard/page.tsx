@@ -115,8 +115,10 @@ export default async function DashboardPage({
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr),
     // GPS Needed box
     admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%GPS Unit Needed%').order('due_date'),
-    // Oil Change / Service Due box — matches both "Oil Change Service Due — X" and "X Service Due"
-    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%Service Due%').order('due_date'),
+    // Oil Change Due box — service due = oil change due. Matches the same synonyms the
+    // auto-ticket dedup uses ("Oil Change", "Service Due", "Service Needed"), so every
+    // form shows here while repair tickets like "Oil Leak" / "service engine light" don't.
+    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').or('title.ilike.*oil change*,title.ilike.*service due*,title.ilike.*service needed*').order('due_date'),
     // Parts Received — Need Scheduled (parts ordered + arrived, not yet completed)
     admin.from('repair_tickets').select('id, ticket_number, title, status, assets(unit_number)').eq('company_id', companyId).eq('parts_ordered', true).eq('waiting_on_parts', false).not('status', 'in', '(completed,closed,deferred,waiting_parts)').order('updated_at', { ascending: false }),
     // Maintenance Alerts: all open tickets with due_date up to end of this month
