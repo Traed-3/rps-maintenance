@@ -237,6 +237,7 @@ export async function syncGmailToTickets(options: {
   maxThreads?: number
   after?: string         // Gmail date YYYY/MM/DD — custom historical window (e.g. 2022/01/01)
   before?: string        // Gmail date YYYY/MM/DD — exclusive upper bound
+  skipUnmatched?: boolean // backfill mode: don't review-queue unmatched emails, just skip them
 }): Promise<SyncResult> {
   const admin = createAdminClient()
   const result: SyncResult = { processed: 0, created: 0, updated: 0, skipped: 0, review: 0, errors: [] }
@@ -294,7 +295,7 @@ export async function syncGmailToTickets(options: {
         seenThreadIds.add(threadId)
 
         result.processed++
-        const r = await processThread(admin, threadId, isInbox)
+        const r = await processThread(admin, threadId, isInbox, options.skipUnmatched ?? false)
         if (r === 'created') result.created++
         else if (r === 'updated') result.updated++
         else if (r === 'review') result.review++
@@ -405,7 +406,8 @@ async function refreshArchivedOpenTickets(
 async function processThread(
   admin: ReturnType<typeof createAdminClient>,
   threadId: string,
-  isInbox: boolean
+  isInbox: boolean,
+  skipUnmatched = false,
 ): Promise<'created' | 'updated' | 'skipped' | 'review'> {
 
   // Check if thread already has a converted ticket
@@ -564,6 +566,8 @@ async function processThread(
   }
 
   // ── Unmatched asset → park in review queue (do NOT create an orphan ticket) ─
+  // In backfill mode (skipUnmatched), record it as 'rejected' so it's deduped but
+  // stays OUT of the review queue — old history shouldn't flood the queue.
   if (!assetId && !isPersonalVehicle(unitNumber)) {
     await admin.from('gmail_imports').insert({
       company_id:       COMPANY_ID,
@@ -573,11 +577,11 @@ async function processThread(
       sender:           senderEmail,
       received_at:      msgDate.toISOString(),
       body_preview:     body.slice(0, 500),
-      status:           'pending',
+      status:           skipUnmatched ? 'rejected' : 'pending',
       detected_asset:   unitNumber,
       raw_payload:      { title: title || subject, body: body.trim().slice(0, 3000) },
     })
-    return 'review'
+    return skipUnmatched ? 'skipped' : 'review'
   }
 
   // ── New thread — create ticket ─────────────────────────────────────────────

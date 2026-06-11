@@ -35,10 +35,11 @@ export async function GET(request: NextRequest) {
   const historical  = request.nextUrl.searchParams.get('historical') === 'true'
   const after       = request.nextUrl.searchParams.get('after')  || undefined
   const before      = request.nextUrl.searchParams.get('before') || undefined
+  const skipUnmatched = request.nextUrl.searchParams.get('matchedOnly') === 'true'
   const maxThreads  = parseInt(request.nextUrl.searchParams.get('max') ?? ((historical || after || before) ? '500' : '100'), 10)
 
   try {
-    const result = await syncGmailToTickets({ historical, maxThreads, after, before })
+    const result = await syncGmailToTickets({ historical, maxThreads, after, before, skipUnmatched })
 
     // If the refresh token died, the per-thread errors will say "Gmail token
     // error: invalid_grant ...". Surface that as an in-app + email notification
