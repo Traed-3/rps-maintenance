@@ -14,7 +14,6 @@ const STATUS_FILTERS = [
   { value: 'waiting_parts', label: 'Waiting Parts' },
   { value: 'paused', label: 'Paused' },
   { value: 'completed', label: 'Completed' },
-  { value: 'closed', label: 'Closed' },
 ]
 
 const CLOSED_STATUSES = ['completed', 'closed', 'deferred']
@@ -76,6 +75,9 @@ export default async function TicketsPage({
     query = query
       .or('waiting_on_parts.eq.true,status.eq.waiting_parts')
       .not('status', 'in', `(${CLOSED_STATUSES.join(',')})`)
+  } else if (status === 'completed' || status === 'closed') {
+    // "Completed" means done — covers both the 'completed' and 'closed' statuses
+    query = query.in('status', ['completed', 'closed'])
   } else {
     query = query.eq('status', status)
   }
