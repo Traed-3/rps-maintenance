@@ -221,6 +221,7 @@ export default async function DashboardPage({
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+  const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   // Close a reminder (Registration / State Inspection) from the dashboard card
   async function completeReminder(ticketId: string) {
@@ -238,24 +239,31 @@ export default async function DashboardPage({
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8">
 
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Dashboard</p>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
-            Good {greeting}, {profile?.full_name?.split(' ')[0]}
-          </h1>
+      {/* Hero header band */}
+      <div className="relative overflow-hidden rounded-3xl px-6 py-7 sm:px-8 sm:py-8 shadow-lg"
+        style={{ background: 'linear-gradient(135deg, #16243d 0%, #1e3558 55%, #2d4e7a 100%)' }}>
+        {/* decorative glows */}
+        <div className="pointer-events-none absolute -top-20 -right-12 w-64 h-64 rounded-full bg-blue-300/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-10 w-64 h-64 rounded-full bg-green-400/10 blur-3xl" />
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-200/70">{dateLabel}</p>
+            <h1 className="text-3xl sm:text-4xl font-bold text-white mt-1.5 tracking-tight">
+              Good {greeting}, {profile?.full_name?.split(' ')[0]}
+            </h1>
+            <p className="text-sm text-blue-100/60 mt-1.5">Here&apos;s what&apos;s happening at the shop today.</p>
+          </div>
+          {totalAlerts > 0 ? (
+            <Link href="/maintenance" className="inline-flex items-center gap-2 rounded-full bg-amber-400/15 border border-amber-300/30 px-4 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-400/25 transition-colors backdrop-blur-sm">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {totalAlerts} maintenance item{totalAlerts !== 1 ? 's' : ''} need attention
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-2 rounded-full bg-green-400/15 border border-green-300/30 px-4 py-2 text-sm font-semibold text-green-100 backdrop-blur-sm">
+              <CheckCircle className="w-4 h-4 shrink-0" /> All caught up
+            </span>
+          )}
         </div>
-        {totalAlerts > 0 ? (
-          <Link href="/maintenance" className="inline-flex items-center gap-2 rounded-full bg-orange-50 border border-orange-200 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 hover:border-orange-300 transition-colors shadow-sm">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            {totalAlerts} maintenance item{totalAlerts !== 1 ? 's' : ''} need attention
-          </Link>
-        ) : (
-          <span className="inline-flex items-center gap-2 rounded-full bg-green-50 border border-green-200 px-4 py-2 text-sm font-medium text-green-700">
-            <CheckCircle className="w-4 h-4 shrink-0" /> All caught up
-          </span>
-        )}
       </div>
 
       {/* Row 1 — Summary cards */}
