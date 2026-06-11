@@ -30,9 +30,21 @@ const navItems = [
   { href: '/settings', label: 'Settings', icon: Settings, active: true },
 ]
 
-export default function AppNav({ email }: { email: string }) {
+export default function AppNav({ email, role }: { email: string; role?: string }) {
   const pathname = usePathname()
   const router = useRouter()
+  const isAdmin = ['owner', 'manager'].includes(role ?? '')
+
+  // Mobile bottom-bar items — owners/managers get Settings so they can reach
+  // user management, company info, alerts, etc. from a phone or the iPad app.
+  const mobileItems = [
+    { href: '/mobile',    label: 'Home',      icon: Home },
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/assets',    label: 'Assets',    icon: Truck },
+    { href: '/tickets',   label: 'Tickets',   icon: ClipboardList },
+    { href: '/shop',      label: 'Shop',      icon: Users },
+    ...(isAdmin ? [{ href: '/settings', label: 'Settings', icon: Settings }] : []),
+  ]
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -102,13 +114,7 @@ export default function AppNav({ email }: { email: string }) {
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50">
-        {[
-          { href: '/mobile',    label: 'Home',     icon: Home },
-          { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-          { href: '/assets',    label: 'Assets',    icon: Truck },
-          { href: '/tickets',   label: 'Tickets',   icon: ClipboardList },
-          { href: '/shop',      label: 'Shop',      icon: Users },
-        ].map((item) => {
+        {mobileItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== '/mobile' && pathname.startsWith(item.href + '/'))
           return (
             <Link

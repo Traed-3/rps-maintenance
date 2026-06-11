@@ -49,6 +49,8 @@ export default async function MobilePage() {
   const activeTicket = (empStatus as any)?.repair_tickets
   const isWorkingTicket = isClockedIn && empStatus?.current_status === 'working_on_ticket' && !!activeTicket?.id
   const isManager = ['owner', 'manager', 'shop_manager'].includes(profile?.role ?? '')
+  // Settings / user management is owner + manager only (matches the Settings page guard)
+  const canAdmin = ['owner', 'manager'].includes(profile?.role ?? '')
 
   // Assigned tickets count
   const { count: myTaskCount } = await admin
@@ -175,6 +177,21 @@ export default async function MobilePage() {
             <Link href="/tickets" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
               <span className="text-3xl">🔧</span>
               <span className="text-sm font-semibold text-gray-800">All Tickets</span>
+            </Link>
+          )}
+
+          {/* Owners & managers — admin access on any device */}
+          {canAdmin && (
+            <Link href="/settings" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+              <span className="text-3xl">⚙️</span>
+              <span className="text-sm font-semibold text-gray-800">Settings</span>
+            </Link>
+          )}
+
+          {canAdmin && (
+            <Link href="/settings/users" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+              <span className="text-3xl">👥</span>
+              <span className="text-sm font-semibold text-gray-800">Users</span>
             </Link>
           )}
         </div>

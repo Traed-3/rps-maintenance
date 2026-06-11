@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // case the callback's ensureProfile server action didn't complete)
   let { data: profile } = await admin
     .from('profiles')
-    .select('id, company_id')
+    .select('id, company_id, role')
     .eq('id', user.id)
     .single()
 
@@ -42,7 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       full_name: fullName,
       email: user.email!,
       role,
-    }).select('id, company_id').single()
+    }).select('id, company_id, role').single()
     profile = created
   }
 
@@ -63,7 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <AppNav email={user.email ?? ''} />
+      <AppNav email={user.email ?? ''} role={profile?.role ?? 'viewer'} />
 
       {/* Notification bell — top right on desktop */}
       <div className="fixed top-3 right-4 z-20 hidden md:block">
