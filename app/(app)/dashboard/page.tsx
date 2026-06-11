@@ -13,6 +13,7 @@ import { ClipboardList, AlertTriangle, Truck, Package, Wrench, Calendar, Users, 
 import { cn } from '@/lib/utils'
 import { revalidatePath } from 'next/cache'
 import { RemindersCard } from './reminders-card'
+import { MiscTasksCard } from './misc-tasks-card'
 import { AssignControl } from '@/components/tickets/assign-control'
 
 const STATUS_LABELS: Record<string, string> = {
@@ -69,9 +70,10 @@ export default async function DashboardPage({
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
 
   // Non-vehicle asset types whose open tickets belong on the Misc Tasks list
-  const { data: miscTypes } = await admin.from('asset_types').select('id')
+  const { data: miscTypes } = await admin.from('asset_types').select('id, name')
     .eq('company_id', companyId).in('name', ['Building / Facility', 'Equipment', 'Machine'])
   const miscTypeIds = (miscTypes ?? []).map(t => t.id)
+  const buildingFacilityId = (miscTypes ?? []).find(t => t.name === 'Building / Facility')?.id ?? null
 
   const canAssign = ['owner', 'manager', 'shop_manager'].includes(profile?.role ?? '')
   const { data: assignable } = await admin.from('profiles').select('id, full_name')
@@ -126,7 +128,7 @@ export default async function DashboardPage({
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lt('due_date', todayStr),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr),
     // GPS Needed — now folded into Misc Tasks (no separate box)
-    admin.from('repair_tickets').select('id, ticket_number, title, status, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%GPS Unit Needed%').order('due_date'),
+    admin.from('repair_tickets').select('id, ticket_number, title, status, assigned_to, due_date, assets(unit_number, asset_type_id), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%GPS Unit Needed%').order('due_date'),
     // Oil Change Due box — service due = oil change due. Matches the same synonyms the
     // auto-ticket dedup uses ("Oil Change", "Service Due", "Service Needed"), so every
     // form shows here while repair tickets like "Oil Leak" / "service engine light" don't.
@@ -138,7 +140,7 @@ export default async function DashboardPage({
     // Reminders: Registration + State Inspection due (kept out of the main ticket list)
     admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number, make, model, name, registration_due_date, inspection_due_date)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').or('title.ilike.Registration*,title.ilike.State Inspection*').order('due_date', { nullsFirst: false }),
     // Misc Tasks: open tickets on non-vehicle assets (Property / Equipment / Machine)
-    admin.from('repair_tickets').select('id, ticket_number, title, status, assets!inner(unit_number, asset_type_id)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').in('assets.asset_type_id', miscTypeIds.length ? miscTypeIds : ['00000000-0000-0000-0000-000000000000']).order('updated_at', { ascending: false }).limit(50),
+    admin.from('repair_tickets').select('id, ticket_number, title, status, assigned_to, assets!inner(unit_number, asset_type_id), profiles!repair_tickets_assigned_to_fkey(full_name)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').in('assets.asset_type_id', miscTypeIds.length ? miscTypeIds : ['00000000-0000-0000-0000-000000000000']).order('updated_at', { ascending: false }).limit(50),
   ])
 
   const empIds = (employees ?? []).map(e => e.id)
@@ -183,13 +185,27 @@ export default async function DashboardPage({
   const totalAlerts = sortedAlerts.length
 
   // Misc Tasks = open tickets on non-vehicle assets (property/equipment/machine)
-  // PLUS GPS-install tickets (which can be on any asset), deduped by id.
+  // PLUS GPS-install tickets (any asset), deduped by id, split Property vs Equipment.
   const miscSeen = new Set<string>()
-  const miscList = [...(miscTasks ?? []), ...(gpsTickets ?? [])].filter(t => {
-    const id = (t as any).id as string
-    if (miscSeen.has(id)) return false
-    miscSeen.add(id); return true
-  })
+  const miscItems = [...(miscTasks ?? []), ...(gpsTickets ?? [])]
+    .filter(t => {
+      const id = (t as any).id as string
+      if (miscSeen.has(id)) return false
+      miscSeen.add(id); return true
+    })
+    .map(t => {
+      const a = (t as any).assets
+      const typeId = a?.asset_type_id ?? null
+      return {
+        id: (t as any).id as string,
+        title: (t as any).title as string,
+        unitNumber: a?.unit_number ?? '—',
+        status: (t as any).status as string,
+        assignedId: (t as any).assigned_to ?? null,
+        assignedName: (t as any).profiles?.full_name ?? null,
+        category: (typeId && typeId === buildingFacilityId ? 'property' : 'equipment') as 'property' | 'equipment',
+      }
+    })
 
   const bands = {
     overdue:          sortedAlerts.filter(a => toBand(a.status) === 'overdue').slice(0, 6),
@@ -246,6 +262,9 @@ export default async function DashboardPage({
         <StatCard label="Clocked In"        value={clockedInCount}           icon={Users}         color="green"  href="/shop" />
         <StatCard label="Shop Hrs Today"    value={(totalShopMins / 60).toFixed(1) + 'h'} icon={Clock} color="gray" href="/shop" />
       </div>
+
+      {/* Misc Tasks — property + equipment jobs, with assignee filter (top of dashboard) */}
+      <MiscTasksCard items={miscItems} employees={assignable ?? []} canAssign={canAssign} />
 
       {/* ── Dashboard info boxes: Completed + Oil Change + Parts ─── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -453,79 +472,6 @@ export default async function DashboardPage({
         }
       })} onComplete={completeReminder} />
 
-      {/* Row 4 — Open tickets */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-gray-900">Open Tickets</h2>
-          <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">View all →</Link>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 w-24">Ticket #</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500">Title</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden md:table-cell">Asset</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500">Status</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden sm:table-cell">Priority</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden lg:table-cell">Assigned To</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden lg:table-cell">Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {recentTickets?.map(t => (
-                  <ClickableRow key={t.id} href={`/tickets/${t.id}`}>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-400">{t.ticket_number}</td>
-                    <td className="px-4 py-3"><Link href={`/tickets/${t.id}`} className="font-medium text-gray-900 hover:text-blue-600">{t.title}</Link></td>
-                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{(t as any).assets?.unit_number ?? '—'}</td>
-                    <td className="px-4 py-3"><TicketStatusBadge status={t.status} /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><PriorityBadge priority={t.priority} /></td>
-                    <td className="px-4 py-3 text-gray-600 hidden lg:table-cell text-xs">
-                      {canAssign ? (
-                        <AssignControl ticketId={t.id} currentId={(t as any).assigned_to ?? null} currentName={(t as any).profiles?.full_name ?? null} employees={assignable ?? []} />
-                      ) : (
-                        (t as any).profiles?.full_name ?? <span className="text-gray-400">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">{new Date(t.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
-                  </ClickableRow>
-                ))}
-                {!recentTickets?.length && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-400">No open tickets. 🎉</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* Misc Tasks — odd jobs tied to Property / Facility assets */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-base font-bold text-gray-900">Misc Tasks</h2>
-            <p className="text-xs text-gray-400">Property, equipment &amp; machine jobs, plus GPS installs</p>
-          </div>
-          <span className="text-xs text-gray-400">{miscList.length} item{miscList.length !== 1 ? 's' : ''}</span>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {!miscList.length
-            ? <p className="px-5 py-6 text-center text-sm text-gray-400">No misc tasks right now. ✅</p>
-            : <div className="divide-y divide-gray-50">
-                {miscList.map(t => (
-                  <Link key={t.id} href={`/tickets/${t.id}`}
-                    className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
-                      <p className="text-xs text-gray-500">{(t as any).assets?.unit_number ?? '—'}</p>
-                    </div>
-                    <TicketStatusBadge status={t.status} />
-                  </Link>
-                ))}
-              </div>
-          }
-        </div>
-      </section>
-
       {/* Row 5 — Due this month + Down assets */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <section>
@@ -574,6 +520,51 @@ export default async function DashboardPage({
           </div>
         </section>
       </div>
+
+      {/* Open Tickets — at the very bottom */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-bold text-gray-900">Open Tickets</h2>
+          <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">View all →</Link>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 w-24">Ticket #</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-500">Title</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden md:table-cell">Asset</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-500">Status</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden sm:table-cell">Priority</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden lg:table-cell">Assigned To</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden lg:table-cell">Updated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {recentTickets?.map(t => (
+                  <ClickableRow key={t.id} href={`/tickets/${t.id}`}>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-400">{t.ticket_number}</td>
+                    <td className="px-4 py-3"><Link href={`/tickets/${t.id}`} className="font-medium text-gray-900 hover:text-blue-600">{t.title}</Link></td>
+                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{(t as any).assets?.unit_number ?? '—'}</td>
+                    <td className="px-4 py-3"><TicketStatusBadge status={t.status} /></td>
+                    <td className="px-4 py-3 hidden sm:table-cell"><PriorityBadge priority={t.priority} /></td>
+                    <td className="px-4 py-3 text-gray-600 hidden lg:table-cell text-xs">
+                      {canAssign ? (
+                        <AssignControl ticketId={t.id} currentId={(t as any).assigned_to ?? null} currentName={(t as any).profiles?.full_name ?? null} employees={assignable ?? []} />
+                      ) : (
+                        (t as any).profiles?.full_name ?? <span className="text-gray-400">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">{new Date(t.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                  </ClickableRow>
+                ))}
+                {!recentTickets?.length && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-400">No open tickets. 🎉</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
     </div>
   )
