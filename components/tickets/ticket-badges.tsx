@@ -13,7 +13,8 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   waiting_approval:  { label: 'Waiting Approval',  className: 'bg-purple-100 text-purple-800 border-purple-200' },
   scheduled:         { label: 'Scheduled',         className: 'bg-blue-100 text-blue-800 border-blue-200' },
   completed:         { label: 'Completed',         className: 'bg-green-200 text-green-900 border-green-300' },
-  closed:            { label: 'Closed',            className: 'bg-gray-200 text-gray-600 border-gray-300' },
+  // 'closed' is treated as the same thing as 'completed' (legacy/leftover rows) — show it identically
+  closed:            { label: 'Completed',         className: 'bg-green-200 text-green-900 border-green-300' },
   deferred:          { label: 'Deferred',          className: 'bg-gray-100 text-gray-500 border-gray-200' },
   unsafe_do_not_use: { label: '⚠ Unsafe – Do Not Use', className: 'bg-red-200 text-red-900 border-red-300' },
 }
@@ -68,10 +69,7 @@ export const STATUS_ACTIONS: Record<string, Array<{ label: string; nextStatus: s
   ],
   waiting_approval:  [{ label: 'Approve & Resume', nextStatus: 'in_progress', style: 'primary' }],
   scheduled:         [{ label: 'Start Work', nextStatus: 'in_progress', style: 'primary' }],
-  completed:         [
-    { label: 'Close Ticket', nextStatus: 'closed', style: 'primary' },
-    { label: 'Reopen',       nextStatus: 'open' },
-  ],
+  completed:         [{ label: 'Reopen', nextStatus: 'open' }],
   closed:            [{ label: 'Reopen', nextStatus: 'open' }],
   deferred:          [{ label: 'Reopen', nextStatus: 'open' }],
   unsafe_do_not_use: [{ label: 'Begin Repair', nextStatus: 'in_progress', style: 'primary' }],

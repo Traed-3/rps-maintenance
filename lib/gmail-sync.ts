@@ -571,8 +571,9 @@ async function processThread(
 
   // ── New thread — create ticket ─────────────────────────────────────────────
 
-  // Determine initial status from ALL messages
-  let finalStatus: string = isInbox ? 'open' : 'closed'
+  // Determine initial status from ALL messages.
+  // Archived threads (not in the inbox) are treated as done → 'completed'.
+  let finalStatus: string = isInbox ? 'open' : 'completed'
   let partsNeeded   = false
   let partsOrdered  = false
   let partsReceived = false
@@ -601,15 +602,15 @@ async function processThread(
 
   // Status: parts-pending wins over "in_progress" assumption; otherwise a thread with
   // follow-up emails that isn't complete means work has started.
-  if (finalStatus !== 'closed' && partsPending) {
+  if (finalStatus !== 'completed' && partsPending) {
     finalStatus = 'waiting_parts'
-  } else if (finalStatus !== 'closed' && messages.length > 1) {
+  } else if (finalStatus !== 'completed' && messages.length > 1) {
     finalStatus = 'in_progress'
   }
 
-  // Archived threads with no explicit "Complete" keyword still need a completion date
-  // so they show up in dashboard counts. Fall back to the last message date.
-  if (finalStatus === 'closed' && !dateCompleted) {
+  // Archived/done threads with no explicit "Complete" keyword still need a completion
+  // date so they show up in dashboard counts. Fall back to the last message date.
+  if (finalStatus === 'completed' && !dateCompleted) {
     const last = messages[messages.length - 1]
     const lastDateStr = last ? getHeader(last.payload?.headers ?? [], 'Date') : null
     dateCompleted = new Date(lastDateStr || Date.now()).toISOString().split('T')[0]
