@@ -235,18 +235,29 @@ export interface SyncResult {
 export async function syncGmailToTickets(options: {
   historical?: boolean   // true = include 2024+ emails, false = just recent
   maxThreads?: number
+  after?: string         // Gmail date YYYY/MM/DD — custom historical window (e.g. 2022/01/01)
+  before?: string        // Gmail date YYYY/MM/DD — exclusive upper bound
 }): Promise<SyncResult> {
   const admin = createAdminClient()
   const result: SyncResult = { processed: 0, created: 0, updated: 0, skipped: 0, review: 0, errors: [] }
 
-  // Query: inbox (open) + historical (archived/completed from 2024)
-  const afterDate = options.historical ? '2024/01/01' : ''
-  const inboxQuery  = afterDate ? `in:inbox after:${afterDate}` : 'in:inbox'
-  const archiveQuery = afterDate ? `in:all -in:inbox -in:spam -in:trash after:${afterDate}` : ''
-
-  const queries = archiveQuery
-    ? [{ q: inboxQuery, isInbox: true }, { q: archiveQuery, isInbox: false }]
-    : [{ q: inboxQuery, isInbox: true }]
+  let queries: { q: string; isInbox: boolean }[]
+  if (options.after || options.before) {
+    // Custom date-range backfill (e.g. 2022–2023). Old archived mail → completed tickets.
+    const df = [
+      options.after  && `after:${options.after}`,
+      options.before && `before:${options.before}`,
+    ].filter(Boolean).join(' ')
+    queries = [{ q: `in:all -in:spam -in:trash ${df}`.trim(), isInbox: false }]
+  } else {
+    // Query: inbox (open) + historical (archived/completed from 2024)
+    const afterDate = options.historical ? '2024/01/01' : ''
+    const inboxQuery  = afterDate ? `in:inbox after:${afterDate}` : 'in:inbox'
+    const archiveQuery = afterDate ? `in:all -in:inbox -in:spam -in:trash after:${afterDate}` : ''
+    queries = archiveQuery
+      ? [{ q: inboxQuery, isInbox: true }, { q: archiveQuery, isInbox: false }]
+      : [{ q: inboxQuery, isInbox: true }]
+  }
 
   const seenThreadIds = new Set<string>()
 

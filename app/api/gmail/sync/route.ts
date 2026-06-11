@@ -5,6 +5,9 @@ import { notifyGmailSyncError } from '@/lib/notifications'
 
 const COMPANY_ID = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 
+// Allow longer runs for historical backfills (chunked imports of older mail)
+export const maxDuration = 60
+
 /**
  * GET /api/gmail/sync
  *
@@ -30,10 +33,12 @@ export async function GET(request: NextRequest) {
   }
 
   const historical  = request.nextUrl.searchParams.get('historical') === 'true'
-  const maxThreads  = parseInt(request.nextUrl.searchParams.get('max') ?? (historical ? '500' : '100'), 10)
+  const after       = request.nextUrl.searchParams.get('after')  || undefined
+  const before      = request.nextUrl.searchParams.get('before') || undefined
+  const maxThreads  = parseInt(request.nextUrl.searchParams.get('max') ?? ((historical || after || before) ? '500' : '100'), 10)
 
   try {
-    const result = await syncGmailToTickets({ historical, maxThreads })
+    const result = await syncGmailToTickets({ historical, maxThreads, after, before })
 
     // If the refresh token died, the per-thread errors will say "Gmail token
     // error: invalid_grant ...". Surface that as an in-app + email notification
