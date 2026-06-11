@@ -14,6 +14,7 @@ const STATUS_FILTERS = [
   { value: 'down', label: 'Down' },
   { value: 'unsafe', label: 'Unsafe' },
   { value: 'retired', label: 'Retired' },
+  { value: 'property', label: 'Property' },
 ]
 
 export default async function AssetsPage({
@@ -141,45 +142,47 @@ export default async function AssetsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {assets.map((asset) => (
+                {assets.map((asset) => {
+                  const t = asset.asset_types as { name?: string } | { name?: string }[] | null
+                  const typeName = Array.isArray(t) ? t[0]?.name : t?.name
+                  const isProperty = typeName === 'Building / Facility' || asset.status === 'property'
+                  const details = [asset.year, asset.make, asset.model].filter(Boolean).join(' ')
+                  return (
                   <ClickableRow key={asset.id} href={`/assets/${asset.id}`}>
                     <td className="px-4 py-3 font-semibold text-gray-900">
                       {asset.unit_number}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {(() => {
-                        const t = asset.asset_types as { name?: string } | { name?: string }[] | null
-                        const name = Array.isArray(t) ? t[0]?.name : t?.name
-                        return name ? (
-                          <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-                            {name}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )
-                      })()}
+                      {typeName ? (
+                        <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                          {typeName}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {asset.name && (
-                        <span className="font-medium text-gray-800">{asset.name} — </span>
+                        <span className="font-medium text-gray-800">{asset.name}{details ? ' — ' : ''}</span>
                       )}
-                      {[asset.year, asset.make, asset.model].filter(Boolean).join(' ') || (
-                        <span className="text-gray-400 italic">No details</span>
-                      )}
+                      {details}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={asset.status} />
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {asset.current_mileage != null
-                        ? asset.current_mileage.toLocaleString() + ' mi'
-                        : '—'}
+                      {isProperty
+                        ? 'N/A'
+                        : asset.current_mileage != null
+                          ? asset.current_mileage.toLocaleString() + ' mi'
+                          : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-blue-600 font-medium text-xs">View →</span>
                     </td>
                   </ClickableRow>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -21,6 +21,7 @@ const statusOptions = [
   { value: 'down',      label: 'Down' },
   { value: 'unsafe',    label: 'Unsafe' },
   { value: 'retired',   label: 'Retired' },
+  { value: 'property',  label: 'Property' },
 ]
 
 type Asset = {
@@ -65,6 +66,7 @@ export function AssetForm({
   const [usesHours, setUsesHours] = useState(asset?.uses_hours ?? false)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [selectedTypeId, setSelectedTypeId] = useState(asset?.asset_type_id ?? '')
+  const [status, setStatus] = useState(asset?.status ?? 'active')
   // Controlled date states — browser cannot auto-fill these with today's date
   const [lastOilDate,      setLastOilDate]      = useState(asset?.last_oil_change_date  ?? '')
   const [inspectionDate,   setInspectionDate]   = useState(asset?.inspection_due_date   ?? '')
@@ -75,13 +77,24 @@ export function AssetForm({
 
   const selectedTypeName = assetTypes.find(t => t.id === selectedTypeId)?.name ?? ''
 
-  // Oil change: hide for Trailer, Equipment, Machine, Other
+  // Buildings / facilities are "property" — no mileage, no service dates, no auto-tickets.
+  const isProperty = selectedTypeName === 'Building / Facility'
+
+  // Oil change: hide for Trailer, Equipment, Machine, Other (and property)
   const NO_OIL_TYPES = ['Trailer', 'Equipment', 'Machine', 'Other']
-  const showOilChange = !NO_OIL_TYPES.includes(selectedTypeName)
+  const showOilChange = !NO_OIL_TYPES.includes(selectedTypeName) && !isProperty
 
   // Registration/Tag: hide for Equipment, Machine, Other (Trailers DO need tags)
   const NO_REGISTRATION_TYPES = ['Equipment', 'Machine', 'Other']
-  const showRegistration = !NO_REGISTRATION_TYPES.includes(selectedTypeName)
+  const showRegistration = !NO_REGISTRATION_TYPES.includes(selectedTypeName) && !isProperty
+
+  // When the user picks Building/Facility, default the status to Property (and back).
+  function handleTypeChange(newTypeId: string) {
+    setSelectedTypeId(newTypeId)
+    const name = assetTypes.find(t => t.id === newTypeId)?.name ?? ''
+    if (name === 'Building / Facility') setStatus('property')
+    else if (status === 'property') setStatus('active')
+  }
 
   return (
     <form action={formAction} className="space-y-8" autoComplete="off">
@@ -116,7 +129,7 @@ export function AssetForm({
               name="asset_type_id"
               className={inputClass}
               value={selectedTypeId}
-              onChange={e => setSelectedTypeId(e.target.value)}
+              onChange={e => handleTypeChange(e.target.value)}
             >
               <option value="">— Select type —</option>
               {assetTypes.map((t) => (
@@ -129,7 +142,7 @@ export function AssetForm({
 
           <div>
             <label className={labelClass}>Status</label>
-            <select name="status" className={inputClass} defaultValue={v?.status ?? 'active'}>
+            <select name="status" className={inputClass} value={status} onChange={e => setStatus(e.target.value)}>
               {statusOptions.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
@@ -227,13 +240,22 @@ export function AssetForm({
           </div>
           <div>
             <label className={labelClass}>Current {mileLabel}</label>
-            <input
-              name="current_mileage"
-              type="number"
-              className={inputClass}
-              placeholder="0"
-              defaultValue={usesHours ? (v?.current_hours ?? '') : (v?.current_mileage ?? '')}
-            />
+            {isProperty ? (
+              <input
+                className={inputClass + ' bg-gray-50 text-gray-400'}
+                value="N/A"
+                disabled
+                readOnly
+              />
+            ) : (
+              <input
+                name="current_mileage"
+                type="number"
+                className={inputClass}
+                placeholder="0"
+                defaultValue={usesHours ? (v?.current_hours ?? '') : (v?.current_mileage ?? '')}
+              />
+            )}
           </div>
         </div>
       </section>
@@ -296,6 +318,11 @@ export function AssetForm({
         <h2 className="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">
           Due Dates
         </h2>
+        {isProperty ? (
+          <p className="text-sm text-gray-400 italic">
+            N/A — property asset (no inspection, registration, or service dates).
+          </p>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Inspection Due</label>
@@ -331,6 +358,7 @@ export function AssetForm({
           )}
 
         </div>
+        )}
       </section>
 
       {/* Notes */}

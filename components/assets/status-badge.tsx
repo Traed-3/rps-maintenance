@@ -7,6 +7,7 @@ const config: Record<string, { label: string; className: string }> = {
   down:      { label: 'Down',       className: 'bg-red-100 text-red-800 border-red-200' },
   unsafe:    { label: 'Unsafe ⚠',   className: 'bg-red-200 text-red-900 border-red-300' },
   retired:   { label: 'Retired',    className: 'bg-gray-100 text-gray-500 border-gray-200' },
+  property:  { label: 'Property',   className: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
 }
 
 export function StatusBadge({ status }: { status: string }) {
