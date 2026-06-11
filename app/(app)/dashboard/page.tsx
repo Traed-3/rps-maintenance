@@ -351,7 +351,7 @@ export default async function DashboardPage({
       {(maintenanceAlertTickets ?? []).length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-gray-900">Maintenance Alerts</h2>
+            <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 before:content-[''] before:w-1.5 before:h-5 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Maintenance Alerts</h2>
             <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
               All tickets →
             </Link>
@@ -406,7 +406,7 @@ export default async function DashboardPage({
       {/* Row 3 — Live employee status */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-gray-900">Employee Status</h2>
+          <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 before:content-[''] before:w-1.5 before:h-5 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Employee Status</h2>
           <div className="flex items-center gap-3">
             {/* Shop / All toggle */}
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
@@ -491,7 +491,7 @@ export default async function DashboardPage({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-gray-900">Maintenance Due This Month</h2>
+            <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 before:content-[''] before:w-1.5 before:h-5 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Maintenance Due This Month</h2>
             <Link href="/maintenance" className="text-sm text-blue-600 hover:text-blue-800 font-medium">All →</Link>
           </div>
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -514,7 +514,7 @@ export default async function DashboardPage({
 
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-gray-900">Assets Down</h2>
+            <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 before:content-[''] before:w-1.5 before:h-5 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Assets Down</h2>
             <Link href="/assets?status=down" className="text-sm text-blue-600 hover:text-blue-800 font-medium">Assets →</Link>
           </div>
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -539,7 +539,7 @@ export default async function DashboardPage({
       {/* Open Tickets — at the very bottom */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-gray-900">Open Tickets</h2>
+          <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 before:content-[''] before:w-1.5 before:h-5 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Open Tickets</h2>
           <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">View all →</Link>
         </div>
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
+import { CountUp } from './count-up'
 
 type Color = 'blue' | 'red' | 'orange' | 'yellow' | 'green' | 'gray' | 'purple'
 
@@ -43,7 +44,7 @@ export function StatCard({
         <Icon className="w-5 h-5" />
       </div>
       <div className="min-w-0">
-        <p className="text-2xl sm:text-3xl font-bold text-gray-900 tabular-nums tracking-tight leading-none">{value}</p>
+        <CountUp value={value} className="block text-2xl sm:text-3xl font-bold text-gray-900 tabular-nums tracking-tight leading-none" />
         <p className="text-xs font-medium text-gray-500 mt-1">{label}</p>
       </div>
     </div>

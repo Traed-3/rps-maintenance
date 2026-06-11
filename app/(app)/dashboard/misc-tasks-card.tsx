@@ -72,7 +72,7 @@ export function MiscTasksCard({
     <section>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-bold text-gray-900">Misc Tasks</h2>
+          <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 before:content-[''] before:w-1.5 before:h-5 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Misc Tasks</h2>
           <span className="text-xs text-gray-400">{property.length + equipment.length} shown</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -91,8 +91,8 @@ export function MiscTasksCard({
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {renderBox('🏢 Property', 'bg-indigo-50 border-indigo-100 text-indigo-700', property)}
-        {renderBox('🔧 Equipment', 'bg-amber-50 border-amber-100 text-amber-700', equipment)}
+        {renderBox('🏢 Property', 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-100 text-indigo-700', property)}
+        {renderBox('🔧 Equipment', 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-100 text-amber-700', equipment)}
       </div>
     </section>
   )
