@@ -170,7 +170,7 @@ export async function changeTicketStatus(id: string, nextStatus: string) {
 
 // ── Assign ticket ─────────────────────────────────────────────────────────────
 
-export async function assignTicket(id: string, assigneeId: string) {
+export async function assignTicket(id: string, assigneeId: string | null) {
   const profile = await getProfile()
   if (!profile) return
 
@@ -185,13 +185,19 @@ export async function assignTicket(id: string, assigneeId: string) {
     await admin.from('repair_ticket_assignments').insert({
       ticket_id: id, profile_id: assigneeId, assigned_by: profile.id,
     })
-    await admin.from('repair_tickets').update({ assigned_to: assigneeId, status: 'assigned' })
-      .eq('id', id).eq('company_id', profile.company_id)
+    // Only bump status to "assigned" if the work hasn't started yet — don't
+    // knock an in-progress / waiting-parts ticket back a step on reassignment.
+    const { data: cur } = await admin.from('repair_tickets').select('status').eq('id', id).single()
+    const updates: Record<string, unknown> = { assigned_to: assigneeId }
+    if (['new', 'open'].includes(cur?.status ?? '')) updates.status = 'assigned'
+    await admin.from('repair_tickets').update(updates).eq('id', id).eq('company_id', profile.company_id)
   } else {
     await admin.from('repair_tickets').update({ assigned_to: null })
       .eq('id', id).eq('company_id', profile.company_id)
   }
 
+  revalidatePath('/tickets')
+  revalidatePath('/dashboard')
   revalidatePath(`/tickets/${id}`)
 }
 

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ClickableRow } from '@/components/clickable-row'
+import { AssignControl } from '@/components/tickets/assign-control'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { TicketStatusBadge, PriorityBadge } from '@/components/tickets/ticket-badges'
@@ -38,11 +39,21 @@ export default async function TicketsPage({
   const { data: profile } = await admin
     .from('profiles').select('company_id, role').eq('id', user!.id).single()
 
+  // People a ticket can be assigned to (shop staff + managers)
+  const { data: assignable } = await admin
+    .from('profiles')
+    .select('id, full_name')
+    .eq('company_id', profile!.company_id)
+    .eq('is_active', true)
+    .in('role', ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech'])
+    .order('full_name')
+  const canAssign = ['owner', 'manager', 'shop_manager'].includes(profile?.role ?? '')
+
   let query = admin
     .from('repair_tickets')
     .select(`
       id, ticket_number, title, status, priority, parts_needed, waiting_on_parts,
-      created_at, updated_at,
+      created_at, updated_at, assigned_to,
       assets(unit_number, make, model),
       profiles!repair_tickets_assigned_to_fkey(full_name)
     `)
@@ -194,8 +205,17 @@ export default async function TicketsPage({
                     </td>
                     <td className="px-4 py-3"><TicketStatusBadge status={t.status} /></td>
                     <td className="px-4 py-3 hidden sm:table-cell"><PriorityBadge priority={t.priority} /></td>
-                    <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
-                      {(t as any).profiles?.full_name ?? <span className="text-gray-400">Unassigned</span>}
+                    <td className="px-4 py-3 text-gray-600 hidden lg:table-cell text-xs">
+                      {canAssign ? (
+                        <AssignControl
+                          ticketId={t.id}
+                          currentId={(t as any).assigned_to ?? null}
+                          currentName={(t as any).profiles?.full_name ?? null}
+                          employees={assignable ?? []}
+                        />
+                      ) : (
+                        (t as any).profiles?.full_name ?? <span className="text-gray-400">Unassigned</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">
                       {new Date(t.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
