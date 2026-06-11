@@ -90,28 +90,38 @@ async function findAssetsInSubject(
   admin: ReturnType<typeof createAdminClient>,
   subject: string,
   skipUnit: string,
-): Promise<{ unitNumber: string; assetId: string }[]> {
-  const candidates = extractUnitCandidates(subject).filter(u => u !== skipUnit.toUpperCase())
-  if (!candidates.length) return []
-
-  // Case-insensitive match against real assets (unit_number stored uppercase,
-  // but ilike keeps us safe regardless).
-  const orFilter = candidates.map(c => `unit_number.ilike.${c}`).join(',')
+): Promise<{ unitNumber: string; assetId: string; matchText: string }[]> {
+  // Load the company's assets once (small table) so we can match both unit-number
+  // tokens AND per-asset email aliases (e.g. "mini excavator" → E35).
   const { data: assets } = await admin
     .from('assets')
-    .select('id, unit_number')
+    .select('id, unit_number, email_aliases')
     .eq('company_id', COMPANY_ID)
-    .or(orFilter)
-
   if (!assets?.length) return []
 
-  const byUnit = new Map(assets.map(a => [a.unit_number.toUpperCase(), a.id]))
-  const out: { unitNumber: string; assetId: string }[] = []
+  const out: { unitNumber: string; assetId: string; matchText: string }[] = []
   const usedIds = new Set<string>()
-  for (const cand of candidates) {
-    const id = byUnit.get(cand)
-    if (id && !usedIds.has(id)) { usedIds.add(id); out.push({ unitNumber: cand, assetId: id }) }
+  const add = (unitNumber: string, assetId: string, matchText: string) => {
+    if (!usedIds.has(assetId)) { usedIds.add(assetId); out.push({ unitNumber, assetId, matchText }) }
   }
+
+  // 1) Unit-number tokens anywhere in the subject (in subject order)
+  const byUnit = new Map(assets.map(a => [a.unit_number.toUpperCase(), a]))
+  const candidates = extractUnitCandidates(subject).filter(u => u !== skipUnit.toUpperCase())
+  for (const cand of candidates) {
+    const a = byUnit.get(cand)
+    if (a) add(a.unit_number, a.id, cand)
+  }
+
+  // 2) Per-asset alias phrases ("mini excavator", "forklift", …)
+  for (const a of assets) {
+    for (const alias of ((a as any).email_aliases ?? []) as string[]) {
+      if (!alias?.trim()) continue
+      const escaped = alias.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (new RegExp(`\\b${escaped}\\b`, 'i').test(subject)) { add(a.unit_number, a.id, alias.trim()); break }
+    }
+  }
+
   return out
 }
 
@@ -422,7 +432,7 @@ async function processThread(
     if (found.length === 1) {
       unitNumber = found[0].unitNumber
       assetId    = found[0].assetId
-      title      = titleWithoutUnit(subject, found[0].unitNumber)
+      title      = titleWithoutUnit(subject, found[0].matchText)
     }
   }
 

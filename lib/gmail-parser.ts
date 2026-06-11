@@ -45,6 +45,19 @@ export function extractUnitCandidates(subject: string): string[] {
   const normalized = subject.replace(/[/,]+/g, ' ')
   for (const m of normalized.matchAll(UNIT_TOKEN)) push(m[0])
   for (const m of normalized.matchAll(PV_TOKEN))   push(m[0])
+  // Collapse runs of single chars typed with spaces ("I I 9" → "II9", "T 20" → "T20")
+  // so a unit broken up by spaces still resolves. Validated against real assets,
+  // so the occasional bogus join (e.g. "a b c") simply matches nothing.
+  const toks = normalized.split(/\s+/)
+  let i = 0
+  while (i < toks.length) {
+    if (/^[A-Za-z0-9]$/.test(toks[i])) {
+      let j = i
+      while (j < toks.length && /^[A-Za-z0-9]$/.test(toks[j])) j++
+      if (j - i >= 2) push(toks.slice(i, j).join(''))
+      i = j
+    } else i++
+  }
   return out
 }
 
