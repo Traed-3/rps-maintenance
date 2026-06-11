@@ -118,8 +118,8 @@ export default async function DashboardPage({
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['completed','closed']).gte('date_completed', monthStartStr),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lt('due_date', todayStr),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr),
-    // GPS Needed box
-    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%GPS Unit Needed%').order('due_date'),
+    // GPS Needed — now folded into Misc Tasks (no separate box)
+    admin.from('repair_tickets').select('id, ticket_number, title, status, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%GPS Unit Needed%').order('due_date'),
     // Oil Change Due box — service due = oil change due. Matches the same synonyms the
     // auto-ticket dedup uses ("Oil Change", "Service Due", "Service Needed"), so every
     // form shows here while repair tickets like "Oil Leak" / "service engine light" don't.
@@ -174,6 +174,15 @@ export default async function DashboardPage({
   }
   const sortedAlerts = sortByUrgency(alerts)
   const totalAlerts = sortedAlerts.length
+
+  // Misc Tasks = open tickets on non-vehicle assets (property/equipment/machine)
+  // PLUS GPS-install tickets (which can be on any asset), deduped by id.
+  const miscSeen = new Set<string>()
+  const miscList = [...(miscTasks ?? []), ...(gpsTickets ?? [])].filter(t => {
+    const id = (t as any).id as string
+    if (miscSeen.has(id)) return false
+    miscSeen.add(id); return true
+  })
 
   const bands = {
     overdue:          sortedAlerts.filter(a => toBand(a.status) === 'overdue').slice(0, 6),
@@ -231,8 +240,8 @@ export default async function DashboardPage({
         <StatCard label="Shop Hrs Today"    value={(totalShopMins / 60).toFixed(1) + 'h'} icon={Clock} color="gray" href="/shop" />
       </div>
 
-      {/* ── Dashboard info boxes: Completed + GPS + Oil Change + Parts ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* ── Dashboard info boxes: Completed + Oil Change + Parts ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
 
         {/* Completed — stacked */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -249,28 +258,6 @@ export default async function DashboardPage({
                 className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
                 <span className="text-sm text-gray-600">{row.label}</span>
                 <span className="text-lg font-bold text-green-700">{row.value}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* GPS Still Needed */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
-            <h3 className="text-xs font-bold text-blue-700 uppercase tracking-wide">📡 GPS Still Needed</h3>
-            <span className="text-xs font-bold text-blue-600">{gpsTickets?.length ?? 0}</span>
-          </div>
-          <div className="divide-y divide-gray-50 max-h-40 overflow-y-auto">
-            {gpsTickets?.length === 0 && <p className="px-4 py-3 text-xs text-gray-400">All GPS units installed ✓</p>}
-            {(gpsTickets ?? []).map(t => (
-              <Link key={t.id} href={`/tickets/${t.id}`}
-                className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors">
-                <span className="text-sm font-medium text-gray-900">{(t as any).assets?.unit_number ?? '—'}</span>
-                {(t as any).due_date && (
-                  <span className="text-xs text-gray-400">
-                    {new Date((t as any).due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </span>
-                )}
               </Link>
             ))}
           </div>
@@ -503,15 +490,15 @@ export default async function DashboardPage({
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-base font-bold text-gray-900">Misc Tasks</h2>
-            <p className="text-xs text-gray-400">Open jobs on property, equipment &amp; machine assets</p>
+            <p className="text-xs text-gray-400">Property, equipment &amp; machine jobs, plus GPS installs</p>
           </div>
-          <span className="text-xs text-gray-400">{(miscTasks ?? []).length} item{(miscTasks ?? []).length !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-gray-400">{miscList.length} item{miscList.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {!(miscTasks ?? []).length
+          {!miscList.length
             ? <p className="px-5 py-6 text-center text-sm text-gray-400">No misc tasks right now. ✅</p>
             : <div className="divide-y divide-gray-50">
-                {(miscTasks ?? []).map(t => (
+                {miscList.map(t => (
                   <Link key={t.id} href={`/tickets/${t.id}`}
                     className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
                     <div className="min-w-0">
