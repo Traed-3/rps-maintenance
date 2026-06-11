@@ -98,6 +98,7 @@ export default async function DashboardPage({
     { data: partsReceivedTickets },
     { data: maintenanceAlertTickets },
     { data: reminderTickets },
+    { data: miscTasks },
   ] = await Promise.all([
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('title', 'ilike', 'Registration%').not('title', 'ilike', 'State Inspection%'),
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).in('priority', ['critical', 'safety']).not('status', 'in', '(completed,closed,deferred)'),
@@ -114,14 +115,16 @@ export default async function DashboardPage({
     admin.from('repair_tickets').select('*', { count: 'exact', head: true }).eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).gte('due_date', todayStr).lte('due_date', weekEndStr),
     // GPS Needed box
     admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%GPS Unit Needed%').order('due_date'),
-    // Oil Change Service Due box
-    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%Oil Change Service Due%').order('due_date'),
+    // Oil Change / Service Due box — matches both "Oil Change Service Due — X" and "X Service Due"
+    admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').ilike('title', '%Service Due%').order('due_date'),
     // Parts Received — Need Scheduled (parts ordered + arrived, not yet completed)
     admin.from('repair_tickets').select('id, ticket_number, title, status, assets(unit_number)').eq('company_id', companyId).eq('parts_ordered', true).eq('waiting_on_parts', false).not('status', 'in', '(completed,closed,deferred,waiting_parts)').order('updated_at', { ascending: false }),
     // Maintenance Alerts: all open tickets with due_date up to end of this month
     admin.from('repair_tickets').select('id, ticket_number, title, status, priority, due_date, assets(unit_number)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').not('due_date', 'is', null).lte('due_date', monthEndStr).not('title', 'ilike', 'Registration%').not('title', 'ilike', 'State Inspection%').order('due_date'),
     // Reminders: Registration + State Inspection due (kept out of the main ticket list)
     admin.from('repair_tickets').select('id, ticket_number, title, due_date, assets(unit_number, make, model, name, registration_due_date, inspection_due_date)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').or('title.ilike.Registration*,title.ilike.State Inspection*').order('due_date', { nullsFirst: false }),
+    // Misc Tasks: open tickets attached to a Property (Building/Facility) asset
+    admin.from('repair_tickets').select('id, ticket_number, title, status, assets!inner(unit_number, status)').eq('company_id', companyId).not('status', 'in', '(completed,closed,deferred)').eq('assets.status', 'property').order('updated_at', { ascending: false }).limit(30),
   ])
 
   const empIds = (employees ?? []).map(e => e.id)
@@ -202,7 +205,9 @@ export default async function DashboardPage({
         <p className="text-sm text-gray-500 mt-0.5">
           Good {greeting}, {profile?.full_name?.split(' ')[0]}.{' '}
           {totalAlerts > 0 && (
-            <span className="text-orange-600 font-medium">{totalAlerts} maintenance item{totalAlerts !== 1 ? 's' : ''} need attention.</span>
+            <Link href="/maintenance" className="text-orange-600 font-medium underline decoration-orange-300 underline-offset-2 hover:text-orange-700 hover:decoration-orange-500">
+              {totalAlerts} maintenance item{totalAlerts !== 1 ? 's' : ''} need attention.
+            </Link>
           )}
         </p>
       </div>
@@ -483,6 +488,34 @@ export default async function DashboardPage({
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      {/* Misc Tasks — odd jobs tied to Property / Facility assets */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Misc Tasks</h2>
+            <p className="text-xs text-gray-400">Property &amp; facility jobs (buildings, shop, equipment fixtures)</p>
+          </div>
+          <span className="text-xs text-gray-400">{(miscTasks ?? []).length} item{(miscTasks ?? []).length !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {!(miscTasks ?? []).length
+            ? <p className="px-5 py-6 text-center text-sm text-gray-400">No misc tasks right now. ✅</p>
+            : <div className="divide-y divide-gray-50">
+                {(miscTasks ?? []).map(t => (
+                  <Link key={t.id} href={`/tickets/${t.id}`}
+                    className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{t.title}</p>
+                      <p className="text-xs text-gray-500">{(t as any).assets?.unit_number ?? '—'}</p>
+                    </div>
+                    <TicketStatusBadge status={t.status} />
+                  </Link>
+                ))}
+              </div>
+          }
         </div>
       </section>
 
