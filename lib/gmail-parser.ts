@@ -22,6 +22,45 @@ export function parseSubject(subject: string): ParsedSubject {
   return { unitNumber, title, raw: trimmed }
 }
 
+// ── Asset unit-number candidates (anywhere in the subject) ────────────────────
+
+// Shop convention puts the unit first ("T20 brakes sound bad"), but some emails
+// bury it ("Breaks sound bad on t20"). These regexes pull every token that
+// *looks* like a unit number from anywhere in the subject. The caller then
+// validates them against real assets, so being liberal here is safe — a token
+// that isn't a real unit (F250, O2, 4x4…) simply doesn't match anything.
+const UNIT_TOKEN = /\b[A-Za-z]{1,3}\d{1,4}[A-Za-z]?\b/g   // T20, P16, GG7, I9, NN14, L12A…
+const PV_TOKEN   = /\b[A-Za-z]{2,4}PV\b/gi                 // personal vehicles: PWPV, SPPV…
+
+/** Every unit-number-looking token in the subject, uppercased, in order, deduped. */
+export function extractUnitCandidates(subject: string): string[] {
+  if (!subject) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  const push = (tok: string) => {
+    const u = tok.toUpperCase()
+    if (!seen.has(u)) { seen.add(u); out.push(u) }
+  }
+  // Split on commas/slashes too so "S19,II9,J10" yields separate tokens
+  const normalized = subject.replace(/[/,]+/g, ' ')
+  for (const m of normalized.matchAll(UNIT_TOKEN)) push(m[0])
+  for (const m of normalized.matchAll(PV_TOKEN))   push(m[0])
+  return out
+}
+
+/** Build a clean ticket title by removing a matched unit token from the subject. */
+export function titleWithoutUnit(subject: string, unit: string): string {
+  if (!subject) return ''
+  const escaped = unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  let t = subject.replace(new RegExp(`\\b${escaped}\\b`, 'i'), ' ')
+  t = t.replace(/^\s*(re|fwd)\s*:\s*/gi, '')               // drop "Re:" / "Fwd:" prefixes
+  t = t.replace(/\s*,\s*(?=,|$)/g, '')                     // collapse "x,,y" and trailing commas
+  t = t.replace(/\s{2,}/g, ' ').trim()
+  t = t.replace(/^[\s\-:,]+|[\s\-:,]+$/g, '').trim()       // stray leading/trailing punctuation
+  t = t.replace(/\s+(on|for|at|to|in|of|the)$/i, '').trim() // dangling connector left behind
+  return t || subject.trim()
+}
+
 // ── Body extraction ───────────────────────────────────────────────────────────
 
 /**

@@ -19,6 +19,8 @@ import {
 } from '@/lib/gmail-client'
 import {
   parseSubject,
+  extractUnitCandidates,
+  titleWithoutUnit,
   extractBody,
   getHeader,
   parseSender,
@@ -72,6 +74,45 @@ async function findOrCreateAsset(
   }
 
   return null
+}
+
+/**
+ * Fallback asset resolver. The shop usually puts the unit first, but some emails
+ * bury it ("Breaks sound bad on t20"). When the first-word unit doesn't match a
+ * real asset, scan the WHOLE subject for tokens that match existing assets'
+ * unit numbers. Returns every distinct real asset found, in subject order.
+ *
+ * Only the caller decides whether to use it — a single confident match is
+ * auto-linked; multiple matches (e.g. "Service due S19, J10, I9") stay in the
+ * review queue rather than silently picking one and dropping the rest.
+ */
+async function findAssetsInSubject(
+  admin: ReturnType<typeof createAdminClient>,
+  subject: string,
+  skipUnit: string,
+): Promise<{ unitNumber: string; assetId: string }[]> {
+  const candidates = extractUnitCandidates(subject).filter(u => u !== skipUnit.toUpperCase())
+  if (!candidates.length) return []
+
+  // Case-insensitive match against real assets (unit_number stored uppercase,
+  // but ilike keeps us safe regardless).
+  const orFilter = candidates.map(c => `unit_number.ilike.${c}`).join(',')
+  const { data: assets } = await admin
+    .from('assets')
+    .select('id, unit_number')
+    .eq('company_id', COMPANY_ID)
+    .or(orFilter)
+
+  if (!assets?.length) return []
+
+  const byUnit = new Map(assets.map(a => [a.unit_number.toUpperCase(), a.id]))
+  const out: { unitNumber: string; assetId: string }[] = []
+  const usedIds = new Set<string>()
+  for (const cand of candidates) {
+    const id = byUnit.get(cand)
+    if (id && !usedIds.has(id)) { usedIds.add(id); out.push({ unitNumber: cand, assetId: id }) }
+  }
+  return out
 }
 
 // ── Attachment helpers ────────────────────────────────────────────────────────
@@ -368,10 +409,23 @@ async function processThread(
   const dateStr   = getHeader(headers, 'Date')
   const msgDate   = dateStr ? new Date(dateStr) : new Date()
 
-  const { unitNumber, title } = parseSubject(subject)
+  let { unitNumber, title } = parseSubject(subject)
   const { email: senderEmail } = parseSender(fromRaw)
 
-  const assetId    = await findOrCreateAsset(admin, unitNumber)
+  let assetId = await findOrCreateAsset(admin, unitNumber)
+
+  // If the first word wasn't a real asset, look for the unit elsewhere in the
+  // subject ("Breaks sound bad on t20"). Auto-link only on a single confident
+  // match; ambiguous multi-asset subjects fall through to the review queue.
+  if (!assetId && !isPersonalVehicle(unitNumber)) {
+    const found = await findAssetsInSubject(admin, subject, unitNumber)
+    if (found.length === 1) {
+      unitNumber = found[0].unitNumber
+      assetId    = found[0].assetId
+      title      = titleWithoutUnit(subject, found[0].unitNumber)
+    }
+  }
+
   const reporterId = await findReporter(admin, senderEmail)
   const body       = extractBody(firstMsg.payload)
 
