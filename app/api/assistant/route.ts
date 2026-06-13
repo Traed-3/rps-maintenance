@@ -6,7 +6,7 @@ import { generateTicketNumber } from '@/lib/gmail-parser'
 
 export const maxDuration = 60
 
-const MODEL = 'claude-opus-4-8'
+const MODEL = 'claude-sonnet-4-6'
 const WRITE_ROLES = ['owner', 'manager', 'shop_manager']
 const TERMINAL = ['completed', 'closed', 'deferred']
 
