@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import AppNav from '@/components/app-nav'
 import { NotificationBell } from '@/components/notifications/notification-bell'
+import { AskRps } from '@/components/assistant/ask-rps'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -76,6 +77,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="flex-1 pb-16 md:pb-0 overflow-y-auto">
         {children}
       </main>
+
+      {/* In-app AI assistant */}
+      <AskRps />
     </div>
   )
 }
