@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { revalidatePath } from 'next/cache'
 import { RemindersCard } from './reminders-card'
 import { MiscTasksCard } from './misc-tasks-card'
+import { DailySummaryCard } from './daily-summary-card'
 import { AssignControl } from '@/components/tickets/assign-control'
 
 const STATUS_LABELS: Record<string, string> = {
@@ -149,6 +150,15 @@ export default async function DashboardPage({
     .select('profile_id, clock_status, current_status, current_ticket_id, status_updated_at, repair_tickets(id, ticket_number, title)')
     .in('profile_id', empIds)
 
+  // Latest daily summary for the Today's Recap card
+  const { data: latestSummary } = await admin
+    .from('daily_summaries')
+    .select('content, period_start, period_end, created_at')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
   const statusMap = Object.fromEntries((empStatusData ?? []).map(s => [s.profile_id, s]))
   const clockedInCount = (empStatusData ?? []).filter(s => s.clock_status === 'clocked_in').length
   const now = Date.now()
@@ -277,6 +287,14 @@ export default async function DashboardPage({
         <StatCard label="Clocked In"        value={clockedInCount}           icon={Users}         color="green"  href="/shop" />
         <StatCard label="Shop Hrs Today"    value={(totalShopMins / 60).toFixed(1) + 'h'} icon={Clock} color="gray" href="/shop" />
       </div>
+
+      {/* Today's 3pm recap */}
+      <DailySummaryCard
+        generatedAt={latestSummary?.created_at  ?? null}
+        periodStart={latestSummary?.period_start ?? null}
+        periodEnd={latestSummary?.period_end     ?? null}
+        content={latestSummary?.content          ?? null}
+      />
 
       {/* Misc Tasks — property + equipment jobs, with assignee filter (top of dashboard) */}
       <MiscTasksCard items={miscItems} employees={assignable ?? []} canAssign={canAssign} />

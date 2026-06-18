@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Sparkles, X, Send } from 'lucide-react'
+import { Sparkles, X, Send, FileText } from 'lucide-react'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
@@ -44,6 +44,23 @@ export function AskRps() {
     }
   }
 
+  async function getUpdateSinceLastSummary() {
+    if (loading) return
+    const next: Msg[] = [...messages, { role: 'user', content: 'Update since last summary' }]
+    setMessages(next)
+    setLoading(true)
+    try {
+      const res = await fetch('/api/daily-summary?dry_run=true')
+      const data = await res.json()
+      const reply = data.content ?? data.error ?? 'Could not generate an update.'
+      setMessages([...next, { role: 'assistant', content: reply }])
+    } catch {
+      setMessages([...next, { role: 'assistant', content: 'Network error — please try again.' }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (!open) {
     return (
       <button
@@ -64,9 +81,17 @@ export function AskRps() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50">
+        {/* Always-visible quick action */}
+        <button
+          onClick={getUpdateSinceLastSummary}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+        >
+          <FileText className="w-4 h-4" /> Update since last summary
+        </button>
         {messages.length === 0 && (
           <div className="text-sm text-gray-500 space-y-2">
-            <p>Hi! I can answer how-to questions, look things up, and make changes for you. Try:</p>
+            <p>Or ask me a question — I can look things up and make changes for you. Try:</p>
             <ul className="space-y-1.5">
               {SUGGESTIONS.map((s) => (
                 <li key={s}>

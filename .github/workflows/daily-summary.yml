@@ -1,0 +1,27 @@
+name: Daily summary (3pm ET)
+on:
+  # 19:00 UTC = 3pm EDT (Mar-Nov). During EST (Nov-Mar) this lands at 2pm ET.
+  # Adjust if you'd rather strictly track 3pm in winter.
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-summary
+  cancel-in-progress: false
+
+jobs:
+  summary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger /api/daily-summary
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body -sS --max-time 90 \
+            -w "\nHTTP %{http_code}\n" \
+            "https://rps-maintenance.vercel.app/api/daily-summary?secret=$CRON_SECRET"
