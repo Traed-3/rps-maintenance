@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { sendAlertEmail } from '@/lib/email'
 
 const COMPANY_ID    = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 const RECIPIENT     = 'finance.trae@proton.me'
-const MODEL         = 'claude-sonnet-4-6'
 const TZ            = 'America/New_York'
 
 export const maxDuration = 60
@@ -171,22 +169,13 @@ export async function GET(request: NextRequest) {
       })),
     }
 
-    // ── 3) Ask Claude to write the summary in Trae's preferred format ──────
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const prompt = buildPrompt(context)
-    const msg = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }],
-    })
-    const content = msg.content
-      .filter((b: any) => b.type === 'text')
-      .map((b: any) => b.text)
-      .join('\n')
-      .trim()
-
+    // ── 3) Build the summary deterministically from the data ──────────────
+    // No LLM — the prompt-based approach kept inferring "complete" from email
+    // body wording even when ticket_current_status said otherwise. Template
+    // is uglier prose but 100% accurate to the database.
+    const content = renderSummary(context)
     if (!content) {
-      return NextResponse.json({ ok: false, error: 'Empty model response' }, { status: 500 })
+      return NextResponse.json({ ok: false, error: 'Empty summary' }, { status: 500 })
     }
 
     if (dryRun) {
@@ -235,34 +224,119 @@ function fmtET(input: string | Date, withTime = false): string {
   return new Intl.DateTimeFormat('en-US', opts).format(d)
 }
 
-function buildPrompt(ctx: any): string {
-  return `You are the daily-update writer for RPS Maintenance's shop dashboard. Trae (the owner) reads this at 3pm to see what changed.
+// Combine AR + RY into one group. Everyone else keeps their own initials.
+function bucketInitials(initials: string): string {
+  return initials === 'AR' || initials === 'RY' ? 'AR / RY' : initials
+}
 
-THE DATA BELOW IS THE COMPLETE SOURCE OF TRUTH. You are writing prose from it. You are NOT analyzing or inferring beyond what is explicitly stated.
+// Pretty status label for the inline tag next to each asset.
+function statusLabel(s: string | null): string {
+  if (!s) return ''
+  const m: Record<string, string> = {
+    open: 'open', new: 'new', assigned: 'assigned', in_progress: 'in progress',
+    waiting_parts: 'waiting on parts', completed: 'completed', closed: 'completed',
+    deferred: 'deferred',
+  }
+  return m[s] ?? s
+}
 
-HARD RULES — these are non-negotiable:
-1. NEVER invent ticket numbers. In fact, do NOT include any ticket numbers in the output. Trae doesn't want them.
-2. NEVER call something "complete", "closed", "fixed", "resolved", or "done" unless the asset's CURRENT ticket status in the data is literally "completed" OR that exact ticket appears in tickets_completed_in_window.
-3. NEVER infer a fix from email body wording alone. If the body says "installed brake harness" but ticket_current_status is "in_progress" or "open", describe it as ongoing work ("installed brake harness, still working") — not as complete.
-4. If the data is empty, write a single sentence: "No changes since the last update." Do not pad.
-5. Use ONLY the asset unit numbers, sender names, and statuses present in the data. Do not embellish.
+// Pull the first signal-bearing line from an email body. Skips iPhone/sig junk.
+function cleanSnippet(body: string, subject: string): string {
+  const lines = (body ?? '').split(/\n+/).map(l => l.trim()).filter(Boolean)
+  const skip = /^(sent from my|begin forwarded|from:|to:|date:|subject:|cc:|>|--+$|thanks,?$|respectfully|regards)/i
+  for (const l of lines) {
+    if (l.length < 3) continue
+    if (skip.test(l)) continue
+    return l.replace(/\s+/g, ' ').slice(0, 200)
+  }
+  // Fall back to subject if body is empty / all junk
+  return (subject ?? '').replace(/^(RE:|FWD:|Fwd:|Re:)\s*/i, '').trim().slice(0, 200)
+}
 
-FORMAT:
-- Markdown sections grouped by tech initials. Each section header is "## INITIALS" (e.g. "## AR / RY").
-- COMBINE AR (Austin Renner) + RY (Ritchie Yatsko) into a single "## AR / RY" section. They work as a pair.
-- Within each section, group by ASSET. One bold asset header (e.g. "**A1**") followed by 1-3 short bullets describing what changed on that asset (what they reported, ordered, installed, assigned, etc.) — drawn from the email_subject + email_body and the ticket_current_status.
-- No timestamps. No ticket numbers. No preamble. No closing.
-- After the tech sections, add "## Still needs attention" — list:
-  * Anything in review_queue (one bullet per item: sender + brief subject)
-  * Any unassigned_new_tickets (one bullet per asset: brief title)
-  * If both are empty, omit the section entirely.
+// Build markdown summary directly from the structured context. No LLM.
+function renderSummary(ctx: any): string {
+  const out: string[] = []
 
-PERIOD: ${ctx.period.start} → ${ctx.period.end}
+  // ── 1) Group events by bucketed initials, then by asset ──────────────────
+  type Event = {
+    asset: string | null
+    ticket_current_status: string | null
+    email_subject: string
+    email_body: string
+  }
+  const buckets: Record<string, Record<string, Event[]>> = {}
+  for (const [initials, info] of Object.entries(ctx.by_initials) as [string, any][]) {
+    const bucket = bucketInitials(initials)
+    for (const ev of info.events as Event[]) {
+      const assetKey = ev.asset ?? '(unknown asset)'
+      ;((buckets[bucket] ||= {})[assetKey] ||= []).push(ev)
+    }
+  }
 
-DATA (JSON):
-${JSON.stringify(ctx, null, 2)}
+  // Order: AR / RY first, then other initials alphabetically
+  const bucketOrder = Object.keys(buckets).sort((a, b) =>
+    a === 'AR / RY' ? -1 : b === 'AR / RY' ? 1 : a.localeCompare(b)
+  )
 
-Write the summary now, following the hard rules.`
+  if (bucketOrder.length === 0 && (ctx.tickets_completed_in_window ?? []).length === 0) {
+    return 'No changes since the last update.'
+  }
+
+  for (const bucket of bucketOrder) {
+    out.push(`## ${bucket}`, '')
+    const assets = buckets[bucket]
+    const assetKeys = Object.keys(assets).sort()
+    for (const asset of assetKeys) {
+      const events = assets[asset]
+      // Status comes from the most recent event's ticket_current_status (DB source of truth)
+      const status = events[events.length - 1].ticket_current_status
+      const statusTag = status ? ` _(${statusLabel(status)})_` : ''
+      out.push(`**${asset}**${statusTag}`)
+      const lines = uniq(events.map(e => cleanSnippet(e.email_body, e.email_subject)).filter(Boolean))
+      for (const ln of lines) out.push(`- ${ln}`)
+      out.push('')
+    }
+  }
+
+  // ── 2) Completed today (from DB, not inferred) ───────────────────────────
+  const completed = ctx.tickets_completed_in_window ?? []
+  if (completed.length) {
+    out.push('## Completed today', '')
+    // Group by asset (one asset can have multiple completions)
+    const byAsset: Record<string, any[]> = {}
+    for (const t of completed) {
+      const key = t.asset ?? '(unknown asset)'
+      ;(byAsset[key] ||= []).push(t)
+    }
+    for (const asset of Object.keys(byAsset).sort()) {
+      out.push(`**${asset}**`)
+      for (const t of byAsset[asset]) {
+        const who   = t.completed_by ? ` — ${t.completed_by}` : ''
+        const note  = t.completion_notes ? ` — ${t.completion_notes.replace(/\s+/g, ' ').slice(0, 160)}` : ''
+        const title = (t.title ?? '').replace(/\s+/g, ' ').slice(0, 100)
+        out.push(`- ${title}${who}${note}`)
+      }
+      out.push('')
+    }
+  }
+
+  // ── 3) Still needs attention ─────────────────────────────────────────────
+  const review     = ctx.review_queue ?? []
+  const unassigned = ctx.unassigned_new_tickets ?? []
+  if (review.length || unassigned.length) {
+    out.push('## Still needs attention', '')
+    for (const r of review) {
+      const subj = (r.subject ?? '').replace(/\s+/g, ' ').slice(0, 120)
+      out.push(`- Review queue (${r.sender}): ${subj}`)
+    }
+    for (const t of unassigned) {
+      const asset = t.asset ?? '(no asset)'
+      const title = (t.title ?? '').replace(/\s+/g, ' ').slice(0, 100)
+      out.push(`- **${asset}** unassigned (${statusLabel(t.status)}): ${title}`)
+    }
+  }
+
+  return out.join('\n').trim()
 }
 
 // Map a sender email like "ryatsko.rp@gmail.com" → { initials: "RY", full_name: "Ritchie Yatsko" }
