@@ -59,19 +59,20 @@ export async function GET(request: NextRequest) {
     // ── 2) Pull changes in the window ──────────────────────────────────────
     const [emailsRes, newTicketsRes, completedRes, reviewRes] = await Promise.all([
       admin.from('gmail_imports')
-        .select('received_at, sender, subject, body_preview, status, converted_ticket_id, detected_asset')
+        .select('received_at, sender, subject, body_preview, converted_ticket_id, detected_asset')
         .eq('company_id', COMPANY_ID)
         .gte('received_at', periodStart.toISOString())
         .lte('received_at', periodEnd.toISOString())
+        .in('status', ['converted','duplicate'])
         .order('received_at'),
       admin.from('repair_tickets')
-        .select('ticket_number, title, status, priority, created_at, asset_id, source')
+        .select('id, ticket_number, title, status, priority, created_at, asset_id, source')
         .eq('company_id', COMPANY_ID)
         .gte('created_at', periodStart.toISOString())
         .lte('created_at', periodEnd.toISOString())
         .order('created_at'),
       admin.from('repair_tickets')
-        .select('ticket_number, title, date_completed, completion_notes, asset_id, completed_by')
+        .select('id, ticket_number, title, date_completed, completion_notes, asset_id, completed_by')
         .eq('company_id', COMPANY_ID)
         .eq('status', 'completed')
         .gte('date_completed', periodStart.toISOString().split('T')[0])
@@ -84,9 +85,25 @@ export async function GET(request: NextRequest) {
         .order('received_at'),
     ])
 
-    // Look up asset unit numbers + profile names so the model has labels, not UUIDs
-    const assetIds   = uniq([...(newTicketsRes.data ?? []), ...(completedRes.data ?? [])].map((t: any) => t.asset_id).filter(Boolean))
-    const profileIds = uniq((completedRes.data ?? []).map((t: any) => t.completed_by).filter(Boolean))
+    // Pull CURRENT status of every ticket touched by an email — the model has to
+    // see the real status field, not infer it from email body context.
+    const touchedTicketIds = uniq((emailsRes.data ?? []).map((e: any) => e.converted_ticket_id).filter(Boolean))
+    const { data: touchedTickets } = touchedTicketIds.length
+      ? await admin.from('repair_tickets')
+          .select('id, ticket_number, status, asset_id, title, assigned_to')
+          .in('id', touchedTicketIds)
+      : { data: [] as any[] }
+
+    // Asset + profile label lookups
+    const assetIds = uniq([
+      ...(newTicketsRes.data   ?? []).map((t: any) => t.asset_id),
+      ...(completedRes.data    ?? []).map((t: any) => t.asset_id),
+      ...((touchedTickets      ?? []) as any[]).map((t: any) => t.asset_id),
+    ].filter(Boolean))
+    const profileIds = uniq([
+      ...(completedRes.data ?? []).map((t: any) => t.completed_by),
+      ...((touchedTickets   ?? []) as any[]).map((t: any) => t.assigned_to),
+    ].filter(Boolean))
     const [assetsRes, profilesRes] = await Promise.all([
       assetIds.length
         ? admin.from('assets').select('id, unit_number').in('id', assetIds)
@@ -97,35 +114,60 @@ export async function GET(request: NextRequest) {
     ])
     const assetById   = new Map((assetsRes.data   ?? []).map((a: any) => [a.id, a.unit_number]))
     const profileById = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p.full_name]))
+    const ticketById  = new Map(((touchedTickets ?? []) as any[]).map((t: any) => [t.id, t]))
+
+    // Group every email event under the sender's initials, with the resolved
+    // ticket + ITS CURRENT STATUS attached. This is the source of truth handed
+    // to the model — no further data joins or inferences allowed.
+    type Event = {
+      asset: string | null
+      ticket_number: string | null
+      ticket_current_status: string | null
+      ticket_assigned_to: string | null
+      email_subject: string
+      email_body: string
+    }
+    const byInitials: Record<string, { full_name: string; events: Event[] }> = {}
+    for (const e of (emailsRes.data ?? []) as any[]) {
+      const { initials, full_name } = whoIs(e.sender)
+      const tk = e.converted_ticket_id ? ticketById.get(e.converted_ticket_id) : null
+      const ev: Event = {
+        asset: tk ? (assetById.get(tk.asset_id) ?? null) : e.detected_asset,
+        ticket_number: tk?.ticket_number ?? null,
+        ticket_current_status: tk?.status ?? null,
+        ticket_assigned_to: tk?.assigned_to ? (profileById.get(tk.assigned_to) ?? null) : null,
+        email_subject: e.subject ?? '',
+        email_body: (e.body_preview ?? '').slice(0, 500),
+      }
+      ;(byInitials[initials] ||= { full_name, events: [] }).events.push(ev)
+    }
+
+    const tickets_completed_in_window = ((completedRes.data ?? []) as any[]).map((t: any) => ({
+      ticket_number:    t.ticket_number,
+      asset:            assetById.get(t.asset_id) ?? null,
+      title:            t.title,
+      date_completed:   t.date_completed,
+      completion_notes: (t.completion_notes ?? '').slice(0, 400),
+      completed_by:     profileById.get(t.completed_by) ?? null,
+    }))
+
+    const unassigned_new_tickets = ((newTicketsRes.data ?? []) as any[])
+      .filter((t: any) => t.status !== 'completed' && t.status !== 'closed' && t.status !== 'deferred')
+      .map((t: any) => ({
+        ticket_number: t.ticket_number,
+        asset:         assetById.get(t.asset_id) ?? null,
+        title:         t.title,
+        status:        t.status,
+        priority:      t.priority,
+      }))
 
     const context = {
       period: { start: fmtET(periodStart), end: fmtET(periodEnd) },
-      emails: (emailsRes.data ?? []).map((e: any) => ({
-        time:    fmtET(e.received_at, true),
-        sender:  e.sender,
-        subject: e.subject,
-        body:    (e.body_preview ?? '').slice(0, 400),
-        status:  e.status,
-        asset:   e.detected_asset,
-      })),
-      tickets_created: (newTicketsRes.data ?? []).map((t: any) => ({
-        ticket: t.ticket_number,
-        asset:  assetById.get(t.asset_id) ?? null,
-        title:  t.title,
-        status: t.status,
-        priority: t.priority,
-        source: t.source,
-      })),
-      tickets_completed: (completedRes.data ?? []).map((t: any) => ({
-        ticket:           t.ticket_number,
-        asset:            assetById.get(t.asset_id) ?? null,
-        title:            t.title,
-        date_completed:   t.date_completed,
-        completion_notes: (t.completion_notes ?? '').slice(0, 400),
-        completed_by:     profileById.get(t.completed_by) ?? null,
-      })),
+      by_initials: byInitials,
+      tickets_completed_in_window,
+      unassigned_new_tickets,
       review_queue: (reviewRes.data ?? []).map((g: any) => ({
-        time: fmtET(g.received_at, true), sender: g.sender, subject: g.subject,
+        sender: g.sender, subject: g.subject,
       })),
     }
 
@@ -194,32 +236,55 @@ function fmtET(input: string | Date, withTime = false): string {
 }
 
 function buildPrompt(ctx: any): string {
-  return `You are the daily-update writer for RPS Maintenance's shop dashboard. Trae (the owner) reads this at 3pm every day to know what changed.
+  return `You are the daily-update writer for RPS Maintenance's shop dashboard. Trae (the owner) reads this at 3pm to see what changed.
 
-WRITE IN TRAE'S PREFERRED FORMAT:
-- Markdown sections grouped by TECH INITIALS (from the email senders + completed_by names).
-- **Combine AR (Austin Renner) and RY (Ritchie Yatsko) into one section labeled "AR / RY".** They work as a pair.
-- Within each tech's section, list the assets they touched. One short bullet per asset describing what changed (what they reported, fixed, ordered, or assigned).
-- If nothing changed in the window, say so in one sentence. Do not invent activity.
-- No timestamps in the body — Trae doesn't want them.
-- Keep it tight. No flowery prose, no preamble, no closing. Just the sections.
-- After the tech sections, add a short "**Still needs attention**" section listing anything in the review queue or any unassigned new tickets.
+THE DATA BELOW IS THE COMPLETE SOURCE OF TRUTH. You are writing prose from it. You are NOT analyzing or inferring beyond what is explicitly stated.
 
-INITIALS MAP (derive from email username; first + last initial):
-- ryatsko.rp → RY (Ritchie Yatsko)
-- arenner.rp → AR (Austin Renner)
-- akerner.rp → AK (Ariel Kerner)
-- wlongo.rp → WL (William Longo)
-- fdodson.rp → FD (Fred Dodson)
-- For anyone else, derive initials from their email username.
-- Anything from "maintenance.rps@gmail.com" is the shared inbox — usually a one-word "Fred" reply means Fred assigned the ticket.
+HARD RULES — these are non-negotiable:
+1. NEVER invent ticket numbers. In fact, do NOT include any ticket numbers in the output. Trae doesn't want them.
+2. NEVER call something "complete", "closed", "fixed", "resolved", or "done" unless the asset's CURRENT ticket status in the data is literally "completed" OR that exact ticket appears in tickets_completed_in_window.
+3. NEVER infer a fix from email body wording alone. If the body says "installed brake harness" but ticket_current_status is "in_progress" or "open", describe it as ongoing work ("installed brake harness, still working") — not as complete.
+4. If the data is empty, write a single sentence: "No changes since the last update." Do not pad.
+5. Use ONLY the asset unit numbers, sender names, and statuses present in the data. Do not embellish.
+
+FORMAT:
+- Markdown sections grouped by tech initials. Each section header is "## INITIALS" (e.g. "## AR / RY").
+- COMBINE AR (Austin Renner) + RY (Ritchie Yatsko) into a single "## AR / RY" section. They work as a pair.
+- Within each section, group by ASSET. One bold asset header (e.g. "**A1**") followed by 1-3 short bullets describing what changed on that asset (what they reported, ordered, installed, assigned, etc.) — drawn from the email_subject + email_body and the ticket_current_status.
+- No timestamps. No ticket numbers. No preamble. No closing.
+- After the tech sections, add "## Still needs attention" — list:
+  * Anything in review_queue (one bullet per item: sender + brief subject)
+  * Any unassigned_new_tickets (one bullet per asset: brief title)
+  * If both are empty, omit the section entirely.
 
 PERIOD: ${ctx.period.start} → ${ctx.period.end}
 
 DATA (JSON):
 ${JSON.stringify(ctx, null, 2)}
 
-Now write the summary.`
+Write the summary now, following the hard rules.`
+}
+
+// Map a sender email like "ryatsko.rp@gmail.com" → { initials: "RY", full_name: "Ritchie Yatsko" }
+// Initials are the first letter of the first name + first letter of the surname
+// the user actually goes by — for the small RPS crew we hardcode known names;
+// anything unknown falls back to first-two-letters of the username.
+function whoIs(email: string): { initials: string; full_name: string } {
+  const e = (email ?? '').toLowerCase()
+  const map: Record<string, { initials: string; full_name: string }> = {
+    'ryatsko.rp@gmail.com':       { initials: 'RY', full_name: 'Ritchie Yatsko' },
+    'arenner.rp@gmail.com':       { initials: 'AR', full_name: 'Austin Renner' },
+    'akerner.rp@gmail.com':       { initials: 'AK', full_name: 'Ariel Kerner' },
+    'wlongo.rp@gmail.com':        { initials: 'WL', full_name: 'William Longo' },
+    'fdodson.rp@gmail.com':       { initials: 'FD', full_name: 'Fred Dodson' },
+    'sdodson.rp@gmail.com':       { initials: 'SD', full_name: 'Shannon Dodson' },
+    'maintenance.rps@gmail.com':  { initials: 'FD', full_name: 'Fred Dodson' }, // shared inbox; usually Fred
+  }
+  if (map[e]) return map[e]
+  // Fallback: take the user part before the @, drop ".rp" suffix if present, then 2 initials
+  const user = e.split('@')[0].replace(/\.rp$/, '')
+  const initials = (user.slice(0, 2)).toUpperCase()
+  return { initials, full_name: user }
 }
 
 // Minimal markdown → inline HTML for the email body (Resend accepts HTML)
