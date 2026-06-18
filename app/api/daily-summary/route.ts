@@ -240,14 +240,21 @@ function statusLabel(s: string | null): string {
   return m[s] ?? s
 }
 
-// Pull the first signal-bearing line from an email body. Skips iPhone/sig junk.
+// Pull the first signal-bearing line from an email body. Skips iPhone signature
+// junk, forwarded-message blocks, and tiny one-word replies that don't add info.
 function cleanSnippet(body: string, subject: string): string {
-  const lines = (body ?? '').split(/\n+/).map(l => l.trim()).filter(Boolean)
-  const skip = /^(sent from my|begin forwarded|from:|to:|date:|subject:|cc:|>|--+$|thanks,?$|respectfully|regards)/i
+  // Drop everything from the first "Begin forwarded message" / "From:" header
+  // onward — those are quoted history, not new content.
+  const trimmed = (body ?? '')
+    .split(/\n\s*(?:begin forwarded message|from:|on .+ wrote:)/i)[0]
+  const lines = trimmed.split(/\n+/).map(l => l.trim()).filter(Boolean)
+  const skip = /^(sent from my|>|--+$|thanks,?$|respectfully|regards|^[A-Z][a-z]+\s+[A-Z]\.?\s*[A-Z][a-z]+$)/i
+  const trivial = /^(complete|completed|done|finished|fred|ok|yes|no)\.?$/i
   for (const l of lines) {
     if (l.length < 3) continue
     if (skip.test(l)) continue
-    return l.replace(/\s+/g, ' ').slice(0, 200)
+    if (trivial.test(l)) continue   // one-word replies are noise; status badge covers them
+    return l.replace(/^Update\s+/i, '').replace(/\s+/g, ' ').slice(0, 200)
   }
   // Fall back to subject if body is empty / all junk
   return (subject ?? '').replace(/^(RE:|FWD:|Fwd:|Re:)\s*/i, '').trim().slice(0, 200)
@@ -257,19 +264,30 @@ function cleanSnippet(body: string, subject: string): string {
 function renderSummary(ctx: any): string {
   const out: string[] = []
 
-  // ── 1) Group events by bucketed initials, then by asset ──────────────────
+  // ── 1) Group events by bucketed initials → asset → ticket ────────────────
+  // Grouping by (asset, ticket) prevents the "one asset has 3 tickets in 3
+  // different statuses → which status do we show?" problem.
   type Event = {
     asset: string | null
+    ticket_number: string | null
     ticket_current_status: string | null
     email_subject: string
     email_body: string
   }
-  const buckets: Record<string, Record<string, Event[]>> = {}
+  type TicketGroup = { status: string | null; lines: string[] }
+  const buckets: Record<string, Record<string, Record<string, TicketGroup>>> = {}
+
   for (const [initials, info] of Object.entries(ctx.by_initials) as [string, any][]) {
     const bucket = bucketInitials(initials)
     for (const ev of info.events as Event[]) {
-      const assetKey = ev.asset ?? '(unknown asset)'
-      ;((buckets[bucket] ||= {})[assetKey] ||= []).push(ev)
+      const assetKey  = ev.asset ?? '(unknown asset)'
+      const ticketKey = ev.ticket_number ?? '__no_ticket__'
+      const assets    = (buckets[bucket]    ||= {})
+      const tickets   = (assets[assetKey]   ||= {})
+      const grp       = (tickets[ticketKey] ||= { status: ev.ticket_current_status, lines: [] })
+      grp.status = ev.ticket_current_status  // last write wins (events are in chrono order)
+      const snip = cleanSnippet(ev.email_body, ev.email_subject)
+      if (snip && !grp.lines.includes(snip)) grp.lines.push(snip)
     }
   }
 
@@ -285,16 +303,28 @@ function renderSummary(ctx: any): string {
   for (const bucket of bucketOrder) {
     out.push(`## ${bucket}`, '')
     const assets = buckets[bucket]
-    const assetKeys = Object.keys(assets).sort()
-    for (const asset of assetKeys) {
-      const events = assets[asset]
-      // Status comes from the most recent event's ticket_current_status (DB source of truth)
-      const status = events[events.length - 1].ticket_current_status
-      const statusTag = status ? ` _(${statusLabel(status)})_` : ''
-      out.push(`**${asset}**${statusTag}`)
-      const lines = uniq(events.map(e => cleanSnippet(e.email_body, e.email_subject)).filter(Boolean))
-      for (const ln of lines) out.push(`- ${ln}`)
-      out.push('')
+    for (const asset of Object.keys(assets).sort()) {
+      const tickets = assets[asset]
+      const ticketKeys = Object.keys(tickets)
+
+      if (ticketKeys.length === 1) {
+        // Single ticket on this asset → status next to the asset header
+        const grp = tickets[ticketKeys[0]]
+        const statusTag = grp.status ? ` _(${statusLabel(grp.status)})_` : ''
+        out.push(`**${asset}**${statusTag}`)
+        for (const ln of grp.lines) out.push(`- ${ln}`)
+        out.push('')
+      } else {
+        // Multiple tickets on this asset → status per ticket line
+        out.push(`**${asset}**`)
+        for (const tk of ticketKeys) {
+          const grp = tickets[tk]
+          const statusTag = grp.status ? ` _(${statusLabel(grp.status)})_` : ''
+          const summary = grp.lines.length ? grp.lines.join('; ') : '(activity)'
+          out.push(`- ${summary}${statusTag}`)
+        }
+        out.push('')
+      }
     }
   }
 
@@ -312,7 +342,8 @@ function renderSummary(ctx: any): string {
       out.push(`**${asset}**`)
       for (const t of byAsset[asset]) {
         const who   = t.completed_by ? ` — ${t.completed_by}` : ''
-        const note  = t.completion_notes ? ` — ${t.completion_notes.replace(/\s+/g, ' ').slice(0, 160)}` : ''
+        const noteClean = cleanSnippet(t.completion_notes ?? '', '')
+        const note  = noteClean ? ` — ${noteClean}` : ''
         const title = (t.title ?? '').replace(/\s+/g, ' ').slice(0, 100)
         out.push(`- ${title}${who}${note}`)
       }
