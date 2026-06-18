@@ -244,11 +244,12 @@ function statusLabel(s: string | null): string {
 // junk, forwarded-message blocks, and tiny one-word replies that don't add info.
 function cleanSnippet(body: string, subject: string): string {
   // Drop everything from the first "Begin forwarded message" / "From:" header
-  // onward — those are quoted history, not new content.
+  // onward — those are quoted history, not new content. (No leading-newline
+  // requirement, so we catch bodies that START with the forwarded header.)
   const trimmed = (body ?? '')
-    .split(/\n\s*(?:begin forwarded message|from:|on .+ wrote:)/i)[0]
+    .split(/(?:^|\n)\s*(?:begin forwarded message|from:|on .+ wrote:)/i)[0]
   const lines = trimmed.split(/\n+/).map(l => l.trim()).filter(Boolean)
-  const skip = /^(sent from my|>|--+$|thanks,?$|respectfully|regards|^[A-Z][a-z]+\s+[A-Z]\.?\s*[A-Z][a-z]+$)/i
+  const skip = /^(sent from my|begin forwarded|>|--+$|thanks,?$|respectfully|regards|^[A-Z][a-z]+\s+[A-Z]\.?\s*[A-Z][a-z]+$)/i
   const trivial = /^(complete|completed|done|finished|fred|ok|yes|no)\.?$/i
   for (const l of lines) {
     if (l.length < 3) continue
