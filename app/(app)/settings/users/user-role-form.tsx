@@ -10,6 +10,8 @@ const ROLES = [
   { value: 'mechanic',          label: 'Mechanic' },
   { value: 'service_tech',      label: 'Service Tech' },
   { value: 'construction_tech', label: 'Construction Tech' },
+  { value: 'construction_manager', label: 'Construction Manager' },
+  { value: 'estimator',         label: 'Estimator' },
   { value: 'office_staff',      label: 'Office Staff' },
   { value: 'viewer',            label: 'Viewer' },
 ]
