@@ -140,14 +140,18 @@ export async function GET(request: NextRequest) {
       ;(byInitials[initials] ||= { full_name, events: [] }).events.push(ev)
     }
 
-    const tickets_completed_in_window = ((completedRes.data ?? []) as any[]).map((t: any) => ({
-      ticket_number:    t.ticket_number,
-      asset:            assetById.get(t.asset_id) ?? null,
-      title:            t.title,
-      date_completed:   t.date_completed,
-      completion_notes: (t.completion_notes ?? '').slice(0, 400),
-      completed_by:     profileById.get(t.completed_by) ?? null,
-    }))
+    const tickets_completed_in_window = ((completedRes.data ?? []) as any[]).map((t: any) => {
+      const notes = (t.completion_notes ?? '').slice(0, 400)
+      return {
+        ticket_number:          t.ticket_number,
+        asset:                  assetById.get(t.asset_id) ?? null,
+        title:                  t.title,
+        date_completed:         t.date_completed,
+        completion_notes:       notes,
+        completed_by:           profileById.get(t.completed_by) ?? null,
+        completed_by_initials:  extractTrailingInitials(notes),  // shop sign-off convention
+      }
+    })
 
     const unassigned_new_tickets = ((newTicketsRes.data ?? []) as any[])
       .filter((t: any) => t.status !== 'completed' && t.status !== 'closed' && t.status !== 'deferred')
@@ -227,6 +231,30 @@ function fmtET(input: string | Date, withTime = false): string {
 // Combine AR + RY into one group. Everyone else keeps their own initials.
 function bucketInitials(initials: string): string {
   return initials === 'AR' || initials === 'RY' ? 'AR / RY' : initials
+}
+
+// Shop sign-off convention: the tech who actually did the work puts their
+// initials at the very end of the completion note ("complete - WL", "done WL",
+// or just "WL" on the last line). Two letters, optionally with a dash before.
+function extractTrailingInitials(notes: string): string | null {
+  if (!notes) return null
+  // Strip forwarded-message tail first so we look at the actual last line
+  const head = notes.split(/(?:^|\n)\s*(?:begin forwarded message|from:|on .+ wrote:)/i)[0]
+  const lines = head.split(/\n+/).map(l => l.trim()).filter(Boolean)
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = lines[i].match(/(?:^|[\s\-—–])([A-Z]{2})\.?$/)
+    if (m) return m[1]
+  }
+  return null
+}
+
+// YYYY-MM-DD in ET — used to compare against the date_completed column.
+function dateInET(d: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d)
+  const g = (t: string) => parts.find(p => p.type === t)?.value ?? ''
+  return `${g('year')}-${g('month')}-${g('day')}`
 }
 
 // Pretty status label for the inline tag next to each asset.
@@ -329,26 +357,55 @@ function renderSummary(ctx: any): string {
     }
   }
 
-  // ── 2) Completed today (from DB, not inferred) ───────────────────────────
-  const completed = ctx.tickets_completed_in_window ?? []
+  // ── 2) Completed in window — split by date ───────────────────────────────
+  // Trae wants to see what slipped in after the previous 3pm cutoff (i.e.
+  // completed yesterday after the last update) separately from work the shop
+  // closed out today before this update.
+  const completed = (ctx.tickets_completed_in_window ?? []) as any[]
   if (completed.length) {
-    out.push('## Completed today', '')
-    // Group by asset (one asset can have multiple completions)
-    const byAsset: Record<string, any[]> = {}
-    for (const t of completed) {
-      const key = t.asset ?? '(unknown asset)'
-      ;(byAsset[key] ||= []).push(t)
+    const todayET     = dateInET(new Date())
+    const yesterdayET = dateInET(new Date(Date.now() - 24 * 60 * 60 * 1000))
+
+    const dateLabel = (iso: string | null): string => {
+      if (!iso) return 'Completed (date unknown)'
+      if (iso === todayET)     return 'Completed today'
+      if (iso === yesterdayET) return 'Completed yesterday (after last update)'
+      const d = new Date(iso + 'T12:00:00')
+      const human = new Intl.DateTimeFormat('en-US', {
+        timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric',
+      }).format(d)
+      return `Completed ${human}`
     }
-    for (const asset of Object.keys(byAsset).sort()) {
-      out.push(`**${asset}**`)
-      for (const t of byAsset[asset]) {
-        const who   = t.completed_by ? ` — ${t.completed_by}` : ''
-        const noteClean = cleanSnippet(t.completion_notes ?? '', '')
-        const note  = noteClean ? ` — ${noteClean}` : ''
-        const title = (t.title ?? '').replace(/\s+/g, ' ').slice(0, 100)
-        out.push(`- ${title}${who}${note}`)
+
+    // Group by date_completed (newest first), then by asset within each date
+    const byDate: Record<string, any[]> = {}
+    for (const t of completed) (byDate[t.date_completed ?? ''] ||= []).push(t)
+    const dateKeys = Object.keys(byDate).sort().reverse() // newest first
+
+    for (const date of dateKeys) {
+      out.push(`## ${dateLabel(date)}`, '')
+      const byAsset: Record<string, any[]> = {}
+      for (const t of byDate[date]) {
+        const key = t.asset ?? '(unknown asset)'
+        ;(byAsset[key] ||= []).push(t)
       }
-      out.push('')
+      for (const asset of Object.keys(byAsset).sort()) {
+        out.push(`**${asset}**`)
+        for (const t of byAsset[asset]) {
+          // Prefer the trailing initials the tech signed off with — that's
+          // who actually did the work. Fall back to the DB completed_by name
+          // (which on email-sourced tickets is just the email sender, not
+          // necessarily the doer).
+          const credit = t.completed_by_initials
+            ? ` — ${t.completed_by_initials}`
+            : t.completed_by ? ` — ${t.completed_by}` : ''
+          const noteClean = cleanSnippet(t.completion_notes ?? '', '')
+          const note  = noteClean ? ` — ${noteClean}` : ''
+          const title = (t.title ?? '').replace(/\s+/g, ' ').slice(0, 100)
+          out.push(`- ${title}${credit}${note}`)
+        }
+        out.push('')
+      }
     }
   }
 
