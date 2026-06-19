@@ -23,10 +23,13 @@ export async function GET(request: NextRequest) {
     }
   )
 
+  // Prefer the address the user is actually on (so preview deployments and
+  // localhost work), falling back to NEXT_PUBLIC_APP_URL only if there is no
+  // host header for some reason.
   const host = request.headers.get('host') ?? ''
-  const siteUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (host.includes('localhost') ? `http://${host}` : `https://${host}`)
+  const siteUrl = host
+    ? (host.includes('localhost') ? `http://${host}` : `https://${host}`)
+    : (process.env.NEXT_PUBLIC_APP_URL ?? '')
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
