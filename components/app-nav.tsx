@@ -20,8 +20,10 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-// Roles that may see the Construction module (viewer = read-only).
-const CONSTRUCTION_ROLES = ['owner', 'manager', 'construction_manager', 'estimator', 'viewer']
+// TEMPORARY: Construction is owner-only while it is still being refined, so
+// the "Build" nav link is hidden from everyone else. When ready to roll out,
+// restore: ['owner', 'manager', 'construction_manager', 'estimator', 'viewer'].
+const CONSTRUCTION_ROLES = ['owner']
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, active: true },

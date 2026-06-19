@@ -6,10 +6,16 @@
 // ============================================================
 
 // ── Roles ───────────────────────────────────────────────────
+// TEMPORARY: while the Construction module is still being refined, it is
+// restricted to OWNER only so nobody else in the company can see it yet.
+// When ready to roll it out, restore the fuller lists (kept here for easy
+// reference):
+//   read:  ['owner', 'manager', 'construction_manager', 'estimator', 'viewer']
+//   write: ['owner', 'manager', 'construction_manager', 'estimator']
 // Who can open the module at all (viewer = read-only).
-export const CON_READ_ROLES = ['owner', 'manager', 'construction_manager', 'estimator', 'viewer'] as const
+export const CON_READ_ROLES = ['owner'] as const
 // Who can create / edit construction records.
-export const CON_WRITE_ROLES = ['owner', 'manager', 'construction_manager', 'estimator'] as const
+export const CON_WRITE_ROLES = ['owner'] as const
 
 export function canReadConstruction(role?: string | null) {
   return CON_READ_ROLES.includes((role ?? '') as (typeof CON_READ_ROLES)[number])
