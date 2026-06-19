@@ -8,11 +8,13 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const oauthError = searchParams.get('error')
 
-  // Determine the base URL for redirects
+  // Determine the base URL for redirects. Prefer the address the user is
+  // actually on (so preview deployments and localhost keep the session on the
+  // same domain), falling back to NEXT_PUBLIC_APP_URL only if no host header.
   const host = request.headers.get('host') ?? ''
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (host.includes('localhost') ? `http://${host}` : `https://${host}`)
+  const origin = host
+    ? (host.includes('localhost') ? `http://${host}` : `https://${host}`)
+    : (process.env.NEXT_PUBLIC_APP_URL ?? '')
 
   if (oauthError) {
     console.error('[callback] OAuth provider error:', oauthError)
