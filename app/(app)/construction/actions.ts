@@ -23,10 +23,6 @@ function num(val: FormDataEntryValue | null): number | null {
   const v = Number(s.replace(/[$,]/g, ''))
   return isFinite(v) ? v : null
 }
-function bool(val: FormDataEntryValue | null) {
-  return val === 'on' || val === 'true'
-}
-
 async function getProfile() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

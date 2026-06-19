@@ -14,10 +14,14 @@ import {
   LogOut,
   Receipt,
   Home,
+  HardHat,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+
+// Roles that may see the Construction module (viewer = read-only).
+const CONSTRUCTION_ROLES = ['owner', 'manager', 'construction_manager', 'estimator', 'viewer']
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, active: true },
@@ -25,6 +29,7 @@ const navItems = [
   { href: '/maintenance', label: 'Maintenance', icon: Wrench, active: true },
   { href: '/tickets', label: 'Tickets', icon: ClipboardList, active: true },
   { href: '/shop', label: 'Shop', icon: Users, active: true },
+  { href: '/construction', label: 'Construction', icon: HardHat, active: true, roles: CONSTRUCTION_ROLES },
   { href: '/expenses', label: 'Expenses', icon: Receipt, active: true },
   { href: '/reports', label: 'Reports', icon: BarChart3, active: true },
   { href: '/settings', label: 'Settings', icon: Settings, active: true },
@@ -34,6 +39,10 @@ export default function AppNav({ email, role }: { email: string; role?: string }
   const pathname = usePathname()
   const router = useRouter()
   const isAdmin = ['owner', 'manager'].includes(role ?? '')
+  const canSeeConstruction = CONSTRUCTION_ROLES.includes(role ?? '')
+
+  // Hide role-gated items the current user may not see.
+  const visibleNavItems = navItems.filter(i => !i.roles || i.roles.includes(role ?? ''))
 
   // Mobile bottom-bar items — owners/managers get Settings so they can reach
   // user management, company info, alerts, etc. from a phone or the iPad app.
@@ -43,6 +52,7 @@ export default function AppNav({ email, role }: { email: string; role?: string }
     { href: '/assets',    label: 'Assets',    icon: Truck },
     { href: '/tickets',   label: 'Tickets',   icon: ClipboardList },
     { href: '/shop',      label: 'Shop',      icon: Users },
+    ...(canSeeConstruction ? [{ href: '/construction', label: 'Build', icon: HardHat }] : []),
     ...(isAdmin ? [{ href: '/settings', label: 'Settings', icon: Settings }] : []),
   ]
 
@@ -70,7 +80,7 @@ export default function AppNav({ email, role }: { email: string; role?: string }
 
         {/* Nav links */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             return item.active ? (
               <Link

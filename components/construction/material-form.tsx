@@ -26,11 +26,13 @@ export type MaterialRecord = {
 export function MaterialForm({
   action,
   jobId,
+  jobs,
   material,
   compact = false,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
-  jobId: string
+  jobId?: string
+  jobs?: { id: string; site_number: string | null; work_order_number: string | null }[]
   material?: MaterialRecord
   compact?: boolean
 }) {
@@ -42,7 +44,17 @@ export function MaterialForm({
       {state?.error && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{state.error}</div>
       )}
-      <input type="hidden" name="job_id" value={jobId} />
+      {jobId ? (
+        <input type="hidden" name="job_id" value={jobId} />
+      ) : (
+        <div>
+          <label className={lbl}>Job <span className="text-red-500">*</span></label>
+          <select name="job_id" className={inp} defaultValue={m?.job_id ?? ''} required>
+            <option value="">— Select a job —</option>
+            {(jobs ?? []).map(j => <option key={j.id} value={j.id}>{j.site_number ?? '—'}{j.work_order_number ? ` (${j.work_order_number})` : ''}</option>)}
+          </select>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
