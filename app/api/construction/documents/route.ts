@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient()
   const { data: profile } = await admin
     .from('profiles').select('id, company_id, role').eq('id', user.id).single()
-  if (!profile || !canWriteConstruction(profile.role)) {
+  if (!profile || !canWriteConstruction(profile)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

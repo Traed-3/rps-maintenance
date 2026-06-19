@@ -39,7 +39,7 @@ async function getProfile() {
 export async function saveCustomer(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'You do not have permission to edit customers.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit customers.' }
 
   const name = str(formData.get('name'))
   if (!name) return { error: 'Customer name is required.' }
@@ -71,7 +71,7 @@ export async function saveCustomer(id: string | null, _state: ActionState, formD
 
 export async function deleteCustomer(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   // Detach sites (keep the site rows; just unlink) then remove the customer.
   await admin.from('con_sites').update({ customer_id: null }).eq('customer_id', id).eq('company_id', profile.company_id)
@@ -86,7 +86,7 @@ export async function deleteCustomer(id: string): Promise<void> {
 export async function saveSite(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'You do not have permission to edit sites.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit sites.' }
 
   const site_number = str(formData.get('site_number'))
   if (!site_number) return { error: 'Site number / name is required.' }
@@ -121,7 +121,7 @@ export async function saveSite(id: string | null, _state: ActionState, formData:
 
 export async function deleteSite(id: string, redirectTo?: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   await admin.from('con_sites').delete().eq('id', id).eq('company_id', profile.company_id)
   revalidatePath('/construction/customers')
@@ -155,7 +155,7 @@ function jobFields(formData: FormData) {
 export async function saveJob(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'You do not have permission to edit jobs.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit jobs.' }
 
   const fields = jobFields(formData)
   if (!fields.site_number && !fields.site_id) return { error: 'A site number (or selected site) is required.' }
@@ -180,7 +180,7 @@ export async function saveJob(id: string | null, _state: ActionState, formData: 
 /** Quick stage change from the kanban / detail header. */
 export async function changeJobStage(id: string, stage: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   await admin.from('con_jobs').update({ stage }).eq('id', id).eq('company_id', profile.company_id)
   revalidatePath('/construction/jobs')
@@ -190,7 +190,7 @@ export async function changeJobStage(id: string, stage: string): Promise<void> {
 
 export async function deleteJob(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   // Child rows with ON DELETE CASCADE (materials, labor, closeout) go automatically;
   // quotes/invoices/schedule/documents keep their rows but null their job link.
@@ -249,7 +249,7 @@ function docHeaderFields(formData: FormData) {
 export async function saveQuote(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'You do not have permission to edit quotes.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit quotes.' }
 
   const admin = createAdminClient()
   const header = docHeaderFields(formData)
@@ -308,7 +308,7 @@ export async function saveQuote(id: string | null, _state: ActionState, formData
 
 export async function setQuoteStatus(id: string, status: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const updates: Record<string, unknown> = { status }
   if (status === 'sent') updates.sent_date = new Date().toISOString().split('T')[0]
@@ -320,7 +320,7 @@ export async function setQuoteStatus(id: string, status: string): Promise<void> 
 
 export async function deleteQuote(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   await admin.from('con_quotes').delete().eq('id', id).eq('company_id', profile.company_id)
   revalidatePath('/construction/quotes')
@@ -330,7 +330,7 @@ export async function deleteQuote(id: string): Promise<void> {
 /** Copy an existing quote (header + line items) into a new draft invoice. */
 export async function convertQuoteToInvoice(quoteId: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
 
   const { data: q } = await admin.from('con_quotes').select('*').eq('id', quoteId).eq('company_id', profile.company_id).single()
@@ -392,7 +392,7 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<void> {
 export async function saveInvoice(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'You do not have permission to edit invoices.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit invoices.' }
 
   const admin = createAdminClient()
   const header = docHeaderFields(formData)
@@ -456,7 +456,7 @@ export async function saveInvoice(id: string | null, _state: ActionState, formDa
 
 export async function setInvoiceStatus(id: string, status: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const today = new Date().toISOString().split('T')[0]
   const updates: Record<string, unknown> = { status }
@@ -469,7 +469,7 @@ export async function setInvoiceStatus(id: string, status: string): Promise<void
 
 export async function deleteInvoice(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   await admin.from('con_invoices').delete().eq('id', id).eq('company_id', profile.company_id)
   revalidatePath('/construction/invoices')
@@ -482,7 +482,7 @@ export async function deleteInvoice(id: string): Promise<void> {
 export async function saveMaterial(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'You do not have permission to edit materials.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit materials.' }
 
   const job_id = str(formData.get('job_id'))
   if (!job_id) return { error: 'Material must belong to a job.' }
@@ -519,7 +519,7 @@ export async function saveMaterial(id: string | null, _state: ActionState, formD
 
 export async function setMaterialStatus(id: string, status: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const today = new Date().toISOString().split('T')[0]
   const updates: Record<string, unknown> = { status }
@@ -531,7 +531,7 @@ export async function setMaterialStatus(id: string, status: string): Promise<voi
 
 export async function deleteMaterial(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const { data } = await admin.from('con_job_materials').select('job_id').eq('id', id).single()
   await admin.from('con_job_materials').delete().eq('id', id).eq('company_id', profile.company_id)
@@ -545,7 +545,7 @@ export async function deleteMaterial(id: string): Promise<void> {
 export async function saveScheduleEntry(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'You do not have permission to edit the schedule.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit the schedule.' }
 
   const schedule_date = str(formData.get('schedule_date'))
   if (!schedule_date) return { error: 'A date is required.' }
@@ -579,7 +579,7 @@ export async function saveScheduleEntry(id: string | null, _state: ActionState, 
 
 export async function moveScheduleEntry(id: string, schedule_date: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   await admin.from('con_schedule_entries').update({ schedule_date }).eq('id', id).eq('company_id', profile.company_id)
   revalidatePath('/construction/schedule')
@@ -587,7 +587,7 @@ export async function moveScheduleEntry(id: string, schedule_date: string): Prom
 
 export async function deleteScheduleEntry(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   await admin.from('con_schedule_entries').delete().eq('id', id).eq('company_id', profile.company_id)
   revalidatePath('/construction/schedule')
@@ -603,7 +603,7 @@ const DEFAULT_CLOSEOUT_TASKS = [
 
 export async function seedCloseoutTasks(jobId: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const { count } = await admin.from('con_closeout_tasks')
     .select('*', { count: 'exact', head: true }).eq('job_id', jobId)
@@ -617,7 +617,7 @@ export async function seedCloseoutTasks(jobId: string): Promise<void> {
 export async function addCloseoutTask(jobId: string, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'No permission.' }
+  if (!canWriteConstruction(profile)) return { error: 'No permission.' }
   const task_name = str(formData.get('task_name'))
   if (!task_name) return { error: 'Task name is required.' }
   const admin = createAdminClient()
@@ -628,7 +628,7 @@ export async function addCloseoutTask(jobId: string, _state: ActionState, formDa
 
 export async function toggleCloseoutTask(id: string, isComplete: boolean): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const { data: me } = await admin.from('profiles').select('full_name').eq('id', profile.id).single()
   await admin.from('con_closeout_tasks').update({
@@ -642,7 +642,7 @@ export async function toggleCloseoutTask(id: string, isComplete: boolean): Promi
 
 export async function deleteCloseoutTask(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const { data } = await admin.from('con_closeout_tasks').select('job_id').eq('id', id).single()
   await admin.from('con_closeout_tasks').delete().eq('id', id).eq('company_id', profile.company_id)
@@ -655,7 +655,7 @@ export async function deleteCloseoutTask(id: string): Promise<void> {
 export async function addJobLabor(jobId: string, _state: ActionState, formData: FormData): Promise<ActionState> {
   const profile = await getProfile()
   if (!profile) return { error: 'Not authenticated.' }
-  if (!canWriteConstruction(profile.role)) return { error: 'No permission.' }
+  if (!canWriteConstruction(profile)) return { error: 'No permission.' }
   const hours = num(formData.get('hours'))
   if (hours == null) return { error: 'Hours are required.' }
   const admin = createAdminClient()
@@ -674,7 +674,7 @@ export async function addJobLabor(jobId: string, _state: ActionState, formData: 
 
 export async function deleteJobLabor(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const { data } = await admin.from('con_job_labor').select('job_id').eq('id', id).single()
   await admin.from('con_job_labor').delete().eq('id', id).eq('company_id', profile.company_id)
@@ -686,7 +686,7 @@ export async function deleteJobLabor(id: string): Promise<void> {
 // ============================================================
 export async function deleteDocument(id: string): Promise<void> {
   const profile = await getProfile()
-  if (!profile || !canWriteConstruction(profile.role)) return
+  if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const { data: doc } = await admin.from('con_documents')
     .select('job_id, storage_path').eq('id', id).eq('company_id', profile.company_id).single()

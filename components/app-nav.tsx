@@ -19,11 +19,7 @@ import {
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-
-// TEMPORARY: Construction is owner-only while it is still being refined, so
-// the "Build" nav link is hidden from everyone else. When ready to roll out,
-// restore: ['owner', 'manager', 'construction_manager', 'estimator', 'viewer'].
-const CONSTRUCTION_ROLES = ['owner']
+import { CON_ALLOWED_USER_IDS } from '@/lib/construction'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, active: true },
@@ -31,20 +27,22 @@ const navItems = [
   { href: '/maintenance', label: 'Maintenance', icon: Wrench, active: true },
   { href: '/tickets', label: 'Tickets', icon: ClipboardList, active: true },
   { href: '/shop', label: 'Shop', icon: Users, active: true },
-  { href: '/construction', label: 'Construction', icon: HardHat, active: true, roles: CONSTRUCTION_ROLES },
+  // `construction: true` marks this link as gated to the Construction
+  // allowlist (see CON_ALLOWED_USER_IDS) while the module is being refined.
+  { href: '/construction', label: 'Construction', icon: HardHat, active: true, construction: true },
   { href: '/expenses', label: 'Expenses', icon: Receipt, active: true },
   { href: '/reports', label: 'Reports', icon: BarChart3, active: true },
   { href: '/settings', label: 'Settings', icon: Settings, active: true },
 ]
 
-export default function AppNav({ email, role }: { email: string; role?: string }) {
+export default function AppNav({ email, role, userId }: { email: string; role?: string; userId?: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const isAdmin = ['owner', 'manager'].includes(role ?? '')
-  const canSeeConstruction = CONSTRUCTION_ROLES.includes(role ?? '')
+  const canSeeConstruction = CON_ALLOWED_USER_IDS.includes(userId ?? '')
 
-  // Hide role-gated items the current user may not see.
-  const visibleNavItems = navItems.filter(i => !i.roles || i.roles.includes(role ?? ''))
+  // Hide the Construction link from anyone not on the allowlist.
+  const visibleNavItems = navItems.filter(i => canSeeConstruction || !('construction' in i))
 
   // Mobile bottom-bar items — owners/managers get Settings so they can reach
   // user management, company info, alerts, etc. from a phone or the iPad app.

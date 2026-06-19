@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data: profile } = await admin.from('profiles').select('company_id, role').eq('id', user.id).single()
-  if (!profile || !canReadConstruction(profile.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { data: profile } = await admin.from('profiles').select('id, company_id, role').eq('id', user.id).single()
+  if (!profile || !canReadConstruction(profile)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const report = new URL(request.url).searchParams.get('report') ?? 'job_cost'
   let rows: (string | number | null)[][] = []

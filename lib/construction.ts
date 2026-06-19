@@ -5,23 +5,32 @@
 // page guard lives in lib/construction-guard.ts.
 // ============================================================
 
-// ── Roles ───────────────────────────────────────────────────
-// TEMPORARY: while the Construction module is still being refined, it is
-// restricted to OWNER only so nobody else in the company can see it yet.
-// When ready to roll it out, restore the fuller lists (kept here for easy
-// reference):
-//   read:  ['owner', 'manager', 'construction_manager', 'estimator', 'viewer']
-//   write: ['owner', 'manager', 'construction_manager', 'estimator']
-// Who can open the module at all (viewer = read-only).
-export const CON_READ_ROLES = ['owner'] as const
-// Who can create / edit construction records.
-export const CON_WRITE_ROLES = ['owner'] as const
+// ── Access control ──────────────────────────────────────────
+// TEMPORARY LOCK: while the Construction module is still being refined it is
+// restricted to specific user accounts only (Trae's two logins) so that NO
+// other user — including the other family "owner" accounts — can see it yet.
+// Gating is by user id (which every permission check already loads) rather
+// than by role, so nothing can slip through.
+//
+// To roll the module out to the team later, replace the body of the two
+// helpers below with a role check using these lists:
+//   read roles:  ['owner', 'manager', 'construction_manager', 'estimator', 'viewer']
+//   write roles: ['owner', 'manager', 'construction_manager', 'estimator']
+export const CON_ALLOWED_USER_IDS: readonly string[] = [
+  '09d76016-7ed8-427d-83c3-1f94c484c1ce', // finance.trae@proton.me  (Trae Dodson - Admin)
+  '703891ec-8547-423c-bba3-baba65a950b2', // dodson3.trae@gmail.com  (Admin Acct)
+]
 
-export function canReadConstruction(role?: string | null) {
-  return CON_READ_ROLES.includes((role ?? '') as (typeof CON_READ_ROLES)[number])
+// Pass the caller's profile object (must include `id`). Anyone not on the
+// allowlist above gets false. During the temporary lock, read and write are
+// the same gate (the allowed users can do everything).
+type ConGateProfile = { id?: string | null } | null | undefined
+
+export function canReadConstruction(profile?: ConGateProfile) {
+  return !!profile?.id && CON_ALLOWED_USER_IDS.includes(profile.id)
 }
-export function canWriteConstruction(role?: string | null) {
-  return CON_WRITE_ROLES.includes((role ?? '') as (typeof CON_WRITE_ROLES)[number])
+export function canWriteConstruction(profile?: ConGateProfile) {
+  return !!profile?.id && CON_ALLOWED_USER_IDS.includes(profile.id)
 }
 
 export type ConProfile = { id: string; company_id: string; role: string }

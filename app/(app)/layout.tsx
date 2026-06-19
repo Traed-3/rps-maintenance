@@ -64,7 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <AppNav email={user.email ?? ''} role={profile?.role ?? 'viewer'} />
+      <AppNav email={user.email ?? ''} role={profile?.role ?? 'viewer'} userId={user.id} />
 
       {/* Notification bell — top right on desktop */}
       <div className="fixed top-3 right-4 z-20 hidden md:block">

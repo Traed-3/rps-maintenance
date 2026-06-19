@@ -14,8 +14,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data: profile } = await admin.from('profiles').select('company_id, role').eq('id', user.id).single()
-  if (!profile || !canReadConstruction(profile.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { data: profile } = await admin.from('profiles').select('id, company_id, role').eq('id', user.id).single()
+  if (!profile || !canReadConstruction(profile)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data: q } = await admin
     .from('con_quotes').select('*, con_customers(name, billing_address)')

@@ -16,8 +16,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
   const admin = createAdminClient()
   const { data: profile } = await admin
-    .from('profiles').select('company_id, role').eq('id', user.id).single()
-  if (!profile || !canReadConstruction(profile.role)) {
+    .from('profiles').select('id, company_id, role').eq('id', user.id).single()
+  if (!profile || !canReadConstruction(profile)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

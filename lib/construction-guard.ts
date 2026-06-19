@@ -19,7 +19,7 @@ export async function requireConstruction(): Promise<ConProfile & { canWrite: bo
     .eq('id', user.id)
     .single()
 
-  if (!profile || !canReadConstruction(profile.role)) redirect('/dashboard')
+  if (!profile || !canReadConstruction(profile)) redirect('/dashboard')
 
-  return { ...(profile as ConProfile), canWrite: canWriteConstruction(profile.role) }
+  return { ...(profile as ConProfile), canWrite: canWriteConstruction(profile) }
 }
