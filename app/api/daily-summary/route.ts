@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { sendAlertEmail } from '@/lib/email'
+import { syncGmailToTickets } from '@/lib/gmail-sync'
 
 const COMPANY_ID    = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 const RECIPIENT     = 'finance.trae@proton.me'
@@ -40,6 +41,18 @@ export async function GET(request: NextRequest) {
   const admin  = createAdminClient()
 
   try {
+    // ── 0) Force a fresh Gmail sync first so the summary reflects the latest
+    //       inbox state, not whatever the 15-min cron last picked up.
+    //       Best-effort: errors here don't block the summary, but they do
+    //       get surfaced in the response so we can see if sync is failing.
+    let sync_errors: string[] = []
+    try {
+      const r = await syncGmailToTickets({ maxThreads: 40 })
+      sync_errors = r.errors
+    } catch (syncErr: any) {
+      sync_errors = [String(syncErr?.message ?? syncErr)]
+    }
+
     // ── 1) Period: from last summary's period_end to now (fallback 24h) ────
     const { data: last } = await admin
       .from('daily_summaries')
@@ -183,7 +196,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (dryRun) {
-      return NextResponse.json({ ok: true, dry_run: true, period: context.period, content })
+      return NextResponse.json({ ok: true, dry_run: true, period: context.period, content, sync_errors })
     }
 
     // ── 4) Save + email ────────────────────────────────────────────────────
@@ -209,7 +222,7 @@ export async function GET(request: NextRequest) {
       link:    '/dashboard',
     })
 
-    return NextResponse.json({ ok: true, summary_id: saved?.id, period: context.period })
+    return NextResponse.json({ ok: true, summary_id: saved?.id, period: context.period, sync_errors })
   } catch (e: any) {
     console.error('[Daily Summary Error]', e)
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
