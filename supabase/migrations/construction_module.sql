@@ -511,6 +511,28 @@ CREATE POLICY con_invoice_line_items_write ON con_invoice_line_items FOR ALL TO 
   WITH CHECK (con_can_write() AND invoice_id IN (SELECT id FROM con_invoices WHERE company_id = con_user_company_id()));
 
 -- ============================================================
--- DONE. (Storage bucket "construction-docs" is created in the
--- Supabase dashboard — see the click-by-click steps in chat.)
+-- 6. HARDENING (satisfies the Supabase security linter)
+-- ============================================================
+-- Pin search_path on the numbering trigger functions.
+ALTER FUNCTION con_set_quote_number()   SET search_path = public;
+ALTER FUNCTION con_set_invoice_number() SET search_path = public;
+
+-- RLS helper functions must not be callable via the public REST API.
+-- They stay available to `authenticated` so RLS policy evaluation works.
+REVOKE EXECUTE ON FUNCTION con_user_company_id() FROM anon, public;
+REVOKE EXECUTE ON FUNCTION con_can_read()        FROM anon, public;
+REVOKE EXECUTE ON FUNCTION con_can_write()       FROM anon, public;
+GRANT  EXECUTE ON FUNCTION con_user_company_id() TO authenticated;
+GRANT  EXECUTE ON FUNCTION con_can_read()        TO authenticated;
+GRANT  EXECUTE ON FUNCTION con_can_write()       TO authenticated;
+
+-- ============================================================
+-- 7. STORAGE BUCKET for construction documents (private)
+-- ============================================================
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('construction-docs', 'construction-docs', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- DONE.
 -- ============================================================
