@@ -64,7 +64,7 @@ export default function AppNav({ email, role }: { email: string; role?: string }
             width={220}
             height={100}
             priority
-            className="h-16 w-auto"
+            className="h-20 w-auto"
           />
         </div>
 
