@@ -10,7 +10,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <Image
             src="/logo-full.png"
-            alt="RPS Maintenance"
+            alt="RPS Intelligence"
             width={320}
             height={145}
             priority

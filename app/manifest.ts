@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'RPS Maintenance',
+    name: 'RPS Intelligence',
     short_name: 'RPS',
     description: 'RPS Fleet & Shop Operations Platform',
     start_url: '/mobile',

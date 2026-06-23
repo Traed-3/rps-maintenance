@@ -60,7 +60,7 @@ export default function AppNav({ email, role }: { email: string; role?: string }
         <div className="px-4 py-4 border-b border-gray-200">
           <Image
             src="/logo-full.png"
-            alt="RPS Maintenance"
+            alt="RPS Intelligence"
             width={220}
             height={100}
             priority
