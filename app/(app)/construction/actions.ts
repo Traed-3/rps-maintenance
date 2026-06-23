@@ -554,10 +554,14 @@ export async function saveScheduleEntry(id: string | null, _state: ActionState, 
   const crewRaw = str(formData.get('crew'))
   const crew = crewRaw ? crewRaw.split(/[,\s]+/).map(s => s.trim()).filter(Boolean) : null
 
+  const entryTypeRaw = str(formData.get('entry_type'))
+  const entry_type = ['job', 'time_off', 'note'].includes(entryTypeRaw ?? '') ? entryTypeRaw : 'job'
+
   const admin = createAdminClient()
   const fields = {
     schedule_date,
-    job_id:           str(formData.get('job_id')),
+    entry_type,
+    job_id:           entry_type === 'job' ? str(formData.get('job_id')) : null,
     site_number:      str(formData.get('site_number')),
     task_description: str(formData.get('task_description')),
     crew,
