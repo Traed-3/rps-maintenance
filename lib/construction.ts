@@ -220,7 +220,7 @@ export function fmtDate(d: string | null | undefined) {
 export const NOTIFY_WINDOW_OPEN_DAYS = 7
 export const NOTIFY_DEADLINE_DAYS = 3
 
-export type NotifyState = 'sent' | 'waived' | 'no_start' | 'scheduled' | 'send_now' | 'due_soon' | 'overdue'
+export type NotifyState = 'sent' | 'waived' | 'no_start' | 'scheduled' | 'send_now' | 'due_soon' | 'overdue' | 'started'
 
 type NotifyJob = {
   project_start_date: string | null
@@ -265,6 +265,11 @@ export function projectNotificationStatus(job: NotifyJob, now = new Date()): Not
   if (today < windowOpen) {
     const opensIn = dayDiff(windowOpen, today)
     return { ...out, state: 'scheduled', isDue: false, label: `Opens in ${opensIn}d`, className: 'bg-blue-50 text-blue-700 border-blue-200' }
+  }
+  if (today > start) {
+    // The project has already started — its notification was necessarily sent
+    // beforehand, so it's never "due" anymore.
+    return { ...out, state: 'started', isDue: false, label: 'Project started', className: 'bg-gray-100 text-gray-500 border-gray-200' }
   }
   if (daysToDeadline < 0) {
     return { ...out, state: 'overdue', isDue: true, label: `Overdue ${-daysToDeadline}d`, className: 'bg-red-100 text-red-700 border-red-300' }
