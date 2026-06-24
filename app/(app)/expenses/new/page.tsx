@@ -21,6 +21,7 @@ export default async function NewExpensePage() {
     { data: openTickets },
     { data: constructionJobs },
     { data: storeRows },
+    { data: quoteRows },
   ] = await Promise.all([
     admin.from('assets').select('id, unit_number, name, make, model')
       .eq('company_id', profile!.company_id).neq('status', 'retired').order('unit_number'),
@@ -39,11 +40,29 @@ export default async function NewExpensePage() {
       .order('site_number').limit(500),
     admin.from('expenses').select('store_number')
       .eq('company_id', profile!.company_id).not('store_number', 'is', null).limit(2000),
+    admin.from('con_quotes').select('id, job_id')
+      .eq('company_id', profile!.company_id).not('job_id', 'is', null),
   ])
 
   const storeNumbers = Array.from(
     new Set((storeRows ?? []).map(r => (r.store_number ?? '').trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+
+  // Map each construction project to the line-item descriptions from its bid(s),
+  // so charging an expense to a project offers those as categories.
+  const projectCategories: Record<string, string[]> = {}
+  const quoteToJob = new Map((quoteRows ?? []).map(q => [q.id, q.job_id as string]))
+  if (quoteToJob.size > 0) {
+    const { data: liRows } = await admin.from('con_quote_line_items')
+      .select('quote_id, description').in('quote_id', Array.from(quoteToJob.keys()))
+    for (const li of liRows ?? []) {
+      const jobId = quoteToJob.get(li.quote_id as string)
+      const d = (li.description ?? '').trim()
+      if (!jobId || !d) continue
+      ;(projectCategories[jobId] ??= [])
+      if (!projectCategories[jobId].includes(d)) projectCategories[jobId].push(d)
+    }
+  }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -61,6 +80,7 @@ export default async function NewExpensePage() {
           openTickets={openTickets ?? []}
           constructionJobs={constructionJobs ?? []}
           storeNumbers={storeNumbers}
+          projectCategories={projectCategories}
         />
       </div>
     </div>
