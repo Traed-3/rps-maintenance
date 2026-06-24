@@ -25,9 +25,10 @@ type Entry = {
 }
 type Job = { id: string; site_number: string | null; work_order_number: string | null; stage: string | null; scope_of_work: string | null }
 
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ view?: string; date?: string }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ view?: string; date?: string; stage?: string }> }) {
   const sp = await searchParams
   const view = sp.view === 'week' ? 'week' : 'month'
+  const stageFilter = sp.stage ?? ''
   const { company_id, canWrite } = await requireConstruction()
   const admin = createAdminClient()
 
@@ -69,12 +70,25 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const jobById = new Map<string, Job>((jobs ?? []).map(j => [j.id, j as Job]))
   const byDay = new Map<string, Entry[]>()
   for (const e of (entries ?? []) as Entry[]) {
+    if (stageFilter && !(e.job_id && jobById.get(e.job_id)?.stage === stageFilter)) continue
     const k = e.schedule_date
     if (!byDay.has(k)) byDay.set(k, [])
     byDay.get(k)!.push(e)
   }
 
   const dayOptions = days.map(d => ({ value: iso(d), label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }) }))
+  const navHref = (v: string, d: string) => {
+    const p = new URLSearchParams(); p.set('view', v)
+    if (d) p.set('date', d)
+    if (stageFilter) p.set('stage', stageFilter)
+    return `/construction/schedule?${p.toString()}`
+  }
+  const filterHref = (st: string) => {
+    const p = new URLSearchParams(); p.set('view', view)
+    if (sp.date) p.set('date', sp.date)
+    if (st) p.set('stage', st)
+    return `/construction/schedule?${p.toString()}`
+  }
 
   function chipClass(e: Entry): string {
     if (e.entry_type === 'time_off') return 'bg-gray-100 text-gray-500 border-gray-300'
@@ -134,21 +148,23 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           <Link href="/construction" className="text-sm text-gray-500 hover:text-gray-700 mr-1">← Construction</Link>
           {/* View toggle */}
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
-            <Link href="/construction/schedule?view=month" className={`px-3 py-2 ${view === 'month' ? 'bg-gray-900 text-white' : 'hover:bg-gray-50 text-gray-600'}`}>Month</Link>
-            <Link href="/construction/schedule?view=week" className={`px-3 py-2 ${view === 'week' ? 'bg-gray-900 text-white' : 'hover:bg-gray-50 text-gray-600'}`}>Week</Link>
+            <Link href={navHref('month', sp.date ?? '')} className={`px-3 py-2 ${view === 'month' ? 'bg-gray-900 text-white' : 'hover:bg-gray-50 text-gray-600'}`}>Month</Link>
+            <Link href={navHref('week', sp.date ?? '')} className={`px-3 py-2 ${view === 'week' ? 'bg-gray-900 text-white' : 'hover:bg-gray-50 text-gray-600'}`}>Week</Link>
           </div>
-          <Link href={`/construction/schedule?view=${view}&date=${prevDate}`} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"><ChevronLeft className="w-4 h-4" /></Link>
-          <Link href={`/construction/schedule?view=${view}`} className="px-3 py-2 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-50">Today</Link>
-          <Link href={`/construction/schedule?view=${view}&date=${nextDate}`} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"><ChevronRight className="w-4 h-4" /></Link>
+          <Link href={navHref(view, prevDate)} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"><ChevronLeft className="w-4 h-4" /></Link>
+          <Link href={navHref(view, '')} className="px-3 py-2 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-50">Today</Link>
+          <Link href={navHref(view, nextDate)} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"><ChevronRight className="w-4 h-4" /></Link>
         </div>
       </div>
 
-      {/* Stage legend */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
+      {/* Status filter — also serves as the colour legend */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mr-0.5">Status</span>
+        <Link href={filterHref('')} className={`text-[10px] px-2 py-0.5 rounded-full border ${!stageFilter ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>All</Link>
         {CON_STAGES.map(s => (
-          <span key={s.value} className={`text-[10px] px-2 py-0.5 rounded-full border ${s.className}`}>{s.label}</span>
+          <Link key={s.value} href={filterHref(s.value)} className={`text-[10px] px-2 py-0.5 rounded-full border ${s.className} ${stageFilter === s.value ? 'ring-2 ring-gray-900 ring-offset-1' : 'opacity-80 hover:opacity-100'}`}>{s.label}</Link>
         ))}
-        <span className="text-[10px] px-2 py-0.5 rounded-full border bg-gray-100 text-gray-500 border-gray-300">Time off</span>
+        <span className="text-[10px] px-2 py-0.5 rounded-full border bg-gray-100 text-gray-400 border-gray-300">Time off</span>
       </div>
 
       {view === 'month' ? (

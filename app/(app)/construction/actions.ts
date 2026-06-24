@@ -597,6 +597,14 @@ export async function deleteScheduleEntry(id: string): Promise<void> {
   revalidatePath('/construction/schedule')
 }
 
+export async function toggleChecklistItem(id: string, done: boolean): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  await admin.from('con_checklist_items').update({ done }).eq('id', id).eq('company_id', profile.company_id)
+  revalidatePath('/construction/checklist')
+}
+
 // ============================================================
 // CLOSE-OUT TASKS
 // ============================================================
