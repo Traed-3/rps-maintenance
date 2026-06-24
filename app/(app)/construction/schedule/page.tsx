@@ -92,8 +92,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     const job = e.job_id ? jobById.get(e.job_id) : null
     const sub = e.entry_type === 'time_off' ? null
       : (e.task_description && entryTitle(e) !== e.task_description ? e.task_description : (job?.scope_of_work ?? null))
-    return (
-      <div className={`rounded-lg border px-2 py-1 text-[11px] leading-tight ${chipClass(e)}`}>
+    const body = (
+      <>
         <div className="flex items-start gap-1">
           {e.entry_type === 'time_off' && <Plane className="w-3 h-3 shrink-0 mt-0.5" />}
           <span className="font-semibold break-words">{entryTitle(e)}</span>
@@ -103,6 +103,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           <p className="mt-0.5 inline-flex items-center gap-1 opacity-90"><Users className="w-2.5 h-2.5" />{e.crew.join(', ')}</p>
         ) : null}
         {e.equipment && <p className="mt-0.5 italic opacity-80">{e.equipment}</p>}
+      </>
+    )
+    return (
+      <div className={`rounded-lg border px-2 py-1 text-[11px] leading-tight ${chipClass(e)}`}>
+        {job ? (
+          <Link href={`/construction/jobs/${job.id}`} className="block hover:underline" title={`Open job ${job.site_number ?? ''}`}>{body}</Link>
+        ) : body}
         {canWrite && (
           <div className="flex items-center justify-between mt-1 -mb-0.5" data-no-row-nav>
             <ScheduleMove id={e.id} current={di} days={dayOptions} action={moveScheduleEntry} />
