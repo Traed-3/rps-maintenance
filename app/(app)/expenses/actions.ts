@@ -62,11 +62,13 @@ export async function createExpense(_state: State, formData: FormData): Promise<
     asset_id:            expenseType === 'asset' ? str(formData.get('asset_id')) : null,
     store_number:        expenseType === 'store' ? str(formData.get('store_number')) : null,
     project_number:      expenseType === 'project' ? str(formData.get('project_number')) : null,
+    con_job_id:          expenseType === 'project' ? str(formData.get('con_job_id')) : null,
     category_id:         str(formData.get('category_id')),
     category_custom:     str(formData.get('category_custom')),
     payment_method_id:   pmId,
     payment_method_code: pmCode?.toUpperCase() ?? null,
-    repair_ticket_id:    str(formData.get('repair_ticket_id')),
+    // Linked shop ticket only applies to non-project expenses
+    repair_ticket_id:    expenseType === 'project' ? null : str(formData.get('repair_ticket_id')),
     receipt_url:         str(formData.get('receipt_url')),
     notes:               str(formData.get('notes')),
   }).select('id').single()

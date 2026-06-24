@@ -13,6 +13,7 @@ type Asset   = { id: string; unit_number: string; name: string | null; make: str
 type PM      = { id: string; code: string; name: string }
 type Cat     = { id: string; name: string }
 type Ticket  = { id: string; ticket_number: string; title: string }
+type ConJob  = { id: string; site_number: string | null; work_order_number: string | null; stage: string | null }
 
 export function ExpenseForm({
   action,
@@ -21,6 +22,8 @@ export function ExpenseForm({
   assetCategories,
   storeCategories,
   openTickets,
+  constructionJobs,
+  storeNumbers,
 }: {
   action: (state: State, formData: FormData) => Promise<State>
   assets: Asset[]
@@ -28,6 +31,8 @@ export function ExpenseForm({
   assetCategories: Cat[]
   storeCategories: Cat[]
   openTickets: Ticket[]
+  constructionJobs: ConJob[]
+  storeNumbers: string[]
 }) {
   const [state, formAction, isPending] = useActionState(action, null)
   const [expenseType, setExpenseType] = useState<string>('asset')
@@ -104,13 +109,32 @@ export function ExpenseForm({
       {expenseType === 'store' && (
         <div>
           <label className={lbl}>Store Number</label>
-          <input name="store_number" className={inp} placeholder="e.g. #1042" />
+          <input name="store_number" className={inp} list="store-numbers" placeholder="Select or type a store #" autoComplete="off" />
+          <datalist id="store-numbers">
+            {storeNumbers.map(s => <option key={s} value={s} />)}
+          </datalist>
+          {storeNumbers.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1">No stores on file yet — type one and it’ll be suggested next time.</p>
+          )}
         </div>
       )}
       {expenseType === 'project' && (
-        <div>
-          <label className={lbl}>Project Number</label>
-          <input name="project_number" className={inp} placeholder="e.g. PRJ-2024-001" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className={lbl}>Construction Project</label>
+            <select name="con_job_id" className={inp}>
+              <option value="">— Select project —</option>
+              {constructionJobs.map(j => (
+                <option key={j.id} value={j.id}>
+                  {j.site_number ?? '—'}{j.work_order_number ? ` (${j.work_order_number})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={lbl}>Or Project # <span className="font-normal text-gray-400">(field / service work)</span></label>
+            <input name="project_number" className={inp} placeholder="e.g. 32346" />
+          </div>
         </div>
       )}
 
@@ -134,21 +158,23 @@ export function ExpenseForm({
         </div>
       )}
 
-      {/* Vendor */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Vendor + linked ticket (ticket only applies to non-project expenses) */}
+      <div className={`grid gap-4 ${expenseType === 'project' ? 'grid-cols-1' : 'grid-cols-2'}`}>
         <div>
           <label className={lbl}>Vendor / Store</label>
           <input name="vendor" className={inp} placeholder="Home Depot, O'Reilly, etc." />
         </div>
-        <div>
-          <label className={lbl}>Linked Ticket (optional)</label>
-          <select name="repair_ticket_id" className={inp}>
-            <option value="">— None —</option>
-            {openTickets.map(t => (
-              <option key={t.id} value={t.id}>{t.ticket_number} — {t.title.slice(0, 35)}</option>
-            ))}
-          </select>
-        </div>
+        {expenseType !== 'project' && (
+          <div>
+            <label className={lbl}>Linked Ticket (optional)</label>
+            <select name="repair_ticket_id" className={inp}>
+              <option value="">— None —</option>
+              {openTickets.map(t => (
+                <option key={t.id} value={t.id}>{t.ticket_number} — {t.title.slice(0, 35)}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Payment method */}

@@ -12,7 +12,7 @@ export default async function ExpenseDetailPage({ params }: { params: Promise<{ 
 
   const { data: expense } = await admin
     .from('expenses')
-    .select('*, assets(unit_number, make, model), profiles!expenses_submitted_by_fkey(full_name), repair_tickets(ticket_number, title), expense_categories(name)')
+    .select('*, assets(unit_number, make, model), profiles!expenses_submitted_by_fkey(full_name), repair_tickets(ticket_number, title), con_jobs(site_number, work_order_number), expense_categories(name)')
     .eq('id', id)
     .eq('company_id', profile!.company_id)
     .single()
@@ -32,7 +32,7 @@ export default async function ExpenseDetailPage({ params }: { params: Promise<{ 
   const chargedTo = expense.expense_type === 'asset'
     ? `${(expense as any).assets?.unit_number} — ${(expense as any).assets?.make ?? ''} ${(expense as any).assets?.model ?? ''}`.trim()
     : expense.expense_type === 'store' ? `Store ${expense.store_number}`
-    : expense.expense_type === 'project' ? `Project ${expense.project_number}`
+    : expense.expense_type === 'project' ? `Project ${(expense as any).con_jobs?.site_number ?? expense.project_number ?? ''}`.trim()
     : 'General'
 
   return (
@@ -71,6 +71,14 @@ export default async function ExpenseDetailPage({ params }: { params: Promise<{ 
               <span className="text-sm text-gray-500">Linked Ticket</span>
               <Link href={`/tickets/${expense.repair_ticket_id}`} className="text-sm text-blue-600 font-medium hover:underline">
                 {(expense as any).repair_tickets.ticket_number}
+              </Link>
+            </div>
+          )}
+          {(expense as any).con_jobs && (
+            <div className="flex justify-between py-2">
+              <span className="text-sm text-gray-500">Linked Project</span>
+              <Link href={`/construction/jobs/${expense.con_job_id}`} className="text-sm text-blue-600 font-medium hover:underline">
+                {(expense as any).con_jobs.site_number ?? 'View project'}
               </Link>
             </div>
           )}
