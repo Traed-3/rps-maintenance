@@ -69,7 +69,7 @@ export default function AppNav({ email, role, userId }: { email: string; role?: 
         {/* Brand */}
         <div className="px-4 py-4 border-b border-gray-200">
           <Image
-            src="/logo-full.png"
+            src="/logo-full.png?v=2"
             alt="RPS Maintenance"
             width={220}
             height={100}
