@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Media Art Productions — Creating Memories, One Frame at a Time</title>
+<meta name="description" content="Media Art Productions — a cinematic video production studio. Weddings, corporate, sports, music videos, and FAA-certified drone work. Creating memories, one frame at a time." />
+
+<!-- Open Graph -->
+<meta property="og:title" content="Media Art Productions" />
+<meta property="og:description" content="Creating Memories, One Frame at a Time." />
+<meta property="og:type" content="website" />
+
+<!-- Fonts: Fraunces (editorial display) + Inter (modern sans body) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+/* ============================================================
+   Media Art Productions — single-page cinematic landing
+   Dark theme · warm gold accent · editorial display type
+   ============================================================ */
+
+:root {
+  --bg:        #0a0a0b;
+  --bg-2:      #0f0f11;
+  --bg-elev:   #141417;
+  --ink:       #ece9e1;       /* off-white */
+  --ink-dim:   #a7a39a;
+  --ink-faint: #6f6c64;
+  --gold:      #d4a857;       /* warm gold accent */
+  --gold-soft: #e8c77e;
+  --gold-deep: #9c7733;
+  --line:      rgba(236,233,225,0.10);
+  --line-soft: rgba(236,233,225,0.06);
+
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --maxw: 1180px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.005em;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: var(--gold); color: #0a0a0b; }
+
+a { color: inherit; text-decoration: none; }
+
+img { max-width: 100%; display: block; }
+
+/* ---- Film grain overlay (cinematic texture) ---- */
+.grain {
+  position: fixed;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain 0.6s steps(3) infinite;
+}
+@keyframes grain {
+  0%,100% { transform: translate(0,0); }
+  33%     { transform: translate(-3%, 2%); }
+  66%     { transform: translate(2%, -3%); }
+}
+
+/* ---- Layout helpers ---- */
+.wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
+
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--gold);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+}
+.eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 1px;
+  background: var(--gold);
+  opacity: 0.7;
+}
+
+.section { padding: clamp(80px, 12vw, 160px) 0; position: relative; }
+
+h2.section-title {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.1rem, 5.2vw, 3.9rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin: 22px 0 0;
+}
+
+/* ============================================================
+   NAV
+   ============================================================ */
+.nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 28px;
+  transition: background 0.5s var(--ease), padding 0.5s var(--ease), border-color 0.5s var(--ease);
+  border-bottom: 1px solid transparent;
+}
+.nav.scrolled {
+  background: rgba(10,10,11,0.72);
+  backdrop-filter: saturate(140%) blur(14px);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-family: var(--display);
+  font-size: 1.18rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.brand .dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 14px 2px rgba(212,168,87,0.6);
+}
+.brand small {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-top: 1px;
+}
+.nav-links { display: flex; align-items: center; gap: 34px; }
+.nav-links a {
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-dim);
+  transition: color 0.3s var(--ease);
+  position: relative;
+}
+.nav-links a:not(.nav-cta)::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: -5px;
+  width: 0; height: 1px;
+  background: var(--gold);
+  transition: width 0.35s var(--ease);
+}
+.nav-links a:not(.nav-cta):hover { color: var(--ink); }
+.nav-links a:not(.nav-cta):hover::after { width: 100%; }
+.nav-cta {
+  border: 1px solid var(--line);
+  padding: 9px 18px;
+  border-radius: 999px;
+  color: var(--ink) !important;
+  transition: all 0.35s var(--ease);
+}
+.nav-cta:hover { background: var(--gold); color: #0a0a0b !important; border-color: var(--gold); }
+.nav-toggle { display: none; background: none; border: 0; color: var(--ink); cursor: pointer; }
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+/* layered cinematic background: animated gradient "reel" feel */
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(120% 90% at 75% 18%, rgba(212,168,87,0.16), transparent 55%),
+    radial-gradient(90% 80% at 12% 88%, rgba(80,60,120,0.16), transparent 55%),
+    linear-gradient(180deg, #0c0c0e 0%, #0a0a0b 60%, #08080a 100%);
+}
+.hero-bg::after {
+  /* slow drifting light sweep — placeholder for a looping reel */
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: conic-gradient(from 200deg at 60% 40%, transparent, rgba(212,168,87,0.10), transparent 40%);
+  filter: blur(40px);
+  animation: drift 22s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+@keyframes drift {
+  0%   { transform: translate(-4%, -2%) rotate(0deg); }
+  100% { transform: translate(5%, 3%) rotate(12deg); }
+}
+.hero-bg .scan {
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 4px);
+  opacity: 0.4;
+  mix-blend-mode: multiply;
+}
+.hero-vignette {
+  position: absolute; inset: 0; z-index: 1;
+  background: radial-gradient(120% 100% at 50% 40%, transparent 40%, rgba(0,0,0,0.55) 100%);
+}
+
+.hero .wrap { position: relative; z-index: 2; }
+.hero-inner { max-width: 920px; padding-top: 80px; }
+
+.hero h1 {
+  font-family: var(--display);
+  font-weight: 350;
+  font-size: clamp(2.9rem, 8.5vw, 6.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  margin: 26px 0 0;
+}
+.hero h1 em {
+  font-style: italic;
+  color: var(--gold);
+}
+.hero p.lead {
+  margin-top: 28px;
+  max-width: 540px;
+  font-size: clamp(1rem, 1.5vw, 1.18rem);
+  color: var(--ink-dim);
+  font-weight: 300;
+}
+.hero-cta {
+  margin-top: 42px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 0.92rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 16px 30px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.4s var(--ease), background 0.4s var(--ease), color 0.4s var(--ease), border-color 0.4s var(--ease), box-shadow 0.4s var(--ease);
+  will-change: transform;
+}
+.btn-primary {
+  background: var(--gold);
+  color: #0a0a0b;
+  box-shadow: 0 8px 40px -12px rgba(212,168,87,0.6);
+}
+.btn-primary:hover { transform: translateY(-3px); background: var(--gold-soft); box-shadow: 0 16px 50px -10px rgba(212,168,87,0.55); }
+.btn-ghost {
+  background: rgba(236,233,225,0.03);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.btn-ghost:hover { transform: translateY(-3px); border-color: rgba(236,233,225,0.35); background: rgba(236,233,225,0.06); }
+.btn .play {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #0a0a0b;
+  display: grid; place-items: center;
+  flex: 0 0 auto;
+  transition: transform 0.4s var(--ease);
+}
+.btn-ghost:hover .play { transform: scale(1.12); }
+
+.hero-meta {
+  position: absolute;
+  bottom: 38px; left: 0; right: 0;
+  z-index: 2;
+}
+.hero-meta .wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.scroll-hint {
+  font-size: 0.68rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.scroll-hint .bar {
+  width: 1px; height: 42px;
+  background: linear-gradient(var(--gold), transparent);
+  display: inline-block;
+  animation: scrollpulse 2.4s var(--ease) infinite;
+  transform-origin: top;
+}
+@keyframes scrollpulse {
+  0%,100% { transform: scaleY(0.4); opacity: 0.4; }
+  50%     { transform: scaleY(1); opacity: 1; }
+}
+.hero-tags {
+  display: flex;
+  gap: 26px;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   MARQUEE
+   ============================================================ */
+.marquee {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 26px 0;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+.marquee-track {
+  display: flex;
+  gap: 56px;
+  white-space: nowrap;
+  width: max-content;
+  animation: scrollx 32s linear infinite;
+}
+.marquee:hover .marquee-track { animation-play-state: paused; }
+.marquee-track span {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--ink-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 56px;
+}
+.marquee-track span::after {
+  content: "✦";
+  color: var(--gold);
+  font-style: normal;
+  font-size: 0.7rem;
+}
+@keyframes scrollx { to { transform: translateX(-50%); } }
+
+/* ============================================================
+   SERVICES
+   ============================================================ */
+.services-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 30px;
+  flex-wrap: wrap;
+  margin-bottom: 56px;
+}
+.services-head p {
+  max-width: 360px;
+  color: var(--ink-dim);
+  font-weight: 300;
+}
+.svc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.svc {
+  background: var(--bg);
+  padding: 42px 34px 38px;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.5s var(--ease);
+  min-height: 290px;
+  display: flex;
+  flex-direction: column;
+}
+.svc::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 100% at 0% 0%, rgba(212,168,87,0.10), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.5s var(--ease);
+}
+.svc:hover { background: var(--bg-elev); }
+.svc:hover::before { opacity: 1; }
+.svc .num {
+  font-family: var(--display);
+  font-size: 0.9rem;
+  color: var(--gold);
+  letter-spacing: 0.05em;
+}
+.svc .ico {
+  margin-top: 18px;
+  color: var(--gold);
+  transition: transform 0.5s var(--ease);
+}
+.svc:hover .ico { transform: scale(1.12) translateY(-2px); }
+.svc h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+  margin-top: auto;
+  padding-top: 26px;
+}
+.svc p {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: var(--ink-dim);
+  font-weight: 300;
+}
+.svc .arrow {
+  margin-top: 18px;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.4s var(--ease), gap 0.4s var(--ease);
+}
+.svc:hover .arrow { color: var(--gold); gap: 14px; }
+
+/* ============================================================
+   STATS
+   ============================================================ */
+.stats {
+  border-top: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  text-align: center;
+}
+.stat .n {
+  font-family: var(--display);
+  font-size: clamp(2.6rem, 6vw, 4.4rem);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  background: linear-gradient(180deg, var(--gold-soft), var(--gold-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.stat .l {
+  margin-top: 12px;
+  font-size: 0.78rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+/* ============================================================
+   TEAM
+   ============================================================ */
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 26px;
+  margin-top: 56px;
+}
+.member {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg-2);
+  transition: transform 0.6s var(--ease), border-color 0.6s var(--ease);
+}
+.member:hover { transform: translateY(-6px); border-color: rgba(212,168,87,0.4); }
+.member .portrait {
+  aspect-ratio: 4/5;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(80% 60% at 50% 20%, rgba(212,168,87,0.18), transparent 60%),
+    linear-gradient(160deg, #1a1a1f, #0d0d10);
+  display: grid;
+  place-items: center;
+}
+.member .portrait .initial {
+  font-family: var(--display);
+  font-size: 5.5rem;
+  color: rgba(236,233,225,0.10);
+  transition: transform 0.7s var(--ease), color 0.7s var(--ease);
+}
+.member:hover .portrait .initial { transform: scale(1.18); color: rgba(212,168,87,0.22); }
+.member .portrait::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 40%, rgba(10,10,11,0.85) 100%);
+}
+.member .info {
+  padding: 24px 24px 28px;
+  position: relative;
+  z-index: 1;
+}
+.member .role {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.member h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.7rem;
+  margin-top: 8px;
+  letter-spacing: -0.01em;
+}
+.member p {
+  margin-top: 12px;
+  font-size: 0.9rem;
+  color: var(--ink-dim);
+  font-weight: 300;
+  line-height: 1.55;
+}
+
+/* ============================================================
+   ABOUT / CTA band
+   ============================================================ */
+.about .wrap { max-width: 900px; text-align: center; }
+.about .big {
+  font-family: var(--display);
+  font-weight: 300;
+  font-size: clamp(1.7rem, 4.2vw, 3rem);
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  margin-top: 26px;
+}
+.about .big em { font-style: italic; color: var(--gold); }
+
+/* ============================================================
+   CONTACT
+   ============================================================ */
+.contact {
+  border-top: 1px solid var(--line);
+  background:
+    radial-gradient(80% 120% at 80% 0%, rgba(212,168,87,0.10), transparent 55%),
+    var(--bg);
+}
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 60px;
+  align-items: center;
+}
+.contact h2 {
+  font-family: var(--display);
+  font-weight: 350;
+  font-size: clamp(2.4rem, 6vw, 4.6rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin-top: 22px;
+}
+.contact h2 em { font-style: italic; color: var(--gold); }
+.contact .sub { margin-top: 22px; color: var(--ink-dim); font-weight: 300; max-width: 420px; }
+.contact-cards { display: grid; gap: 16px; }
+.cc {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 24px 26px;
+  background: var(--bg-2);
+  transition: transform 0.45s var(--ease), border-color 0.45s var(--ease), background 0.45s var(--ease);
+}
+.cc:hover { transform: translateX(6px); border-color: rgba(212,168,87,0.4); background: var(--bg-elev); }
+.cc .cc-ico {
+  width: 48px; height: 48px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  display: grid; place-items: center;
+  background: rgba(212,168,87,0.10);
+  color: var(--gold);
+}
+.cc .cc-label { font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-faint); }
+.cc .cc-val { font-family: var(--display); font-size: 1.35rem; margin-top: 3px; color: var(--ink); }
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+footer {
+  border-top: 1px solid var(--line);
+  padding: 48px 0 56px;
+}
+footer .wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+footer .brand small { color: var(--ink-faint); }
+footer .legal { font-size: 0.78rem; color: var(--ink-faint); }
+footer .legal a:hover { color: var(--gold); }
+
+/* ============================================================
+   REEL MODAL
+   ============================================================ */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: none;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5,5,6,0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.4s var(--ease);
+}
+.modal.open { display: grid; opacity: 1; }
+.modal-inner {
+  width: min(960px, 100%);
+  aspect-ratio: 16/9;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(100% 100% at 50% 0%, rgba(212,168,87,0.12), transparent 60%),
+    linear-gradient(160deg, #131316, #0a0a0b);
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  transform: scale(0.96);
+  transition: transform 0.5s var(--ease);
+}
+.modal.open .modal-inner { transform: scale(1); }
+.modal-inner .ph {
+  text-align: center;
+}
+.modal-inner .ph .pbtn {
+  width: 76px; height: 76px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #0a0a0b;
+  display: grid; place-items: center;
+  margin: 0 auto 22px;
+  box-shadow: 0 0 0 0 rgba(212,168,87,0.5);
+  animation: pulse 2.4s var(--ease) infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(212,168,87,0.5); }
+  70%  { box-shadow: 0 0 0 26px rgba(212,168,87,0); }
+  100% { box-shadow: 0 0 0 0 rgba(212,168,87,0); }
+}
+.modal-inner .ph h4 { font-family: var(--display); font-weight: 400; font-size: 1.6rem; }
+.modal-inner .ph p { color: var(--ink-dim); margin-top: 8px; font-size: 0.9rem; }
+.modal-close {
+  position: absolute;
+  top: -48px; right: 0;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: all 0.3s var(--ease);
+}
+.modal-close:hover { background: var(--gold); color: #0a0a0b; border-color: var(--gold); }
+
+/* ============================================================
+   SCROLL REVEAL
+   ============================================================ */
+.reveal {
+  opacity: 0;
+  transform: translateY(34px);
+  transition: opacity 1s var(--ease), transform 1s var(--ease);
+  will-change: opacity, transform;
+}
+.reveal.in { opacity: 1; transform: none; }
+.reveal.d1 { transition-delay: 0.08s; }
+.reveal.d2 { transition-delay: 0.16s; }
+.reveal.d3 { transition-delay: 0.24s; }
+.reveal.d4 { transition-delay: 0.32s; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; scroll-behavior: auto !important; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  .svc-grid { grid-template-columns: 1fr 1fr; }
+  .team-grid { grid-template-columns: 1fr 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 40px 24px; }
+  .contact-grid { grid-template-columns: 1fr; gap: 40px; }
+}
+@media (max-width: 640px) {
+  .wrap { padding: 0 20px; }
+  .nav { padding: 16px 20px; }
+  .nav-links { display: none; }
+  .svc-grid { grid-template-columns: 1fr; }
+  .team-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .hero-meta { display: none; }
+  .marquee-track span { font-size: 1.2rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ============ NAV ============ -->
+<nav class="nav" id="nav">
+  <a href="#top" class="brand">
+    <span class="dot"></span>
+    <span>Media Art<small>Productions</small></span>
+  </a>
+  <div class="nav-links">
+    <a href="#work">Work</a>
+    <a href="#services">Services</a>
+    <a href="#team">Team</a>
+    <a href="#contact" class="nav-cta">Get in Touch</a>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <div class="hero-bg" aria-hidden="true"><div class="scan"></div></div>
+  <div class="hero-vignette" aria-hidden="true"></div>
+
+  <div class="wrap">
+    <div class="hero-inner">
+      <span class="eyebrow reveal in">Cinematic Video Production</span>
+      <h1 class="reveal in d1">Creating Memories,<br><em>One Frame</em> at a Time</h1>
+      <p class="lead reveal in d2">
+        From weddings to the world stage — Media Art Productions crafts films that
+        feel like cinema. Two decades of storytelling, FAA-certified aerial work,
+        and an editor's eye for the moments that matter.
+      </p>
+      <div class="hero-cta reveal in d3">
+        <a href="#contact" class="btn btn-primary">Get in Touch</a>
+        <button class="btn btn-ghost" id="openReel" type="button">
+          <span class="play" aria-hidden="true">
+            <svg width="11" height="12" viewBox="0 0 11 12" fill="currentColor"><path d="M0 0l11 6-11 6z"/></svg>
+          </span>
+          Watch Our Reel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-meta">
+    <div class="wrap">
+      <div class="scroll-hint"><span class="bar"></span> Scroll to explore</div>
+      <div class="hero-tags">
+        <span>Weddings</span><span>Corporate</span><span>Sports</span><span>Aerial</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ MARQUEE ============ -->
+<section class="marquee" id="work" aria-label="Disciplines">
+  <div class="marquee-track">
+    <span>Weddings</span><span>Corporate &amp; Commercial</span><span>Sports</span>
+    <span>Music Videos</span><span>Drone &amp; Aerial</span><span>Documentary</span>
+    <span>Weddings</span><span>Corporate &amp; Commercial</span><span>Sports</span>
+    <span>Music Videos</span><span>Drone &amp; Aerial</span><span>Documentary</span>
+  </div>
+</section>
+
+<!-- ============ SERVICES ============ -->
+<section class="section" id="services">
+  <div class="wrap">
+    <div class="services-head">
+      <div class="reveal">
+        <span class="eyebrow">What We Do</span>
+        <h2 class="section-title">Stories told<br>in motion.</h2>
+      </div>
+      <p class="reveal d1">Five disciplines, one standard — every project treated like the
+        film it deserves to be. Shot, directed, and edited in-house.</p>
+    </div>
+
+    <div class="svc-grid">
+      <article class="svc reveal">
+        <span class="num">01</span>
+        <div class="ico">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M12 21s-7-4.6-9.2-9C1.3 8.7 3 5 6.4 5 8.5 5 10 6.5 12 8.7 14 6.5 15.5 5 17.6 5 21 5 22.7 8.7 21.2 12 19 16.4 12 21 12 21z"/></svg>
+        </div>
+        <h3>Weddings</h3>
+        <p>The day, the way you'll want to remember it — emotional, timeless, beautifully cut.</p>
+        <span class="arrow">View →</span>
+      </article>
+
+      <article class="svc reveal d1">
+        <span class="num">02</span>
+        <div class="ico">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>
+        </div>
+        <h3>Corporate &amp; Commercial</h3>
+        <p>Brand films, product launches, and ads that make your company look like the industry leader.</p>
+        <span class="arrow">View →</span>
+      </article>
+
+      <article class="svc reveal d2">
+        <span class="num">03</span>
+        <div class="ico">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18M3.6 9h16.8M3.6 15h16.8M12 3c-3 3-3 15 0 18M12 3c3 3 3 15 0 18"/></svg>
+        </div>
+        <h3>Sports</h3>
+        <p>Fast, kinetic coverage that captures the speed, the tension, and the win.</p>
+        <span class="arrow">View →</span>
+      </article>
+
+      <article class="svc reveal">
+        <span class="num">04</span>
+        <div class="ico">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M9 18V7l12-2v9"/></svg>
+        </div>
+        <h3>Creative Arts</h3>
+        <p>Music videos and artist films with a bold, directorial visual signature.</p>
+        <span class="arrow">View →</span>
+      </article>
+
+      <article class="svc reveal d1">
+        <span class="num">05</span>
+        <div class="ico">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="12" r="3"/><path d="M5 5l4 4M19 5l-4 4M5 19l4-4M19 19l-4-4M3 5h2M5 3v2M19 3v2M21 5h-2M3 19h2M5 21v-2M19 21v-2M21 19h-2"/></svg>
+        </div>
+        <h3>Drone &amp; Aerial</h3>
+        <p>FAA-certified cinematic flight — sweeping perspectives no ground rig can touch.</p>
+        <span class="arrow">View →</span>
+      </article>
+
+      <article class="svc reveal d2" style="background:linear-gradient(160deg,#15110a,#0c0b0d);">
+        <span class="num" style="color:var(--ink-faint)">—</span>
+        <div class="ico" style="color:var(--ink)"></div>
+        <h3 style="margin-top:auto">Have something else<br>in mind?</h3>
+        <p>Tell us the story. We'll figure out how to film it.</p>
+        <a href="#contact" class="arrow" style="color:var(--gold)">Start a project →</a>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STATS ============ -->
+<section class="section stats">
+  <div class="wrap">
+    <div class="stats-grid">
+      <div class="stat reveal">
+        <div class="n" data-count="20" data-suffix="+">20+</div>
+        <div class="l">Years Experience</div>
+      </div>
+      <div class="stat reveal d1">
+        <div class="n" data-count="30" data-suffix="+">30+</div>
+        <div class="l">Countries Filmed</div>
+      </div>
+      <div class="stat reveal d2">
+        <div class="n" data-count="5" data-suffix="">5</div>
+        <div class="l">Disciplines</div>
+      </div>
+      <div class="stat reveal d3">
+        <div class="n" data-count="100" data-suffix="%">100%</div>
+        <div class="l">In-House Production</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TEAM ============ -->
+<section class="section" id="team">
+  <div class="wrap">
+    <div class="reveal">
+      <span class="eyebrow">The People Behind the Lens</span>
+      <h2 class="section-title">A small crew with<br>serious range.</h2>
+    </div>
+
+    <div class="team-grid">
+      <article class="member reveal">
+        <div class="portrait"><span class="initial">P</span></div>
+        <div class="info">
+          <div class="role">Founder · Director</div>
+          <h3>Paul Carey</h3>
+          <p>The founder and creative force behind Media Art Productions, with 20+ years
+            shaping stories on screen. Sets the vision for every film that leaves the studio.</p>
+        </div>
+      </article>
+
+      <article class="member reveal d1">
+        <div class="portrait"><span class="initial">D</span></div>
+        <div class="info">
+          <div class="role">Cinematographer · Editor</div>
+          <h3>Dan Patino</h3>
+          <p>Cinematographer and editor with credits on national TV network productions.
+            Brings a broadcast-grade eye to everything from weddings to commercials.</p>
+        </div>
+      </article>
+
+      <article class="member reveal d2">
+        <div class="portrait"><span class="initial">B</span></div>
+        <div class="info">
+          <div class="role">Aerial · Drone Pilot</div>
+          <h3>Benjamin</h3>
+          <p>FAA-certified commercial drone pilot who has traveled to 30+ countries
+            chasing the perfect aerial shot. The reason our skies look this cinematic.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ABOUT BAND ============ -->
+<section class="section about">
+  <div class="wrap reveal">
+    <span class="eyebrow" style="justify-content:center">Why Media Art</span>
+    <p class="big">We don't just record events — we <em>direct</em> them. Every frame is
+      composed, every cut is deliberate, and every film is made to be watched again
+      and again, long after the moment has passed.</p>
+  </div>
+</section>
+
+<!-- ============ CONTACT ============ -->
+<section class="section contact" id="contact">
+  <div class="wrap">
+    <div class="contact-grid">
+      <div class="reveal">
+        <span class="eyebrow">Let's Make Something</span>
+        <h2>Got a story<br><em>worth filming?</em></h2>
+        <p class="sub">Weddings, brands, artists, athletes — if it matters to you, it's
+          worth shooting properly. Reach out and let's talk about your project.</p>
+      </div>
+
+      <div class="contact-cards reveal d1">
+        <a class="cc" href="tel:+15406646706">
+          <span class="cc-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.8 2.1z"/></svg>
+          </span>
+          <span>
+            <span class="cc-label">Call Us</span>
+            <span class="cc-val">(540) 664-6706</span>
+          </span>
+        </a>
+
+        <a class="cc" href="mailto:pcarey1234@gmail.com">
+          <span class="cc-ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg>
+          </span>
+          <span>
+            <span class="cc-label">Email Us</span>
+            <span class="cc-val">pcarey1234@gmail.com</span>
+          </span>
+        </a>
+
+        <a class="cc" href="#contact" style="border-color:rgba(212,168,87,0.35)">
+          <span class="cc-ico" style="background:var(--gold);color:#0a0a0b">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </span>
+          <span>
+            <span class="cc-label">Response Time</span>
+            <span class="cc-val">Usually within 24 hours</span>
+          </span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap">
+    <a href="#top" class="brand">
+      <span class="dot"></span>
+      <span>Media Art<small>Productions</small></span>
+    </a>
+    <div class="legal">
+      © <span id="year">2026</span> Media Art Productions · Creating Memories, One Frame at a Time ·
+      <a href="mailto:pcarey1234@gmail.com">pcarey1234@gmail.com</a>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ REEL MODAL ============ -->
+<div class="modal" id="reelModal" role="dialog" aria-modal="true" aria-label="Showreel">
+  <div class="modal-inner">
+    <button class="modal-close" id="closeReel" aria-label="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <div class="ph">
+      <div class="pbtn">
+        <svg width="22" height="24" viewBox="0 0 11 12" fill="currentColor"><path d="M0 0l11 6-11 6z"/></svg>
+      </div>
+      <h4>Showreel Coming Soon</h4>
+      <p>Drop your reel video here — this player is wired and ready.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---- year ---- */
+document.getElementById('year').textContent = new Date().getFullYear();
+
+/* ---- sticky nav state ---- */
+const nav = document.getElementById('nav');
+const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 40);
+onScroll();
+window.addEventListener('scroll', onScroll, { passive: true });
+
+/* ---- scroll reveal (skip ones already shown in hero) ---- */
+const io = new IntersectionObserver((entries) => {
+  entries.forEach((e) => {
+    if (e.isIntersecting) {
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.16, rootMargin: '0px 0px -8% 0px' });
+document.querySelectorAll('.reveal:not(.in)').forEach((el) => io.observe(el));
+
+/* ---- animated stat counters ---- */
+const statIO = new IntersectionObserver((entries) => {
+  entries.forEach((e) => {
+    if (!e.isIntersecting) return;
+    const el = e.target;
+    const target = parseInt(el.dataset.count, 10);
+    const suffix = el.dataset.suffix || '';
+    const dur = 1400;
+    const start = performance.now();
+    const tick = (now) => {
+      const p = Math.min((now - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    statIO.unobserve(el);
+  });
+}, { threshold: 0.6 });
+document.querySelectorAll('.stat .n').forEach((el) => statIO.observe(el));
+
+/* ---- reel modal ---- */
+const modal = document.getElementById('reelModal');
+const openModal = () => { modal.classList.add('open'); document.body.style.overflow = 'hidden'; };
+const closeModal = () => { modal.classList.remove('open'); document.body.style.overflow = ''; };
+document.getElementById('openReel').addEventListener('click', openModal);
+document.getElementById('closeReel').addEventListener('click', closeModal);
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+/* ---- subtle parallax on hero light ---- */
+const heroBg = document.querySelector('.hero-bg');
+if (heroBg && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY;
+    if (y < window.innerHeight) heroBg.style.transform = `translateY(${y * 0.18}px) scale(1.04)`;
+  }, { passive: true });
+}
+</script>
+</body>
+</html>
