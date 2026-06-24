@@ -67,7 +67,7 @@ export default function AppNav({ email, role, userId }: { email: string; role?: 
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-60 flex-col bg-white border-r border-gray-200 min-h-screen">
+      <aside className="hidden md:flex print:hidden w-60 flex-col bg-white border-r border-gray-200 min-h-screen">
         {/* Brand */}
         <div className="px-4 py-4 border-b border-gray-200">
           <Image
@@ -117,7 +117,7 @@ export default function AppNav({ email, role, userId }: { email: string; role?: 
       </aside>
 
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50">
+      <nav className="md:hidden print:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50">
         {mobileItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== '/mobile' && pathname.startsWith(item.href + '/'))
           return (

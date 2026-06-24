@@ -213,3 +213,64 @@ export function fmtDate(d: string | null | undefined) {
   }
   return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
+
+// ── Project Notification (brand pre-start notice) ───────────────
+// Must go out starting 1 week before the project start date, and no later
+// than 3 days before. So the send window is [start − 7, start − 3].
+export const NOTIFY_WINDOW_OPEN_DAYS = 7
+export const NOTIFY_DEADLINE_DAYS = 3
+
+export type NotifyState = 'sent' | 'waived' | 'no_start' | 'scheduled' | 'send_now' | 'due_soon' | 'overdue'
+
+type NotifyJob = {
+  project_start_date: string | null
+  notification_sent_at: string | null
+  notification_waived: boolean | null
+}
+
+export type NotifyStatus = {
+  state: NotifyState
+  label: string
+  className: string
+  isDue: boolean            // in window (or past) and still needs sending
+  startDate: string | null
+  windowOpen: string | null // YYYY-MM-DD the window opens
+  deadline: string | null   // YYYY-MM-DD the notice must be sent by
+  daysToDeadline: number | null
+}
+
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function parseYmd(s: string) {
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+function dayDiff(a: Date, b: Date) { return Math.round((a.getTime() - b.getTime()) / 86400000) }
+
+export function projectNotificationStatus(job: NotifyJob, now = new Date()): NotifyStatus {
+  const base = { startDate: job.project_start_date, windowOpen: null, deadline: null, daysToDeadline: null, isDue: false }
+  if (job.notification_waived) return { ...base, state: 'waived', label: 'Not required', className: 'bg-gray-100 text-gray-500 border-gray-200' }
+  if (job.notification_sent_at) return { ...base, state: 'sent', label: `Sent ${fmtDate(job.notification_sent_at)}`, className: 'bg-green-100 text-green-700 border-green-200' }
+  if (!job.project_start_date) return { ...base, state: 'no_start', label: 'No start date', className: 'bg-gray-100 text-gray-400 border-gray-200' }
+
+  const start = parseYmd(job.project_start_date)
+  const windowOpen = addDays(start, -NOTIFY_WINDOW_OPEN_DAYS)
+  const deadline = addDays(start, -NOTIFY_DEADLINE_DAYS)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const daysToDeadline = dayDiff(deadline, today)
+  const out = { startDate: job.project_start_date, windowOpen: ymd(windowOpen), deadline: ymd(deadline), daysToDeadline }
+
+  if (today < windowOpen) {
+    const opensIn = dayDiff(windowOpen, today)
+    return { ...out, state: 'scheduled', isDue: false, label: `Opens in ${opensIn}d`, className: 'bg-blue-50 text-blue-700 border-blue-200' }
+  }
+  if (daysToDeadline < 0) {
+    return { ...out, state: 'overdue', isDue: true, label: `Overdue ${-daysToDeadline}d`, className: 'bg-red-100 text-red-700 border-red-300' }
+  }
+  if (daysToDeadline <= 1) {
+    return { ...out, state: 'due_soon', isDue: true, label: daysToDeadline === 0 ? 'Due today' : 'Due tomorrow', className: 'bg-orange-100 text-orange-800 border-orange-300' }
+  }
+  return { ...out, state: 'send_now', isDue: true, label: `Send now · ${daysToDeadline}d left`, className: 'bg-amber-100 text-amber-800 border-amber-200' }
+}
