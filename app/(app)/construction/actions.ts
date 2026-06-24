@@ -101,6 +101,14 @@ export async function saveSite(id: string | null, _state: ActionState, formData:
     state:           str(formData.get('state')),
     zip:             str(formData.get('zip')),
     dispenser_count: num(formData.get('dispenser_count')),
+    dispenser_type:  str(formData.get('dispenser_type')),
+    tank_count:      num(formData.get('tank_count')),
+    tank_type:       str(formData.get('tank_type')),
+    stp_count:       num(formData.get('stp_count')),
+    stp_type:        str(formData.get('stp_type')),
+    fill_spill_bucket_count: num(formData.get('fill_spill_bucket_count')),
+    vapor_bucket_count:      num(formData.get('vapor_bucket_count')),
+    vapor_bucket_type:       str(formData.get('vapor_bucket_type')),
     notes:           str(formData.get('notes')),
   }
 
