@@ -10,7 +10,7 @@ import {
   sortByUrgency,
   type DueStatus,
 } from '@/lib/maintenance'
-import { Droplets, Circle, CircleDot, CalendarClock, FileText } from 'lucide-react'
+import { Droplets, Circle, CircleDot, CalendarClock, FileText, Truck, ClipboardList, Users } from 'lucide-react'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -144,7 +144,11 @@ export default async function MaintenancePage() {
 
   const totalAlerts = alerts.length
 
-  const quickLinks = [
+  // Primary module areas + the maintenance-due lists, shown as a tile grid (hub).
+  const tiles = [
+    { href: '/assets',                    label: 'Assets',        icon: Truck,         sub: 'Fleet & equipment' },
+    { href: '/tickets',                   label: 'Tickets',       icon: ClipboardList, sub: 'Repairs & work orders' },
+    { href: '/shop',                      label: 'Shop',          icon: Users,         sub: 'Clock, tasks & time' },
     { href: '/maintenance/oil-changes',   label: 'Oil Changes',   icon: Droplets },
     { href: '/maintenance/brakes',        label: 'Brakes',        icon: Circle },
     { href: '/maintenance/tires',         label: 'Tires',         icon: CircleDot },
@@ -164,19 +168,23 @@ export default async function MaintenancePage() {
         </p>
       </div>
 
-      {/* Quick-nav pills */}
-      <div className="flex flex-wrap gap-2 mb-8">
-        {quickLinks.map((l) => (
+      {/* Module tiles */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-8">
+        {tiles.map((t) => (
           <Link
-            key={l.href}
-            href={l.href}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+            key={t.href}
+            href={t.href}
+            className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 hover:border-blue-300 hover:shadow transition-all"
           >
-            <l.icon className="w-4 h-4" />
-            {l.label}
+            <t.icon className="w-5 h-5 text-blue-600 mb-2" />
+            <p className="text-sm font-semibold text-gray-900">{t.label}</p>
+            {'sub' in t && t.sub && <p className="text-xs text-gray-400 mt-0.5">{t.sub}</p>}
           </Link>
         ))}
       </div>
+
+      {/* Coming due */}
+      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Coming Due</h2>
 
       {totalAlerts === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">

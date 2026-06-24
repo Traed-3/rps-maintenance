@@ -15,24 +15,26 @@ import {
   Receipt,
   Home,
   HardHat,
+  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { CON_ALLOWED_USER_IDS } from '@/lib/construction'
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, active: true },
-  { href: '/assets', label: 'Assets', icon: Truck, active: true },
-  { href: '/maintenance', label: 'Maintenance', icon: Wrench, active: true },
-  { href: '/tickets', label: 'Tickets', icon: ClipboardList, active: true },
-  { href: '/shop', label: 'Shop', icon: Users, active: true },
+type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean }
+
+const navItems: NavItem[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  // Maintenance is now a module hub: Assets, Tickets and Shop live inside it
+  // (they keep their own URLs, so the module stays highlighted while you're in any of them).
+  { href: '/maintenance', label: 'Maintenance', icon: Wrench, match: ['/maintenance', '/assets', '/tickets', '/shop'] },
   // `construction: true` marks this link as gated to the Construction
   // allowlist (see CON_ALLOWED_USER_IDS) while the module is being refined.
-  { href: '/construction', label: 'Construction', icon: HardHat, active: true, construction: true },
-  { href: '/expenses', label: 'Expenses', icon: Receipt, active: true },
-  { href: '/reports', label: 'Reports', icon: BarChart3, active: true },
-  { href: '/settings', label: 'Settings', icon: Settings, active: true },
+  { href: '/construction', label: 'Construction', icon: HardHat, construction: true },
+  { href: '/expenses', label: 'Expenses', icon: Receipt },
+  { href: '/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function AppNav({ email, role, userId }: { email: string; role?: string; userId?: string }) {
@@ -69,7 +71,7 @@ export default function AppNav({ email, role, userId }: { email: string; role?: 
         {/* Brand */}
         <div className="px-4 py-4 border-b border-gray-200">
           <Image
-            src="/logo-full.png?v=2"
+            src="/logo-full-v2.png"
             alt="RPS Maintenance"
             width={220}
             height={100}
@@ -81,8 +83,9 @@ export default function AppNav({ email, role, userId }: { email: string; role?: 
         {/* Nav links */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
           {visibleNavItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-            return item.active ? (
+            const matches = item.match ?? [item.href]
+            const isActive = matches.some(m => pathname === m || pathname.startsWith(m + '/'))
+            return (
               <Link
                 key={item.href}
                 href={item.href}
@@ -96,15 +99,6 @@ export default function AppNav({ email, role, userId }: { email: string; role?: 
                 <item.icon className="w-4 h-4 shrink-0" />
                 {item.label}
               </Link>
-            ) : (
-              <div
-                key={item.href}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-300 cursor-not-allowed"
-                title="Coming soon"
-              >
-                <item.icon className="w-4 h-4 shrink-0" />
-                {item.label}
-              </div>
             )
           })}
         </nav>
