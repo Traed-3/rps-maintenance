@@ -19,6 +19,8 @@ export default async function NewExpensePage() {
     { data: assetCategories },
     { data: storeCategories },
     { data: openTickets },
+    { data: constructionJobs },
+    { data: storeRows },
   ] = await Promise.all([
     admin.from('assets').select('id, unit_number, name, make, model')
       .eq('company_id', profile!.company_id).neq('status', 'retired').order('unit_number'),
@@ -32,7 +34,16 @@ export default async function NewExpensePage() {
       .eq('company_id', profile!.company_id)
       .not('status', 'in', '(completed,closed,deferred)')
       .order('updated_at', { ascending: false }).limit(30),
+    admin.from('con_jobs').select('id, site_number, work_order_number, stage')
+      .eq('company_id', profile!.company_id).neq('stage', 'complete')
+      .order('site_number').limit(500),
+    admin.from('expenses').select('store_number')
+      .eq('company_id', profile!.company_id).not('store_number', 'is', null).limit(2000),
   ])
+
+  const storeNumbers = Array.from(
+    new Set((storeRows ?? []).map(r => (r.store_number ?? '').trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -48,6 +59,8 @@ export default async function NewExpensePage() {
           assetCategories={assetCategories ?? []}
           storeCategories={storeCategories ?? []}
           openTickets={openTickets ?? []}
+          constructionJobs={constructionJobs ?? []}
+          storeNumbers={storeNumbers}
         />
       </div>
     </div>
