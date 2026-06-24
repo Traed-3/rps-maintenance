@@ -19,10 +19,12 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
     .order('created_at', { ascending: false })
   if (job) mq = mq.eq('job_id', job)
 
-  const [{ data: materials }, { data: jobs }] = await Promise.all([
+  const [{ data: materials }, { data: jobs }, { data: vendorRows }] = await Promise.all([
     mq,
     admin.from('con_jobs').select('id, site_number, work_order_number').eq('company_id', company_id).order('created_at', { ascending: false }),
+    admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
   ])
+  const vendorNames = (vendorRows ?? []).map(v => v.name).filter(Boolean)
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -80,7 +82,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
       {canWrite && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mt-6 max-w-2xl">
           <h3 className="font-semibold text-gray-900 mb-3">Add Material</h3>
-          <MaterialForm action={saveMaterial.bind(null, null)} jobs={jobs ?? []} />
+          <MaterialForm action={saveMaterial.bind(null, null)} jobs={jobs ?? []} vendors={vendorNames} />
         </div>
       )}
     </div>

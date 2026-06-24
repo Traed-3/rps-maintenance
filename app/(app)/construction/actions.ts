@@ -614,6 +614,109 @@ export async function toggleChecklistItem(id: string, done: boolean): Promise<vo
   revalidatePath('/construction/checklist')
 }
 
+// ── Subcontractors ──────────────────────────────────────────
+export async function saveSubcontractor(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit subcontractors.' }
+
+  const name = str(formData.get('name'))
+  if (!name) return { error: 'Name is required.' }
+
+  const admin = createAdminClient()
+  const fields = {
+    name,
+    trade:        str(formData.get('trade')),
+    contact_name: str(formData.get('contact_name')),
+    phone:        str(formData.get('phone')),
+    email:        str(formData.get('email')),
+    notes:        str(formData.get('notes')),
+    is_active:    formData.get('is_active') != null,
+  }
+  if (id) {
+    const { error } = await admin.from('con_subcontractors').update(fields).eq('id', id).eq('company_id', profile.company_id)
+    if (error) return { error: error.message }
+  } else {
+    const { error } = await admin.from('con_subcontractors').insert({ ...fields, company_id: profile.company_id })
+    if (error) return { error: error.message }
+  }
+  revalidatePath('/construction/subcontractors')
+  redirect('/construction/subcontractors')
+}
+
+export async function deleteSubcontractor(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  await admin.from('con_subcontractors').delete().eq('id', id).eq('company_id', profile.company_id)
+  revalidatePath('/construction/subcontractors')
+  redirect('/construction/subcontractors')
+}
+
+export async function assignSubcontractor(jobId: string, _state: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to assign subcontractors.' }
+  const subId = str(formData.get('subcontractor_id'))
+  if (!subId) return { error: 'Pick a subcontractor.' }
+  const admin = createAdminClient()
+  const { error } = await admin.from('con_job_subcontractors').upsert(
+    { company_id: profile.company_id, job_id: jobId, subcontractor_id: subId, role: str(formData.get('role')) },
+    { onConflict: 'job_id,subcontractor_id' },
+  )
+  if (error) return { error: error.message }
+  revalidatePath(`/construction/jobs/${jobId}`)
+  return null
+}
+
+export async function unassignSubcontractor(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  await admin.from('con_job_subcontractors').delete().eq('id', id).eq('company_id', profile.company_id)
+  revalidatePath('/construction/jobs/[id]', 'page')
+}
+
+// ── Vendors ─────────────────────────────────────────────────
+export async function saveVendor(id: string | null, _state: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!canWriteConstruction(profile)) return { error: 'You do not have permission to edit vendors.' }
+
+  const name = str(formData.get('name'))
+  if (!name) return { error: 'Name is required.' }
+
+  const admin = createAdminClient()
+  const fields = {
+    name,
+    category:       str(formData.get('category')),
+    contact_name:   str(formData.get('contact_name')),
+    phone:          str(formData.get('phone')),
+    email:          str(formData.get('email')),
+    account_number: str(formData.get('account_number')),
+    notes:          str(formData.get('notes')),
+    is_active:      formData.get('is_active') != null,
+  }
+  if (id) {
+    const { error } = await admin.from('con_vendors').update(fields).eq('id', id).eq('company_id', profile.company_id)
+    if (error) return { error: error.message }
+  } else {
+    const { error } = await admin.from('con_vendors').insert({ ...fields, company_id: profile.company_id })
+    if (error) return { error: error.message }
+  }
+  revalidatePath('/construction/vendors')
+  redirect('/construction/vendors')
+}
+
+export async function deleteVendor(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  await admin.from('con_vendors').delete().eq('id', id).eq('company_id', profile.company_id)
+  revalidatePath('/construction/vendors')
+  redirect('/construction/vendors')
+}
+
 // ============================================================
 // CLOSE-OUT TASKS
 // ============================================================

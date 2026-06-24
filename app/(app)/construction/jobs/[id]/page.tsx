@@ -12,6 +12,7 @@ import { CloseoutChecklist } from '@/components/construction/closeout-checklist'
 import { JobLaborForm } from '@/components/construction/job-labor-form'
 import { DocumentUpload } from '@/components/construction/document-upload'
 import { DeleteButton } from '@/components/construction/delete-button'
+import { AssignSubcontractor } from '@/components/construction/assign-subcontractor'
 import { Button } from '@/components/ui/button'
 import { Pencil, Plus, FileText } from 'lucide-react'
 import {
@@ -19,6 +20,7 @@ import {
   saveScheduleEntry, deleteScheduleEntry,
   toggleCloseoutTask, deleteCloseoutTask, addCloseoutTask, seedCloseoutTasks,
   addJobLabor, deleteJobLabor, deleteDocument,
+  assignSubcontractor, unassignSubcontractor,
 } from '../../actions'
 
 const TABS = [
@@ -27,6 +29,7 @@ const TABS = [
   { key: 'invoice',   label: 'Invoices' },
   { key: 'materials', label: 'Materials' },
   { key: 'schedule',  label: 'Schedule' },
+  { key: 'subs',      label: 'Subcontractors' },
   { key: 'closeout',  label: 'Close-Out' },
   { key: 'documents', label: 'Documents' },
   { key: 'cost',      label: 'Cost Summary' },
@@ -53,6 +56,7 @@ export default async function JobDetailPage({
   const [
     { data: quotes }, { data: invoices }, { data: materials },
     { data: schedule }, { data: closeout }, { data: labor }, { data: documents },
+    { data: assignedSubs }, { data: allSubs }, { data: vendorRows },
   ] = await Promise.all([
     admin.from('con_quotes').select('id, quote_number, proposal_date, status, final_total').eq('job_id', id).order('created_at', { ascending: false }),
     admin.from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, due_date').eq('job_id', id).order('created_at', { ascending: false }),
@@ -61,10 +65,14 @@ export default async function JobDetailPage({
     admin.from('con_closeout_tasks').select('*').eq('job_id', id).order('created_at'),
     admin.from('con_job_labor').select('*').eq('job_id', id).order('work_date', { ascending: false }),
     admin.from('con_documents').select('*').eq('job_id', id).order('created_at', { ascending: false }),
+    admin.from('con_job_subcontractors').select('id, role, con_subcontractors(id, name, trade, phone)').eq('job_id', id),
+    admin.from('con_subcontractors').select('id, name, trade').eq('company_id', company_id).eq('is_active', true).order('name'),
+    admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
   ])
 
   const customerName = (job as any).con_customers?.name
   const managerName = (job as any).profiles?.full_name
+  const vendorNames = (vendorRows ?? []).map(v => v.name).filter(Boolean)
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -207,7 +215,7 @@ export default async function JobDetailPage({
           {canWrite && (
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
               <h3 className="font-semibold text-gray-900 mb-3">Add Material</h3>
-              <MaterialForm action={saveMaterial.bind(null, null)} jobId={id} />
+              <MaterialForm action={saveMaterial.bind(null, null)} jobId={id} vendors={vendorNames} />
             </div>
           )}
         </div>
@@ -241,6 +249,47 @@ export default async function JobDetailPage({
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
               <h3 className="font-semibold text-gray-900 mb-3">Add to Schedule</h3>
               <ScheduleEntryForm action={saveScheduleEntry.bind(null, null)} jobs={[]} fixedJobId={id} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SUBCONTRACTORS ─────────────────────────────────── */}
+      {tab === 'subs' && (
+        <div className="space-y-5">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Assigned Subcontractors ({assignedSubs?.length ?? 0})</h2></div>
+            {!assignedSubs?.length ? (
+              <p className="px-4 py-6 text-sm text-gray-400">No subcontractors assigned to this project.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-gray-50">
+                  {assignedSubs.map(a => {
+                    const sc = (a as any).con_subcontractors
+                    return (
+                      <tr key={a.id}>
+                        <td className="px-4 py-3">
+                          {sc ? (
+                            <Link href={`/construction/subcontractors/${sc.id}`} className="font-medium text-blue-600 hover:underline">{sc.name}</Link>
+                          ) : <span className="text-gray-400">—</span>}
+                          <div className="text-xs text-gray-400">{[sc?.trade, a.role, sc?.phone].filter(Boolean).join(' · ')}</div>
+                        </td>
+                        {canWrite && <td className="px-4 py-3 text-right"><DeleteButton action={unassignSubcontractor.bind(null, a.id)} confirm="Remove this subcontractor from the project?" iconOnly /></td>}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+          {canWrite && (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+              <h3 className="font-semibold text-gray-900 mb-3">Assign a Subcontractor</h3>
+              {allSubs?.length ? (
+                <AssignSubcontractor action={assignSubcontractor.bind(null, id)} subs={allSubs} />
+              ) : (
+                <p className="text-sm text-gray-400">No subcontractors yet. <Link href="/construction/subcontractors" className="text-blue-600 hover:underline">Add one first.</Link></p>
+              )}
             </div>
           )}
         </div>
