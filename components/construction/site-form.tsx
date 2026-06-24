@@ -23,6 +23,7 @@ export type SiteRecord = {
   stp_count: number | null
   stp_type: string | null
   fill_spill_bucket_count: number | null
+  fill_spill_bucket_type: string | null
   vapor_bucket_count: number | null
   vapor_bucket_type: string | null
   notes: string | null
@@ -138,11 +139,18 @@ export function SiteForm({
             <label className={lbl}>Fill Spill Buckets</label>
             <input name="fill_spill_bucket_count" type="number" min="0" className={inp} placeholder="Qty" defaultValue={s?.fill_spill_bucket_count ?? ''} />
           </div>
+          <div className="sm:col-span-2">
+            <label className={lbl}>Fill Spill Bucket Type / Brand</label>
+            <input name="fill_spill_bucket_type" className={inp} placeholder="OPW, EMCO…" defaultValue={s?.fill_spill_bucket_type ?? ''} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className={lbl}>Vapor Buckets</label>
             <input name="vapor_bucket_count" type="number" min="0" className={inp} placeholder="Qty" defaultValue={s?.vapor_bucket_count ?? ''} />
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className={lbl}>Vapor Bucket Type / Brand</label>
             <input name="vapor_bucket_type" className={inp} placeholder="OPW, EMCO…" defaultValue={s?.vapor_bucket_type ?? ''} />
           </div>

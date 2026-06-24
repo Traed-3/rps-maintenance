@@ -107,6 +107,7 @@ export async function saveSite(id: string | null, _state: ActionState, formData:
     stp_count:       num(formData.get('stp_count')),
     stp_type:        str(formData.get('stp_type')),
     fill_spill_bucket_count: num(formData.get('fill_spill_bucket_count')),
+    fill_spill_bucket_type:  str(formData.get('fill_spill_bucket_type')),
     vapor_bucket_count:      num(formData.get('vapor_bucket_count')),
     vapor_bucket_type:       str(formData.get('vapor_bucket_type')),
     notes:           str(formData.get('notes')),
