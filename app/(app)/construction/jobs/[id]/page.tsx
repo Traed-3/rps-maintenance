@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
-import { money, fmtDate } from '@/lib/construction'
+import { money, fmtDate, projectNotificationStatus } from '@/lib/construction'
+import { NotificationCard } from '@/components/construction/notification-card'
 import { ConPriorityBadge, QuoteStatusBadge, InvoiceStatusBadge, MaterialStatusBadge } from '@/components/construction/badges'
 import { StageSelect } from '@/components/construction/stage-select'
 import { MaterialForm } from '@/components/construction/material-form'
@@ -143,13 +144,16 @@ export default async function JobDetailPage({
               <p className="text-sm text-gray-400">No scope or notes recorded yet.</p>
             )}
           </div>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3 text-sm">
-            <Detail label="Program" value={job.program} />
-            <Detail label="Facility Address" value={job.facility_address} />
-            <Detail label="Manager" value={managerName} />
-            <Detail label="Response Time" value={job.response_time} />
-            <Detail label="Date Received" value={fmtDate(job.date_received)} />
-            <Detail label="Project Start" value={fmtDate(job.project_start_date)} />
+          <div className="space-y-5">
+            <NotificationCard jobId={job.id} status={projectNotificationStatus(job)} canWrite={canWrite} />
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3 text-sm">
+              <Detail label="Program" value={job.program} />
+              <Detail label="Facility Address" value={job.facility_address} />
+              <Detail label="Manager" value={managerName} />
+              <Detail label="Response Time" value={job.response_time} />
+              <Detail label="Date Received" value={fmtDate(job.date_received)} />
+              <Detail label="Project Start" value={fmtDate(job.project_start_date)} />
+            </div>
           </div>
         </div>
       )}

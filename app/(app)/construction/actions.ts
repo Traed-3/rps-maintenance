@@ -717,6 +717,45 @@ export async function deleteVendor(id: string): Promise<void> {
   redirect('/construction/vendors')
 }
 
+// ── Project Notification (brand pre-start notice) ───────────────
+function todayYmd(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export async function markNotificationSent(jobId: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  await admin.from('con_jobs')
+    .update({ notification_sent_at: todayYmd(), notification_sent_by: profile.id, notification_waived: false })
+    .eq('id', jobId).eq('company_id', profile.company_id)
+  revalidatePath('/construction')
+  revalidatePath('/construction/jobs/[id]', 'page')
+}
+
+export async function clearNotificationSent(jobId: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  await admin.from('con_jobs')
+    .update({ notification_sent_at: null, notification_sent_by: null })
+    .eq('id', jobId).eq('company_id', profile.company_id)
+  revalidatePath('/construction')
+  revalidatePath('/construction/jobs/[id]', 'page')
+}
+
+export async function setNotificationWaived(jobId: string, waived: boolean): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  await admin.from('con_jobs')
+    .update({ notification_waived: waived })
+    .eq('id', jobId).eq('company_id', profile.company_id)
+  revalidatePath('/construction')
+  revalidatePath('/construction/jobs/[id]', 'page')
+}
+
 // ============================================================
 // CLOSE-OUT TASKS
 // ============================================================

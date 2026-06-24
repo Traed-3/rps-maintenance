@@ -7,6 +7,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calcDateDue, calcOilChangeDue } from '@/lib/maintenance'
+import { projectNotificationStatus } from '@/lib/construction'
 import { sendAlertEmail } from '@/lib/email'
 import { sendPushNotification } from '@/lib/push'
 
@@ -345,4 +346,60 @@ export async function checkForgotClockOut(
 
     await deliverAlert(admin, { recipientIds: [e.profile_id], type: 'clock_out_reminder', title, message, link })
   }
+}
+
+// ── Construction: project notification reminders ──────────────────────────────
+/**
+ * For each construction project whose brand "Project Notification" is now due
+ * to be sent (inside the 7→3 day pre-start window, or past it) and hasn't been
+ * sent or waived, drop a company-wide bell notification. Deduped per job per day.
+ */
+export async function checkProjectNotifications(
+  admin: AdminClient,
+  companyId: string,
+): Promise<number> {
+  const { data: jobs } = await admin
+    .from('con_jobs')
+    .select('id, site_number, project_start_date, notification_sent_at, notification_waived')
+    .eq('company_id', companyId)
+    .not('project_start_date', 'is', null)
+    .is('notification_sent_at', null)
+    .eq('notification_waived', false)
+
+  let created = 0
+  const cutoff = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString()
+
+  for (const job of jobs ?? []) {
+    const status = projectNotificationStatus(job)
+    if (!status.isDue) continue
+
+    const link = `/construction/jobs/${job.id}`
+    const { data: existing } = await admin
+      .from('notifications')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('type', 'project_notification')
+      .eq('link', link)
+      .gte('created_at', cutoff)
+      .limit(1)
+      .maybeSingle()
+    if (existing) continue
+
+    const title = status.state === 'overdue'
+      ? `Project notification OVERDUE — ${job.site_number ?? 'site'}`
+      : `Send project notification — ${job.site_number ?? 'site'}`
+    const message = `Project starts ${job.project_start_date}. The brand notification must be sent by ${status.deadline}.`
+
+    await admin.from('notifications').insert({
+      company_id: companyId,
+      recipient_id: null,
+      type: 'project_notification',
+      title,
+      message,
+      link,
+    })
+    created++
+  }
+
+  return created
 }

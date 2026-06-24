@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
-import { CON_STAGES, money, fmtDate } from '@/lib/construction'
+import { CON_STAGES, money, fmtDate, projectNotificationStatus } from '@/lib/construction'
 import { InvoiceStatusBadge } from '@/components/construction/badges'
 import { Users, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck } from 'lucide-react'
 
@@ -18,13 +18,17 @@ export default async function ConstructionDashboard() {
   const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
 
   const [{ data: jobs }, { data: invoices }, { data: neededMaterials }, { data: schedule }] = await Promise.all([
-    admin.from('con_jobs').select('id, site_number, stage, priority, con_customers(name)').eq('company_id', company_id),
+    admin.from('con_jobs').select('id, site_number, stage, priority, project_start_date, notification_sent_at, notification_waived, con_customers(name)').eq('company_id', company_id),
     admin.from('con_invoices').select('id, invoice_number, status, invoice_grand_total, due_date, con_customers(name)').eq('company_id', company_id).in('status', ['draft', 'sent', 'overdue']),
     admin.from('con_job_materials').select('id').eq('company_id', company_id).in('status', ['needed', 'ordered']),
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id).gte('schedule_date', iso(monday)).lte('schedule_date', iso(sunday)).order('schedule_date'),
   ])
 
   const allJobs = jobs ?? []
+  const notifyDue = allJobs
+    .map(j => ({ job: j, n: projectNotificationStatus(j) }))
+    .filter(x => x.n.isDue)
+    .sort((a, b) => (a.n.daysToDeadline ?? 0) - (b.n.daysToDeadline ?? 0))
   const stageCounts = CON_STAGES.map(s => ({ ...s, count: allJobs.filter(j => j.stage === s.value).length }))
   const needingInvoice = allJobs.filter(j => j.stage === 'invoicing')
   const waitingMaterial = allJobs.filter(j => j.stage === 'material_ordering')
@@ -69,6 +73,30 @@ export default async function ConstructionDashboard() {
           </Link>
         ))}
       </div>
+
+      {/* Project notifications due */}
+      {notifyDue.length > 0 && (
+        <div className="bg-white rounded-2xl border border-amber-300 shadow-sm overflow-hidden mb-6">
+          <div className="px-5 py-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+            <h2 className="font-semibold text-amber-900 text-sm">⚠ Project Notifications to send</h2>
+            <span className="text-xs font-semibold text-amber-800">{notifyDue.length}</span>
+          </div>
+          <ul className="divide-y divide-gray-50">
+            {notifyDue.map(({ job, n }) => (
+              <li key={job.id}>
+                <Link href={`/construction/jobs/${job.id}`} className="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-gray-50">
+                  <div className="min-w-0">
+                    <span className="font-medium text-gray-900">{job.site_number ?? '—'}</span>
+                    {(job as any).con_customers?.name && <span className="text-xs text-gray-400 ml-2">{(job as any).con_customers.name}</span>}
+                    <div className="text-xs text-gray-400">Starts {fmtDate(job.project_start_date)} · send by {fmtDate(n.deadline)}</div>
+                  </div>
+                  <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full border ${n.className}`}>{n.label}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Pipeline counts */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-6">
