@@ -66,7 +66,13 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                       {(s.city || s.state) && <div className="text-xs text-gray-400">{[s.city, s.state].filter(Boolean).join(', ')}</div>}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-gray-400">
-                      {s.dispenser_count ? `${s.dispenser_count} disp.` : ''}
+                      {[
+                        s.dispenser_count ? `${s.dispenser_count} disp.` : '',
+                        s.tank_count ? `${s.tank_count} tank` : '',
+                        s.stp_count ? `${s.stp_count} STP` : '',
+                        (s.fill_spill_bucket_count || s.vapor_bucket_count)
+                          ? `${(s.fill_spill_bucket_count ?? 0) + (s.vapor_bucket_count ?? 0)} buckets` : '',
+                      ].filter(Boolean).join(' · ')}
                       {canWrite && <span className="ml-2 text-blue-600">Edit →</span>}
                     </td>
                   </ClickableRow>
