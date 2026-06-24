@@ -89,6 +89,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     if (st) p.set('stage', st)
     return `/construction/schedule?${p.toString()}`
   }
+  // Order the status chips: stages that have jobs first, empty ones after,
+  // and 'complete' always pinned last.
+  const stageCounts = new Map<string, number>()
+  for (const j of (jobs ?? []) as Job[]) stageCounts.set(j.stage ?? '', (stageCounts.get(j.stage ?? '') ?? 0) + 1)
+  const hasJobs = (v: string) => (stageCounts.get(v) ?? 0) > 0
+  const orderedStages = [
+    ...CON_STAGES.filter(s => s.value !== 'complete' && hasJobs(s.value)),
+    ...CON_STAGES.filter(s => s.value !== 'complete' && !hasJobs(s.value)),
+    ...CON_STAGES.filter(s => s.value === 'complete'),
+  ]
 
   function chipClass(e: Entry): string {
     if (e.entry_type === 'time_off') return 'bg-gray-100 text-gray-500 border-gray-300'
@@ -161,8 +171,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <div className="flex flex-wrap items-center gap-1.5 mb-4">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mr-0.5">Status</span>
         <Link href={filterHref('')} className={`text-[10px] px-2 py-0.5 rounded-full border ${!stageFilter ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>All</Link>
-        {CON_STAGES.map(s => (
-          <Link key={s.value} href={filterHref(s.value)} className={`text-[10px] px-2 py-0.5 rounded-full border ${s.className} ${stageFilter === s.value ? 'ring-2 ring-gray-900 ring-offset-1' : 'opacity-80 hover:opacity-100'}`}>{s.label}</Link>
+        {orderedStages.map(s => (
+          <Link key={s.value} href={filterHref(s.value)} className={`text-[10px] px-2 py-0.5 rounded-full border ${s.className} ${stageFilter === s.value ? 'ring-2 ring-gray-900 ring-offset-1' : hasJobs(s.value) ? 'opacity-100' : 'opacity-50 hover:opacity-90'}`}>{s.label}</Link>
         ))}
         <span className="text-[10px] px-2 py-0.5 rounded-full border bg-gray-100 text-gray-400 border-gray-300">Time off</span>
       </div>

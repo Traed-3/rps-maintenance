@@ -63,8 +63,8 @@ export function stageMeta(value: string) {
 // ── Priorities ──────────────────────────────────────────────
 export const CON_PRIORITIES = [
   { value: 'low',    label: 'Low',    className: 'bg-gray-100 text-gray-500 border-gray-200' },
-  { value: 'normal', label: 'Normal', className: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { value: 'high',   label: 'High',   className: 'bg-orange-100 text-orange-800 border-orange-200' },
+  { value: 'normal', label: 'Normal', className: 'bg-slate-200 text-slate-700 border-slate-300' },
+  { value: 'high',   label: 'High',   className: 'bg-orange-200 text-orange-900 border-orange-400' },
   { value: 'urgent', label: 'Urgent', className: 'bg-red-200 text-red-900 border-red-300' },
 ] as const
 
