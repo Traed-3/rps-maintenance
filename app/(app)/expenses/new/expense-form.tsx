@@ -24,6 +24,7 @@ export function ExpenseForm({
   openTickets,
   constructionJobs,
   storeNumbers,
+  projectCategories,
 }: {
   action: (state: State, formData: FormData) => Promise<State>
   assets: Asset[]
@@ -33,15 +34,18 @@ export function ExpenseForm({
   openTickets: Ticket[]
   constructionJobs: ConJob[]
   storeNumbers: string[]
+  projectCategories: Record<string, string[]>
 }) {
   const [state, formAction, isPending] = useActionState(action, null)
   const [expenseType, setExpenseType] = useState<string>('asset')
+  const [conJobId, setConJobId] = useState('')
   const [pmCode, setPmCode] = useState('')
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
   const [customPm, setCustomPm] = useState(false)
   const today = new Date().toISOString().split('T')[0]
 
   const categories = expenseType === 'asset' ? assetCategories : storeCategories
+  const bidCats = projectCategories[conJobId] ?? []
 
   return (
     <form action={formAction} className="space-y-6">
@@ -122,7 +126,7 @@ export function ExpenseForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={lbl}>Construction Project</label>
-            <select name="con_job_id" className={inp}>
+            <select name="con_job_id" className={inp} value={conJobId} onChange={e => setConJobId(e.target.value)}>
               <option value="">— Select project —</option>
               {constructionJobs.map(j => (
                 <option key={j.id} value={j.id}>
@@ -138,8 +142,25 @@ export function ExpenseForm({
         </div>
       )}
 
-      {/* Subcategory */}
-      {expenseType !== 'general' && (
+      {/* Category — project mode pulls straight from the bid line items */}
+      {expenseType === 'project' ? (
+        <div>
+          <label className={lbl}>Category <span className="font-normal text-gray-400">(from the project bid)</span></label>
+          <input
+            name="category_custom"
+            className={inp}
+            list="bid-categories"
+            autoComplete="off"
+            placeholder={bidCats.length ? 'Select from bid or type…' : 'Type a category'}
+          />
+          <datalist id="bid-categories">
+            {bidCats.map(d => <option key={d} value={d} />)}
+          </datalist>
+          {conJobId && bidCats.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1">No bid line items on this project yet — type a category.</p>
+          )}
+        </div>
+      ) : expenseType !== 'general' ? (
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={lbl}>Category</label>
@@ -156,7 +177,7 @@ export function ExpenseForm({
             <input name="category_custom" className={inp} placeholder="Leave blank if selected above" />
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Vendor + linked ticket (ticket only applies to non-project expenses) */}
       <div className={`grid gap-4 ${expenseType === 'project' ? 'grid-cols-1' : 'grid-cols-2'}`}>
