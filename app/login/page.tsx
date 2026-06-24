@@ -5,7 +5,7 @@ import { PasswordLoginForm } from './password-form'
 export default function LoginPage() {
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-md">
         {/* Logo / brand */}
         <div className="text-center mb-8">
           <Image
@@ -14,7 +14,7 @@ export default function LoginPage() {
             width={320}
             height={145}
             priority
-            className="mx-auto w-72 h-auto"
+            className="mx-auto w-[27rem] max-w-full h-auto"
           />
           <p className="mt-3 text-sm text-gray-500">Fleet &amp; Shop Operations</p>
         </div>
