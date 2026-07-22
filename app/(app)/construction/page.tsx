@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
 import { CON_STAGES, money, fmtDate, projectNotificationStatus } from '@/lib/construction'
 import { InvoiceStatusBadge } from '@/components/construction/badges'
-import { Users, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck } from 'lucide-react'
+import { Users, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck, Inbox } from 'lucide-react'
 
 function iso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -40,6 +40,10 @@ export default async function ConstructionDashboard() {
   const arOpen = arRows.reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
   const arOverdue = arRows.filter(r => r.effectiveStatus === 'overdue').reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
 
+  const { count: reviewCount } = await admin.from('con_documents')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', company_id).eq('review_status', 'needs_review')
+
   const tiles = [
     { href: '/construction/jobs', label: 'Jobs', icon: HardHat, value: allJobs.length },
     { href: '/construction/quotes', label: 'Quotes', icon: FileText },
@@ -51,6 +55,7 @@ export default async function ConstructionDashboard() {
     { href: '/construction/trackers', label: 'Sunoco Trackers', icon: ClipboardList },
     { href: '/construction/checklist', label: 'Checklist', icon: ListChecks },
     { href: '/construction/customers', label: 'Customers', icon: Users },
+    { href: '/construction/documents/review', label: 'Doc Review', icon: Inbox, value: reviewCount ?? 0, sub: 'to review' },
     { href: '/construction/reports', label: 'Reports', icon: BarChart3 },
   ]
 

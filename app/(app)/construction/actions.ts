@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation'
 import {
   canWriteConstruction,
   computeDocumentTotals,
+  CON_DOC_CATEGORY_VALUES,
   type LineItemInput,
 } from '@/lib/construction'
 
@@ -857,5 +858,21 @@ export async function deleteDocument(id: string): Promise<void> {
     await admin.storage.from('construction-docs').remove([doc.storage_path])
   }
   await admin.from('con_documents').delete().eq('id', id).eq('company_id', profile.company_id)
+  if (doc?.job_id) revalidatePath(`/construction/jobs/${doc.job_id}`)
+}
+
+// File a document into a category and clear it from the review queue.
+// Used by the "Needs Review" page to approve/reassign an importer guess.
+export async function fileDocument(id: string, category: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  if (!CON_DOC_CATEGORY_VALUES.includes(category)) return
+  const admin = createAdminClient()
+  const { data: doc } = await admin.from('con_documents')
+    .select('job_id').eq('id', id).eq('company_id', profile.company_id).single()
+  await admin.from('con_documents')
+    .update({ category, review_status: 'filed' })
+    .eq('id', id).eq('company_id', profile.company_id)
+  revalidatePath('/construction/documents/review')
   if (doc?.job_id) revalidatePath(`/construction/jobs/${doc.job_id}`)
 }
