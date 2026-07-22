@@ -279,3 +279,89 @@ export function projectNotificationStatus(job: NotifyJob, now = new Date()): Not
   }
   return { ...out, state: 'send_now', isDue: true, label: `Send now · ${daysToDeadline}d left`, className: 'bg-amber-100 text-amber-800 border-amber-200' }
 }
+
+// ============================================================
+// Document Center (Phase 1) — the 10 fixed filing categories, the
+// finer real-world document-type taxonomy, and a deterministic
+// classifier shared by the upload UI, the review queue, and the
+// rps-doc-ingest importer (so they all agree). PURE: client-safe.
+// ============================================================
+
+// The 10 fixed filing categories — the "folders" every project has.
+export const CON_DOC_CATEGORIES = [
+  { value: 'permits',       label: 'Permits' },
+  { value: 'quotes',        label: 'Quotes' },
+  { value: 'change_orders', label: 'Change Orders' },
+  { value: 'invoices',      label: 'Invoices' },
+  { value: 'receipts',      label: 'Receipts' },
+  { value: 'photos',        label: 'Photos' },
+  { value: 'daily_updates', label: 'Daily Updates' },
+  { value: 'closeout',      label: 'Closeout' },
+  { value: 'health_safety', label: 'Health & Safety' },
+  { value: 'other',         label: 'Other' },
+] as const
+
+export type ConDocCategory = (typeof CON_DOC_CATEGORIES)[number]['value']
+export const CON_DOC_CATEGORY_VALUES = CON_DOC_CATEGORIES.map(c => c.value) as readonly string[]
+
+export function docCategoryLabel(value: string | null | undefined) {
+  return CON_DOC_CATEGORIES.find(c => c.value === value)?.label ?? 'Other'
+}
+
+// The finer real-world document types (from the SEI/Sheetz archives), each
+// mapped to the fixed category it files under. `match` = lowercase keyword
+// fragments the classifier scans for. Ordered specific → generic; the first
+// match wins, so keep broad matches (e.g. 'permit', 'cert') last within a group.
+export const CON_DOC_TYPES = [
+  { value: 'completion_letter',    label: 'Completion Letter',            category: 'closeout',      match: ['completion letter','letter of completion','completion-letter','-completion'] },
+  { value: 'lien_waiver',          label: 'Lien Waiver',                  category: 'closeout',      match: ['lien waiver','lien-waiver','lien'] },
+  { value: 'permit_application',   label: 'Permit Application',           category: 'permits',       match: ['permit app','permit application','permit-app'] },
+  { value: 'temp_closure',         label: 'Temporary Closure Fact Sheet', category: 'permits',       match: ['temp closure','temporary closure','fact sheet'] },
+  { value: 'business_license',     label: 'Business License',             category: 'permits',       match: ['business license','business-license','county business'] },
+  { value: 'contractors_license',  label: 'Contractors License',          category: 'permits',       match: ['contractors license','va contractors','contractor','lience'] },
+  { value: 'permit',               label: 'Issued Permit',                category: 'permits',       match: ['permit'] },
+  { value: 'testing_form',         label: 'Testing Form',                 category: 'closeout',      match: ['testing form','test form','spill bucket','spill containment','overfill','sump','udc'] },
+  { value: 'drop_tube',            label: 'Drop Tube Verification',       category: 'closeout',      match: ['drop tube','drop-tube'] },
+  { value: 'fuel_vendor_cert',     label: 'Fuel Vendor Certification',    category: 'closeout',      match: ['fuel vendor','vendor certification','certification statement'] },
+  { value: 'equipment_cert',       label: 'Equipment / Mfr Cert',         category: 'closeout',      match: ['veeder','gilbarco','red jacket','xerxes','bravo','fe petro','passport','opw','cert'] },
+  { value: 'project_notification', label: 'Project Notification',         category: 'closeout',      match: ['project notification','notification'] },
+  { value: 'source_list',          label: 'Source List',                  category: 'closeout',      match: ['source list','source-list'] },
+  { value: 'invoice_worksheet',    label: 'Invoice Work Sheet',           category: 'invoices',      match: ['invoice work sheet','work sheet','worksheet'] },
+  { value: 'invoice',              label: 'Itemized Invoice',             category: 'invoices',      match: ['invoice','itemize','itemized'] },
+  { value: 'packing_slip',         label: 'Packing Slip',                 category: 'receipts',      match: ['packing slip','packing-slip','packing'] },
+  { value: 'receipt',              label: 'Receipt / Expense',            category: 'receipts',      match: ['receipt','expense'] },
+  { value: 'change_order',         label: 'Change Order',                 category: 'change_orders', match: ['change order','change-order','chg order'] },
+  { value: 'plan_notes',           label: 'Plan Notes Breakdown',         category: 'quotes',        match: ['plan notes','plan-notes','breakdown'] },
+  { value: 'quote',                label: 'Quote / Bid',                  category: 'quotes',        match: ['quote','bid','proposal','estimate'] },
+  { value: 'photo',                label: 'Photo',                        category: 'photos',        match: ['.jpg','.jpeg','.png','.heic','.gif','img_','image','photo','pic'] },
+] as const
+
+export type ConDocTypeMeta = (typeof CON_DOC_TYPES)[number]
+
+export function docTypeLabel(value: string | null | undefined) {
+  return CON_DOC_TYPES.find(t => t.value === value)?.label ?? null
+}
+
+// Best-guess a {category, docType} from a filename (+ optional folder hint).
+// Deterministic and dependency-free so the importer and the UI agree.
+// `confident` is false when nothing matched, so the caller can route to review.
+export function classifyDocument(
+  filename: string,
+  folderHint?: string | null,
+): { category: ConDocCategory; docType: string | null; confident: boolean } {
+  const hay = `${folderHint ?? ''} ${filename}`.toLowerCase()
+  for (const t of CON_DOC_TYPES) {
+    if (t.match.some(m => hay.includes(m))) {
+      return { category: t.category as ConDocCategory, docType: t.value, confident: true }
+    }
+  }
+  return { category: 'other', docType: null, confident: false }
+}
+
+// Pull the first 3–5 digit store/job number out of a filename or folder name —
+// the spine the importer matches files to jobs on. Ignores runs adjacent to
+// other digits so "40037_PD" → 40037 and "Sheetz 155" → 155.
+export function extractSiteNumber(name: string): string | null {
+  const m = name.match(/(?<!\d)(\d{3,5})(?!\d)/)
+  return m ? m[1] : null
+}

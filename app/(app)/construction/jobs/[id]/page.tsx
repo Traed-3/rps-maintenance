@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
-import { money, fmtDate, projectNotificationStatus } from '@/lib/construction'
+import { money, fmtDate, projectNotificationStatus, CON_DOC_CATEGORIES, docTypeLabel } from '@/lib/construction'
 import { NotificationCard } from '@/components/construction/notification-card'
 import { ConPriorityBadge, QuoteStatusBadge, InvoiceStatusBadge, MaterialStatusBadge } from '@/components/construction/badges'
 import { StageSelect } from '@/components/construction/stage-select'
@@ -321,20 +321,34 @@ export default async function JobDetailPage({
             </div>
           )}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Documents ({documents?.length ?? 0})</h2></div>
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Documents ({documents?.length ?? 0})</h2>
+            </div>
             {!documents?.length ? (
               <p className="px-4 py-6 text-sm text-gray-400">No documents uploaded.</p>
             ) : (
-              <ul className="divide-y divide-gray-50">
-                {documents.map(d => (
-                  <li key={d.id} className="flex items-center gap-3 px-4 py-3">
-                    <FileText className="w-4 h-4 text-gray-400 shrink-0" />
-                    <a href={`/api/construction/documents/${d.id}`} target="_blank" rel="noopener" className="flex-1 text-sm font-medium text-blue-600 hover:text-blue-800 truncate">{d.file_name}</a>
-                    {d.doc_type && <span className="text-xs text-gray-400 capitalize">{d.doc_type.replace(/_/g, ' ')}</span>}
-                    {canWrite && <DeleteButton action={deleteDocument.bind(null, d.id)} confirm="Delete this document?" iconOnly />}
-                  </li>
-                ))}
-              </ul>
+              <div className="divide-y divide-gray-100">
+                {CON_DOC_CATEGORIES.map(cat => {
+                  const inCat = documents.filter(d => (d.category ?? 'other') === cat.value)
+                  if (!inCat.length) return null
+                  return (
+                    <div key={cat.value} className="px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{cat.label} ({inCat.length})</p>
+                      <ul className="space-y-1">
+                        {inCat.map(d => (
+                          <li key={d.id} className="flex items-center gap-3 py-1.5">
+                            <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                            <a href={`/api/construction/documents/${d.id}`} target="_blank" rel="noopener" className="flex-1 text-sm font-medium text-blue-600 hover:text-blue-800 truncate">{d.file_name}</a>
+                            {d.review_status === 'needs_review' && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">Needs review</span>}
+                            {docTypeLabel(d.doc_type) && <span className="text-xs text-gray-400 shrink-0">{docTypeLabel(d.doc_type)}</span>}
+                            {canWrite && <DeleteButton action={deleteDocument.bind(null, d.id)} confirm="Delete this document?" iconOnly />}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
         </div>
