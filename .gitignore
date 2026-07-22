@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated daily-update PDFs (delivered artifacts, not source)
+/RPS-Daily-Update-*.pdf
