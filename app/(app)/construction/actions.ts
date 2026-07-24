@@ -846,6 +846,89 @@ export async function deleteJobLabor(id: string): Promise<void> {
 }
 
 // ============================================================
+// DAILY UPDATES (Phase 2) — ticket + techs/initials/hours -> man-hours
+// ============================================================
+export async function addDailyUpdate(jobId: string, _state: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!canWriteConstruction(profile)) return { error: 'No permission.' }
+
+  const workDescription = str(formData.get('work_description'))
+  // Tech rows arrive as parallel arrays: tech_name[], initials[], hours[]
+  const names = formData.getAll('tech_name').map((v) => (v as string)?.trim())
+  const inits = formData.getAll('initials').map((v) => (v as string)?.trim())
+  const hrs = formData.getAll('hours').map((v) => num(v))
+  const techs = names
+    .map((name, i) => ({ tech_name: name, initials: inits[i] || null, hours: hrs[i] ?? 0 }))
+    .filter((t) => t.tech_name)
+
+  if (!workDescription && techs.length === 0) {
+    return { error: 'Add a work description or at least one tech.' }
+  }
+
+  const admin = createAdminClient()
+
+  // Optional ticket image: upload to storage, file it in the doc center, then
+  // link that document onto the daily update so it serves through the same route.
+  let ticketPath: string | null = null
+  let ticketDocId: string | null = null
+  const ticket = formData.get('ticket') as File | null
+  if (ticket && typeof ticket === 'object' && ticket.size > 0) {
+    const safe = ticket.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+    const path = `${profile.company_id}/${jobId}/daily/${Date.now()}-${safe}`
+    const buf = Buffer.from(await ticket.arrayBuffer())
+    const { error: upErr } = await admin.storage.from('construction-docs')
+      .upload(path, buf, { contentType: ticket.type || 'application/octet-stream', upsert: true })
+    if (upErr) return { error: `Ticket upload failed: ${upErr.message}` }
+    ticketPath = path
+    const { data: doc } = await admin.from('con_documents').insert({
+      company_id: profile.company_id, job_id: jobId,
+      file_name: ticket.name, original_filename: ticket.name,
+      storage_path: path, category: 'daily_updates', doc_type: 'daily_ticket',
+      uploaded_by: profile.id, review_status: 'filed',
+    }).select('id').single()
+    ticketDocId = doc?.id ?? null
+  }
+
+  const { data: du, error } = await admin.from('con_daily_updates').insert({
+    company_id: profile.company_id,
+    job_id: jobId,
+    work_date: str(formData.get('work_date')),
+    work_description: workDescription || '',
+    weather: str(formData.get('weather')),
+    notes: str(formData.get('notes')),
+    ticket_storage_path: ticketPath,
+    ticket_document_id: ticketDocId,
+    submitted_by: profile.id,
+  }).select('id').single()
+  if (error) return { error: error.message }
+
+  if (techs.length > 0) {
+    const { error: tErr } = await admin.from('con_daily_update_techs').insert(
+      techs.map((t) => ({ company_id: profile.company_id, daily_update_id: du.id, ...t })),
+    )
+    if (tErr) return { error: tErr.message }
+  }
+
+  revalidatePath(`/construction/jobs/${jobId}`)
+  return null
+}
+
+export async function deleteDailyUpdate(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  const { data } = await admin.from('con_daily_updates')
+    .select('job_id, ticket_storage_path').eq('id', id).eq('company_id', profile.company_id).single()
+  if (data?.ticket_storage_path) {
+    await admin.storage.from('construction-docs').remove([data.ticket_storage_path])
+  }
+  // techs cascade-delete via FK
+  await admin.from('con_daily_updates').delete().eq('id', id).eq('company_id', profile.company_id)
+  if (data?.job_id) revalidatePath(`/construction/jobs/${data.job_id}`)
+}
+
+// ============================================================
 // DOCUMENTS
 // ============================================================
 export async function deleteDocument(id: string): Promise<void> {
