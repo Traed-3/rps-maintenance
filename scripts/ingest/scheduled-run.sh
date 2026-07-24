@@ -18,7 +18,7 @@ STREAK="$STATE/empty-streak"
 LABEL="com.rps.docingest"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 NODE="/opt/homebrew/bin/node"
-BATCH=500          # max uploads per firing
+BATCH=2000         # max uploads per firing (runs survive now that stalls time out)
 EMPTY_LIMIT=3      # stop after this many consecutive 0-upload runs
 
 mkdir -p "$STATE"

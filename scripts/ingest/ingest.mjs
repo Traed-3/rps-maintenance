@@ -44,11 +44,26 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 let resetPool = () => {}
 try {
   const { Agent, setGlobalDispatcher } = await import('undici')
-  const mk = () => new Agent({ connections: 4, keepAliveTimeout: 15000, keepAliveMaxTimeout: 120000, connect: { timeout: 20000 } })
+  // headersTimeout/bodyTimeout bound how long a single request may stall before
+  // undici aborts it — without them a dead socket can hang the request forever.
+  const mk = () => new Agent({
+    connections: 4, keepAliveTimeout: 15000, keepAliveMaxTimeout: 120000,
+    connect: { timeout: 20000 }, headersTimeout: 30000, bodyTimeout: 60000,
+  })
   setGlobalDispatcher(mk())
   resetPool = () => setGlobalDispatcher(mk())
   console.log('undici keep-alive dispatcher active (pool auto-resets on failure)')
 } catch { console.log('undici not available — using default fetch') }
+
+// Hard wall-clock timeout for a single call. The live setTimeout handle keeps
+// Node's event loop alive, so even a promise orphaned by pool corruption can't
+// drain the loop and crash the process with exit 13 ("unsettled top-level
+// await") — it just loses the race and gets retried on a fresh pool.
+const withTimeout = (p, ms, label) => {
+  let t
+  const timer = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`${label} timed out after ${ms}ms`)), ms) })
+  return Promise.race([Promise.resolve().then(p), timer]).finally(() => clearTimeout(t))
+}
 
 // Retry a Supabase call, resetting the connection pool between attempts so a
 // poisoned pool can't cascade. Retries thrown network errors AND returned errors.
@@ -56,7 +71,7 @@ async function retry(fn, tries = 6) {
   let delay = 400
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fn()
+      const r = await withTimeout(fn, 75000, 'supabase call')
       if (!r || !r.error) return r
       if (i === tries - 1) return r
     } catch (e) {
