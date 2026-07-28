@@ -58,6 +58,35 @@ export function storeCandidates(dirSegments, filename) {
   return out
 }
 
+// Capitol/Capital Petroleum identify sites by street address rather than a
+// store number, so "703 N. Washington Street" is site CPG703 — per Trae.
+const CPG_CUSTOMER = /capit[oa]l\s+petroleum/i
+
+export function isCpgPath(dirSegments) {
+  return dirSegments.some(s => CPG_CUSTOMER.test(s))
+}
+
+// The project folder for a CPG job is the shallowest segment under the customer
+// that carries an address number; deeper folders ("6543 Clean Earth") repeat it.
+export function cpgSite(dirSegments) {
+  if (!isCpgPath(dirSegments)) return null
+  for (const seg of dirSegments) {
+    if (CPG_CUSTOMER.test(seg)) continue
+    const n = extractSiteNumber(seg)
+    if (n && !isYear(n)) return `CPG${n}`
+  }
+  return null
+}
+
+// The year a project folder belongs to, read from any ancestor folder name.
+export function pathYear(dirSegments) {
+  for (let i = dirSegments.length - 1; i >= 0; i--) {
+    const m = String(dirSegments[i]).match(/(?<!\d)(20[0-2]\d)(?!\d)/)
+    if (m) return +m[1]
+  }
+  return null
+}
+
 const isYear = n => { const v = +n; return v >= 2000 && v <= 2099 }
 
 // Pick the best store number from candidates. Prefer a candidate that matches a
