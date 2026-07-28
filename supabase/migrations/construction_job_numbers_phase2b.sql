@@ -114,7 +114,7 @@ with ranked as (
 update con_jobs j
    set job_number = case
          when r.rn = 1  then r.site || '-' || lpad((r.yr % 100)::text, 2, '0')
-         when r.rn <= 20 then r.site || '-' || lpad((r.yr % 100)::text, 2, '0') || chr(64 + r.rn - 1)
+         when r.rn <= 20 then r.site || '-' || lpad((r.yr % 100)::text, 2, '0') || chr((64 + r.rn - 1)::int)
          else r.site || '-' || lpad((r.yr % 100)::text, 2, '0') || 'X' || (r.rn - 1)::text
        end
   from ranked r
