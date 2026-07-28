@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import type { ActionState } from '@/app/(app)/construction/actions'
 
@@ -24,6 +24,15 @@ export function DailyUpdateForm({
   const removeRow = (i: number) => setTechs((rows) => (rows.length === 1 ? rows : rows.filter((_, j) => j !== i)))
 
   const manHours = techs.reduce((sum, t) => sum + (parseFloat(t.hours) || 0), 0)
+
+  // React resets the uncontrolled fields after a successful action, but the tech
+  // rows are our own state — clear them too so the next day starts empty instead
+  // of silently re-submitting yesterday's crew and hours.
+  const wasPending = useRef(false)
+  useEffect(() => {
+    if (wasPending.current && !isPending && !state?.error) setTechs([{ ...blank }])
+    wasPending.current = isPending
+  }, [isPending, state])
 
   return (
     <form action={formAction} className="space-y-4">

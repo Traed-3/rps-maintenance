@@ -919,9 +919,14 @@ export async function deleteDailyUpdate(id: string): Promise<void> {
   if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   const { data } = await admin.from('con_daily_updates')
-    .select('job_id, ticket_storage_path').eq('id', id).eq('company_id', profile.company_id).single()
+    .select('job_id, ticket_storage_path, ticket_document_id').eq('id', id).eq('company_id', profile.company_id).single()
   if (data?.ticket_storage_path) {
     await admin.storage.from('construction-docs').remove([data.ticket_storage_path])
+  }
+  // Drop the doc-center row too, or it lingers pointing at the file we just removed.
+  if (data?.ticket_document_id) {
+    await admin.from('con_documents').delete()
+      .eq('id', data.ticket_document_id).eq('company_id', profile.company_id)
   }
   // techs cascade-delete via FK
   await admin.from('con_daily_updates').delete().eq('id', id).eq('company_id', profile.company_id)
