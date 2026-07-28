@@ -16,7 +16,7 @@ import { DocumentUpload } from '@/components/construction/document-upload'
 import { DeleteButton } from '@/components/construction/delete-button'
 import { AssignSubcontractor } from '@/components/construction/assign-subcontractor'
 import { Button } from '@/components/ui/button'
-import { Pencil, Plus, FileText } from 'lucide-react'
+import { Pencil, Plus, FileText, Image as ImageIcon } from 'lucide-react'
 import {
   changeJobStage, saveMaterial, setMaterialStatus, deleteMaterial,
   saveScheduleEntry, deleteScheduleEntry,
@@ -70,7 +70,7 @@ export default async function JobDetailPage({
     admin.from('con_closeout_tasks').select('*').eq('job_id', id).order('created_at'),
     admin.from('con_job_labor').select('*').eq('job_id', id).order('work_date', { ascending: false }),
     admin.from('con_documents').select('*').eq('job_id', id).order('created_at', { ascending: false }),
-    admin.from('con_daily_updates').select('*, con_daily_update_techs(*)').eq('job_id', id).order('work_date', { ascending: false }),
+    admin.from('con_daily_updates').select('*, con_daily_update_techs(*), con_documents(id, file_name, doc_type)').eq('job_id', id).order('work_date', { ascending: false }),
     admin.from('con_job_subcontractors').select('id, role, con_subcontractors(id, name, trade, phone)').eq('job_id', id),
     admin.from('con_subcontractors').select('id, name, trade').eq('company_id', company_id).eq('is_active', true).order('name'),
     admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
@@ -88,7 +88,10 @@ export default async function JobDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-3 mt-2">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{job.site_number ?? 'Job'}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{job.job_number ?? job.site_number ?? 'Job'}</h1>
+              {job.job_number && job.site_number && (
+                <span className="text-sm text-gray-400">Site {job.site_number}</span>
+              )}
               <ConPriorityBadge priority={job.priority} />
             </div>
             <div className="text-sm text-gray-500 mt-1">
@@ -288,7 +291,6 @@ export default async function JobDetailPage({
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-medium text-gray-900">{fmtDate(u.work_date)}</span>
                               {u.update_number && <span className="text-xs text-gray-400">{u.update_number}</span>}
-                              {u.weather && <span className="text-xs text-gray-400">· {u.weather}</span>}
                               <span className="text-xs font-medium text-gray-600">· {hoursOf(u).toFixed(2)} hrs</span>
                             </div>
                             {u.work_description && <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{u.work_description}</p>}
@@ -300,11 +302,30 @@ export default async function JobDetailPage({
                               </div>
                             )}
                             {u.notes && <p className="text-xs text-gray-400 mt-1">{u.notes}</p>}
-                            {u.ticket_document_id && (
-                              <a href={`/api/construction/documents/${u.ticket_document_id}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1">
-                                <FileText size={12} /> Ticket image
-                              </a>
-                            )}
+                            {(() => {
+                              // Everything filed against this update — the ticket plus any
+                              // job photos — so the crew can see it without leaving the tab.
+                              const files = ((u.con_documents ?? []) as any[])
+                              if (!files.length) return null
+                              return (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {files.map((f: any) => (
+                                    <a
+                                      key={f.id}
+                                      href={`/api/construction/documents/${f.id}`}
+                                      target="_blank"
+                                      rel="noopener"
+                                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                                    >
+                                      {f.doc_type === 'daily_ticket' ? <FileText size={12} /> : <ImageIcon size={12} />}
+                                      <span className="max-w-[10rem] truncate">
+                                        {f.doc_type === 'daily_ticket' ? 'Ticket' : f.file_name}
+                                      </span>
+                                    </a>
+                                  ))}
+                                </div>
+                              )
+                            })()}
                           </div>
                           {canWrite && <DeleteButton action={deleteDailyUpdate.bind(null, u.id)} confirm="Delete this daily update?" iconOnly />}
                         </div>

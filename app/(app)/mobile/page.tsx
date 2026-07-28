@@ -168,6 +168,11 @@ export default async function MobilePage() {
             <span className="text-sm font-semibold text-gray-800">Log Mileage</span>
           </Link>
 
+          <Link href="/mobile/daily-update" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+            <span className="text-3xl">📋</span>
+            <span className="text-sm font-semibold text-gray-800">Daily Update</span>
+          </Link>
+
           <Link href="/shop/general-time" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
             <span className="text-3xl">⏱️</span>
             <span className="text-sm font-semibold text-gray-800">Log Shop Time</span>

@@ -6,14 +6,20 @@ import type { ActionState } from '@/app/(app)/construction/actions'
 
 const inp = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500'
 const lbl = 'block text-xs font-medium text-gray-600 mb-1'
+const file = 'block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm hover:file:bg-gray-200'
 
 type TechRow = { name: string; initials: string; hours: string }
 const blank: TechRow = { name: '', initials: '', hours: '' }
 
+export type JobOption = { id: string; label: string }
+
 export function DailyUpdateForm({
   action,
+  jobs,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
+  /** When present the form picks its own job — used by the crew's mobile screen. */
+  jobs?: JobOption[]
 }) {
   const [state, formAction, isPending] = useActionState(action, null)
   const [techs, setTechs] = useState<TechRow[]>([{ ...blank }])
@@ -36,18 +42,29 @@ export function DailyUpdateForm({
 
   return (
     <form action={formAction} className="space-y-4">
+      {jobs && (
+        <div>
+          <label className={lbl}>Job</label>
+          <select name="job_id" required defaultValue="" className={inp}>
+            <option value="" disabled>Pick a job…</option>
+            {jobs.map((j) => (
+              <option key={j.id} value={j.id}>{j.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
           <label className={lbl}>Date</label>
           <input name="work_date" type="date" className={inp} />
         </div>
         <div>
-          <label className={lbl}>Weather</label>
-          <input name="weather" className={inp} placeholder="e.g. Clear, 82°" />
+          <label className={lbl}>Ticket / PO image</label>
+          <input name="ticket" type="file" accept="image/*,application/pdf" className={file} />
         </div>
         <div>
-          <label className={lbl}>Ticket / PO image</label>
-          <input name="ticket" type="file" accept="image/*,application/pdf" className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm hover:file:bg-gray-200" />
+          <label className={lbl}>Job photos</label>
+          <input name="photos" type="file" accept="image/*" multiple className={file} />
         </div>
       </div>
 

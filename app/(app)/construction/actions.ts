@@ -868,40 +868,51 @@ export async function addDailyUpdate(jobId: string, _state: ActionState, formDat
 
   const admin = createAdminClient()
 
-  // Optional ticket image: upload to storage, file it in the doc center, then
-  // link that document onto the daily update so it serves through the same route.
-  let ticketPath: string | null = null
-  let ticketDocId: string | null = null
-  const ticket = formData.get('ticket') as File | null
-  if (ticket && typeof ticket === 'object' && ticket.size > 0) {
-    const safe = ticket.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
-    const path = `${profile.company_id}/${jobId}/daily/${Date.now()}-${safe}`
-    const buf = Buffer.from(await ticket.arrayBuffer())
-    const { error: upErr } = await admin.storage.from('construction-docs')
-      .upload(path, buf, { contentType: ticket.type || 'application/octet-stream', upsert: true })
-    if (upErr) return { error: `Ticket upload failed: ${upErr.message}` }
-    ticketPath = path
-    const { data: doc } = await admin.from('con_documents').insert({
-      company_id: profile.company_id, job_id: jobId,
-      file_name: ticket.name, original_filename: ticket.name,
-      storage_path: path, category: 'daily_updates', doc_type: 'daily_ticket',
-      uploaded_by: profile.id, review_status: 'filed',
-    }).select('id').single()
-    ticketDocId = doc?.id ?? null
-  }
-
+  // The update row comes first so every file we file in the doc center can point
+  // back at it — that link is what lets an update show its own gallery.
   const { data: du, error } = await admin.from('con_daily_updates').insert({
     company_id: profile.company_id,
     job_id: jobId,
     work_date: str(formData.get('work_date')),
     work_description: workDescription || '',
-    weather: str(formData.get('weather')),
     notes: str(formData.get('notes')),
-    ticket_storage_path: ticketPath,
-    ticket_document_id: ticketDocId,
     submitted_by: profile.id,
   }).select('id').single()
   if (error) return { error: error.message }
+
+  // Upload a file to storage and file it in the doc center against this update.
+  const fileIt = async (f: File, category: string, docType: string) => {
+    const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+    const path = `${profile.company_id}/${jobId}/daily/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
+    const buf = Buffer.from(await f.arrayBuffer())
+    const { error: upErr } = await admin.storage.from('construction-docs')
+      .upload(path, buf, { contentType: f.type || 'application/octet-stream', upsert: true })
+    if (upErr) return { path: null as string | null, docId: null as string | null, error: upErr.message }
+    const { data: doc } = await admin.from('con_documents').insert({
+      company_id: profile.company_id, job_id: jobId, daily_update_id: du.id,
+      file_name: f.name, original_filename: f.name,
+      storage_path: path, category, doc_type: docType,
+      uploaded_by: profile.id, review_status: 'filed',
+    }).select('id').single()
+    return { path, docId: doc?.id ?? null, error: null as string | null }
+  }
+
+  const ticket = formData.get('ticket') as File | null
+  if (ticket && typeof ticket === 'object' && ticket.size > 0) {
+    const r = await fileIt(ticket, 'daily_updates', 'daily_ticket')
+    if (r.error) return { error: `Ticket upload failed: ${r.error}` }
+    await admin.from('con_daily_updates')
+      .update({ ticket_storage_path: r.path, ticket_document_id: r.docId })
+      .eq('id', du.id)
+  }
+
+  const photos = formData.getAll('photos').filter(
+    (f): f is File => typeof f === 'object' && f !== null && (f as File).size > 0,
+  )
+  for (const photo of photos) {
+    const r = await fileIt(photo, 'photos', 'photo')
+    if (r.error) return { error: `Photo upload failed: ${r.error}` }
+  }
 
   if (techs.length > 0) {
     const { error: tErr } = await admin.from('con_daily_update_techs').insert(
@@ -912,6 +923,13 @@ export async function addDailyUpdate(jobId: string, _state: ActionState, formDat
 
   revalidatePath(`/construction/jobs/${jobId}`)
   return null
+}
+
+/** Crew-facing variant: the job comes from the form's dropdown, not the URL. */
+export async function addDailyUpdateForPickedJob(state: ActionState, formData: FormData): Promise<ActionState> {
+  const jobId = str(formData.get('job_id'))
+  if (!jobId) return { error: 'Pick a job first.' }
+  return addDailyUpdate(jobId, state, formData)
 }
 
 export async function deleteDailyUpdate(id: string): Promise<void> {
