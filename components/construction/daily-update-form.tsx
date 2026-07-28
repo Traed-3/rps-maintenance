@@ -1,0 +1,97 @@
+'use client'
+
+import { useActionState, useState } from 'react'
+import { Plus, X } from 'lucide-react'
+import type { ActionState } from '@/app/(app)/construction/actions'
+
+const inp = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500'
+const lbl = 'block text-xs font-medium text-gray-600 mb-1'
+
+type TechRow = { name: string; initials: string; hours: string }
+const blank: TechRow = { name: '', initials: '', hours: '' }
+
+export function DailyUpdateForm({
+  action,
+}: {
+  action: (state: ActionState, formData: FormData) => Promise<ActionState>
+}) {
+  const [state, formAction, isPending] = useActionState(action, null)
+  const [techs, setTechs] = useState<TechRow[]>([{ ...blank }])
+
+  const setRow = (i: number, patch: Partial<TechRow>) =>
+    setTechs((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const addRow = () => setTechs((rows) => [...rows, { ...blank }])
+  const removeRow = (i: number) => setTechs((rows) => (rows.length === 1 ? rows : rows.filter((_, j) => j !== i)))
+
+  const manHours = techs.reduce((sum, t) => sum + (parseFloat(t.hours) || 0), 0)
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className={lbl}>Date</label>
+          <input name="work_date" type="date" className={inp} />
+        </div>
+        <div>
+          <label className={lbl}>Weather</label>
+          <input name="weather" className={inp} placeholder="e.g. Clear, 82°" />
+        </div>
+        <div>
+          <label className={lbl}>Ticket / PO image</label>
+          <input name="ticket" type="file" accept="image/*,application/pdf" className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm hover:file:bg-gray-200" />
+        </div>
+      </div>
+
+      <div>
+        <label className={lbl}>Work performed</label>
+        <textarea name="work_description" rows={3} className={inp} placeholder="What the crew did today…" />
+      </div>
+
+      {/* Techs → man-hours */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className={lbl + ' mb-0'}>Techs on the job</span>
+          <span className="text-xs text-gray-500">Man-hours: <span className="font-semibold text-gray-800">{manHours.toFixed(2)}</span></span>
+        </div>
+        <div className="space-y-2">
+          {techs.map((t, i) => (
+            <div key={i} className="grid grid-cols-12 gap-2 items-center">
+              <input
+                className={inp + ' col-span-6'} placeholder="Tech name"
+                value={t.name} onChange={(e) => setRow(i, { name: e.target.value })}
+                name={t.name.trim() ? 'tech_name' : undefined}
+              />
+              <input
+                className={inp + ' col-span-2'} placeholder="Init."
+                value={t.initials} onChange={(e) => setRow(i, { initials: e.target.value })}
+                name={t.name.trim() ? 'initials' : undefined}
+              />
+              <input
+                className={inp + ' col-span-3'} type="number" step="any" placeholder="Hrs"
+                value={t.hours} onChange={(e) => setRow(i, { hours: e.target.value })}
+                name={t.name.trim() ? 'hours' : undefined}
+              />
+              <button type="button" onClick={() => removeRow(i)} className="col-span-1 flex justify-center text-gray-400 hover:text-red-600" aria-label="Remove tech">
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={addRow} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-900">
+          <Plus size={14} /> Add tech
+        </button>
+      </div>
+
+      <div>
+        <label className={lbl}>Notes (optional)</label>
+        <input name="notes" className={inp} placeholder="Anything else…" />
+      </div>
+
+      {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
+
+      <button type="submit" disabled={isPending} className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-60">
+        {isPending ? 'Saving…' : 'Save daily update'}
+      </button>
+    </form>
+  )
+}

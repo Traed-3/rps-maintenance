@@ -11,6 +11,7 @@ import { MaterialStatusSelect } from '@/components/construction/material-status-
 import { ScheduleEntryForm } from '@/components/construction/schedule-entry-form'
 import { CloseoutChecklist } from '@/components/construction/closeout-checklist'
 import { JobLaborForm } from '@/components/construction/job-labor-form'
+import { DailyUpdateForm } from '@/components/construction/daily-update-form'
 import { DocumentUpload } from '@/components/construction/document-upload'
 import { DeleteButton } from '@/components/construction/delete-button'
 import { AssignSubcontractor } from '@/components/construction/assign-subcontractor'
@@ -21,6 +22,7 @@ import {
   saveScheduleEntry, deleteScheduleEntry,
   toggleCloseoutTask, deleteCloseoutTask, addCloseoutTask, seedCloseoutTasks,
   addJobLabor, deleteJobLabor, deleteDocument,
+  addDailyUpdate, deleteDailyUpdate,
   assignSubcontractor, unassignSubcontractor,
 } from '../../actions'
 
@@ -30,6 +32,7 @@ const TABS = [
   { key: 'invoice',   label: 'Invoices' },
   { key: 'materials', label: 'Materials' },
   { key: 'schedule',  label: 'Schedule' },
+  { key: 'daily',     label: 'Daily Updates' },
   { key: 'subs',      label: 'Subcontractors' },
   { key: 'closeout',  label: 'Close-Out' },
   { key: 'documents', label: 'Documents' },
@@ -57,6 +60,7 @@ export default async function JobDetailPage({
   const [
     { data: quotes }, { data: invoices }, { data: materials },
     { data: schedule }, { data: closeout }, { data: labor }, { data: documents },
+    { data: dailyUpdates },
     { data: assignedSubs }, { data: allSubs }, { data: vendorRows },
   ] = await Promise.all([
     admin.from('con_quotes').select('id, quote_number, proposal_date, status, final_total').eq('job_id', id).order('created_at', { ascending: false }),
@@ -66,6 +70,7 @@ export default async function JobDetailPage({
     admin.from('con_closeout_tasks').select('*').eq('job_id', id).order('created_at'),
     admin.from('con_job_labor').select('*').eq('job_id', id).order('work_date', { ascending: false }),
     admin.from('con_documents').select('*').eq('job_id', id).order('created_at', { ascending: false }),
+    admin.from('con_daily_updates').select('*, con_daily_update_techs(*)').eq('job_id', id).order('work_date', { ascending: false }),
     admin.from('con_job_subcontractors').select('id, role, con_subcontractors(id, name, trade, phone)').eq('job_id', id),
     admin.from('con_subcontractors').select('id, name, trade').eq('company_id', company_id).eq('is_active', true).order('name'),
     admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
@@ -257,6 +262,67 @@ export default async function JobDetailPage({
           )}
         </div>
       )}
+
+      {/* ── DAILY UPDATES ──────────────────────────────────── */}
+      {tab === 'daily' && (() => {
+        const updates = (dailyUpdates ?? []) as any[]
+        const hoursOf = (u: any) => (u.con_daily_update_techs ?? []).reduce((s: number, t: any) => s + Number(t.hours ?? 0), 0)
+        const totalManHours = updates.reduce((s, u) => s + hoursOf(u), 0)
+        return (
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-900">Daily Updates ({updates.length})</h2>
+                <span className="text-sm text-gray-500">Total man-hours: <span className="font-semibold text-gray-800">{totalManHours.toFixed(2)}</span></span>
+              </div>
+              {!updates.length ? (
+                <p className="px-4 py-6 text-sm text-gray-400">No daily updates yet.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {updates.map((u) => {
+                    const techs = (u.con_daily_update_techs ?? []) as any[]
+                    return (
+                      <li key={u.id} className="px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-gray-900">{fmtDate(u.work_date)}</span>
+                              {u.update_number && <span className="text-xs text-gray-400">{u.update_number}</span>}
+                              {u.weather && <span className="text-xs text-gray-400">· {u.weather}</span>}
+                              <span className="text-xs font-medium text-gray-600">· {hoursOf(u).toFixed(2)} hrs</span>
+                            </div>
+                            {u.work_description && <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{u.work_description}</p>}
+                            {techs.length > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {techs.map((t: any, i: number) => (
+                                  <span key={t.id ?? i}>{i > 0 && ', '}{t.tech_name}{t.initials ? ` (${t.initials})` : ''} — {Number(t.hours ?? 0)}h</span>
+                                ))}
+                              </div>
+                            )}
+                            {u.notes && <p className="text-xs text-gray-400 mt-1">{u.notes}</p>}
+                            {u.ticket_document_id && (
+                              <a href={`/api/construction/documents/${u.ticket_document_id}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1">
+                                <FileText size={12} /> Ticket image
+                              </a>
+                            )}
+                          </div>
+                          {canWrite && <DeleteButton action={deleteDailyUpdate.bind(null, u.id)} confirm="Delete this daily update?" iconOnly />}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+            {canWrite && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <h3 className="font-semibold text-gray-900 mb-3">Add Daily Update</h3>
+                <DailyUpdateForm action={addDailyUpdate.bind(null, id)} />
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── SUBCONTRACTORS ─────────────────────────────────── */}
       {tab === 'subs' && (
