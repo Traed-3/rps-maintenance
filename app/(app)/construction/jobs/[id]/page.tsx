@@ -76,6 +76,22 @@ export default async function JobDetailPage({
     admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
   ])
 
+  // Documents filed against the site's OTHER projects. A site often runs
+  // several jobs, and the importer could only tell which site a file came
+  // from, not which of that site's projects — so surface them here rather
+  // than let paperwork look missing.
+  const siteJobIds = job.site_number
+    ? ((await admin.from('con_jobs').select('id')
+        .eq('company_id', company_id).eq('site_number', job.site_number)).data ?? [])
+        .map((j) => j.id).filter((jid) => jid !== id)
+    : []
+  const { data: siteDocuments } = siteJobIds.length
+    ? await admin.from('con_documents')
+        .select('*, con_jobs(job_number, site_number)')
+        .in('job_id', siteJobIds)
+        .order('created_at', { ascending: false })
+    : { data: [] as any[] }
+
   const customerName = (job as any).con_customers?.name
   const managerName = (job as any).profiles?.full_name
   const vendorNames = (vendorRows ?? []).map(v => v.name).filter(Boolean)
@@ -438,6 +454,41 @@ export default async function JobDetailPage({
               </div>
             )}
           </div>
+
+          {siteDocuments && siteDocuments.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-900">
+                  Other projects at site {job.site_number} ({siteDocuments.length})
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Filed against a different project at this site. Imported paperwork can only be
+                  traced to the site, so check here before assuming a document is missing.
+                </p>
+              </div>
+              <ul className="divide-y divide-gray-50">
+                {siteDocuments.map((d: any) => (
+                  <li key={d.id} className="flex items-center gap-3 px-4 py-2">
+                    <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                    <a
+                      href={`/api/construction/documents/${d.id}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="flex-1 text-sm font-medium text-blue-600 hover:text-blue-800 truncate"
+                    >
+                      {d.file_name}
+                    </a>
+                    <Link
+                      href={`/construction/jobs/${d.job_id}?tab=documents`}
+                      className="text-xs text-gray-500 hover:text-gray-800 shrink-0"
+                    >
+                      {d.con_jobs?.job_number ?? 'other project'} →
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
