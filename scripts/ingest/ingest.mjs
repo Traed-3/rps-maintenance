@@ -82,6 +82,43 @@ async function retry(fn, tries = 6, timeoutMs = 75000) {
   }
 }
 
+// Past a few hundred MB a single TLS stream stops being reliable — the upload
+// dies with "bad record mac" every time, no matter the timeout. Chunked
+// resumable (TUS) uploads keep each request small, so nothing runs long enough
+// to corrupt, and a failed chunk retries instead of restarting the file.
+const RESUMABLE_OVER = 100 * 1024 * 1024
+
+async function uploadResumable(storagePath, buf, contentType, label) {
+  let tus
+  try { tus = await import('tus-js-client') }
+  catch { return { message: 'tus-js-client not installed (npm i tus-js-client --no-save)' } }
+
+  const mb = (buf.length / 1e6).toFixed(0)
+  console.log(`  → resumable upload ${label} (${mb} MB)`)
+
+  return await new Promise((resolve) => {
+    const upload = new tus.Upload(buf, {
+      endpoint: `${url}/storage/v1/upload/resumable`,
+      retryDelays: [0, 2000, 5000, 10000, 20000],
+      headers: { authorization: `Bearer ${key}`, 'x-upsert': 'true' },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      chunkSize: 6 * 1024 * 1024, // Supabase requires exactly 6MB chunks
+      metadata: {
+        bucketName: BUCKET,
+        objectName: storagePath,
+        contentType,
+        cacheControl: '3600',
+      },
+      onError: (e) => resolve({ message: e?.message || String(e) }),
+      onSuccess: () => resolve(null),
+    })
+    upload.findPreviousUploads()
+      .then((prev) => { if (prev.length) upload.resumeFromPreviousUpload(prev[0]); upload.start() })
+      .catch(() => upload.start())
+  })
+}
+
 // ── load all rows across the 1000-row page cap ──────────────
 async function fetchAll(table, columns) {
   const rows = []
@@ -201,10 +238,12 @@ for (const path of walk(ROOT)) {
   // Big closeout PDFs run to a gigabyte; give the call room proportional to
   // the payload instead of the flat 75s that suits a photo.
   const upTimeout = Math.max(75000, Math.round(buf.length / 1e6) * 4000)
-  const { error: upErr } = await retry(
-    () => admin.storage.from(BUCKET).upload(storagePath, buf, { contentType: mimeFor(filename), upsert: true }),
-    6, upTimeout,
-  )
+  const upErr = buf.length > RESUMABLE_OVER
+    ? await uploadResumable(storagePath, buf, mimeFor(filename), filename)
+    : (await retry(
+        () => admin.storage.from(BUCKET).upload(storagePath, buf, { contentType: mimeFor(filename), upsert: true }),
+        6, upTimeout,
+      )).error
   if (upErr) { stats.errors++; console.warn(`  upload fail ${filename}: ${upErr.message}`); continue }
   const { error: insErr } = await retry(() => admin.from('con_documents').insert({
     company_id: job.company_id, job_id: job.id,
