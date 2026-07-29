@@ -89,7 +89,7 @@ export default async function JobDetailPage({
     : []
   const { data: siteDocuments } = siteJobIds.length
     ? await admin.from('con_documents')
-        .select('*, con_jobs(job_number, site_number)')
+        .select('id, job_id, file_name, con_jobs(job_number, site_number)')
         .in('job_id', siteJobIds)
         .order('created_at', { ascending: false })
     : { data: [] as any[] }
@@ -505,40 +505,48 @@ export default async function JobDetailPage({
             )}
           </div>
 
-          {siteDocuments && siteDocuments.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <h2 className="font-semibold text-gray-900">
-                  Other projects at site {job.site_number} ({siteDocuments.length})
-                </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Filed against a different project at this site. Imported paperwork can only be
-                  traced to the site, so check here before assuming a document is missing.
-                </p>
+          {siteDocuments && siteDocuments.length > 0 && (() => {
+            // Documents now sit on the project they belong to, so listing every
+            // sibling file here would just bury this job's own paperwork. Show
+            // one line per sibling project instead.
+            const bySibling = new Map<string, { jobId: string; label: string; count: number }>()
+            for (const d of siteDocuments as any[]) {
+              const label = d.con_jobs?.job_number ?? 'Unnumbered project'
+              const cur = bySibling.get(d.job_id) ?? { jobId: d.job_id, label, count: 0 }
+              cur.count++
+              bySibling.set(d.job_id, cur)
+            }
+            const siblings = [...bySibling.values()].sort((a, b) => a.label.localeCompare(b.label))
+            return (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <h2 className="font-semibold text-gray-900">
+                    Other projects at site {job.site_number}
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {siteDocuments.length} more documents across {siblings.length}{' '}
+                    {siblings.length === 1 ? 'project' : 'projects'} at this site.
+                  </p>
+                </div>
+                <ul className="divide-y divide-gray-50">
+                  {siblings.map((s) => (
+                    <li key={s.jobId}>
+                      <Link
+                        href={`/construction/jobs/${s.jobId}?tab=documents`}
+                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50"
+                      >
+                        <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span className="flex-1 text-sm font-medium text-blue-700">{s.label}</span>
+                        <span className="text-xs text-gray-500">
+                          {s.count} {s.count === 1 ? 'document' : 'documents'} →
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="divide-y divide-gray-50">
-                {siteDocuments.map((d: any) => (
-                  <li key={d.id} className="flex items-center gap-3 px-4 py-2">
-                    <FileText className="w-4 h-4 text-gray-400 shrink-0" />
-                    <a
-                      href={`/api/construction/documents/${d.id}`}
-                      target="_blank"
-                      rel="noopener"
-                      className="flex-1 text-sm font-medium text-blue-600 hover:text-blue-800 truncate"
-                    >
-                      {d.file_name}
-                    </a>
-                    <Link
-                      href={`/construction/jobs/${d.job_id}?tab=documents`}
-                      className="text-xs text-gray-500 hover:text-gray-800 shrink-0"
-                    >
-                      {d.con_jobs?.job_number ?? 'other project'} →
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            )
+          })()}
         </div>
       )}
 
