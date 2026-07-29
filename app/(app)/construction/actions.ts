@@ -925,6 +925,70 @@ export async function addDailyUpdate(jobId: string, _state: ActionState, formDat
   return null
 }
 
+// ── Disposables (Phase 2, increment 2) ──────────────────────
+// Rows arrive as parallel arrays, the same shape the tech rows use. Only
+// items the crew actually put a number against are stored, so a form with
+// three entries doesn't persist twenty empty ones.
+export async function addDisposablesForm(state: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!canWriteConstruction(profile)) return { error: 'No permission.' }
+
+  const jobId = str(formData.get('job_id'))
+  if (!jobId) return { error: 'Missing job.' }
+
+  const codes  = formData.getAll('item_code').map((v) => v as string)
+  const labels = formData.getAll('item_label').map((v) => v as string)
+  const amts   = formData.getAll('item_amount').map((v) => num(v))
+  const ords   = formData.getAll('item_ordered').map((v) => num(v))
+
+  const items = codes
+    .map((code, i) => ({ code, label: labels[i] ?? code, amount: amts[i] ?? null, ordered: ords[i] ?? null }))
+    .filter((r) => r.amount !== null || r.ordered !== null)
+
+  const xLabels = formData.getAll('extra_label').map((v) => (v as string)?.trim())
+  const xAmts   = formData.getAll('extra_amount').map((v) => num(v))
+  const xOrds   = formData.getAll('extra_ordered').map((v) => num(v))
+  xLabels.forEach((label, i) => {
+    if (label) items.push({ code: 'DSP-OTHER', label, amount: xAmts[i] ?? null, ordered: xOrds[i] ?? null })
+  })
+
+  const formNames  = formData.getAll('form_name').map((v) => v as string)
+  const formCopies = formData.getAll('form_copies').map((v) => num(v))
+  const forms = formNames
+    .map((name, i) => ({ name, copies: formCopies[i] ?? null }))
+    .filter((f) => f.copies !== null)
+
+  if (items.length === 0 && forms.length === 0) {
+    return { error: 'Enter a count against at least one item or form.' }
+  }
+
+  const admin = createAdminClient()
+  const { error } = await admin.from('con_disposables_forms').insert({
+    company_id: profile.company_id,
+    job_id: jobId,
+    tech_name: str(formData.get('tech_name')),
+    truck: str(formData.get('truck')),
+    form_date: str(formData.get('form_date')) || undefined,
+    items,
+    forms,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(`/construction/jobs/${jobId}`)
+  return null
+}
+
+export async function deleteDisposablesForm(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  const { data } = await admin.from('con_disposables_forms')
+    .select('job_id').eq('id', id).eq('company_id', profile.company_id).single()
+  await admin.from('con_disposables_forms').delete().eq('id', id).eq('company_id', profile.company_id)
+  if (data?.job_id) revalidatePath(`/construction/jobs/${data.job_id}`)
+}
+
 /** Crew-facing variant: the job comes from the form's dropdown, not the URL. */
 export async function addDailyUpdateForPickedJob(state: ActionState, formData: FormData): Promise<ActionState> {
   const jobId = str(formData.get('job_id'))

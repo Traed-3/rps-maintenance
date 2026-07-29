@@ -371,3 +371,41 @@ export function extractSiteNumber(name: string): string | null {
   const m = name.match(/(?<!\d)(\d{3,5})(?!\d)/)
   return m ? m[1] : null
 }
+
+// ============================================================
+// DISPOSABLES (Phase 2, increment 2)
+// Sourced from "Disposables Inventory 7.17.26" in Dropbox, which is the
+// live list the shop actually restocks from. Sorbs appears on the printed
+// form but has dropped off the current spreadsheet — kept here so a crew
+// can still report it rather than lose the count.
+// ============================================================
+export const CON_DISPOSABLE_ITEMS = [
+  { code: 'DSP-BRAKLEEN',         label: 'BrakeKleen' },
+  { code: 'DSP-CATAPE',           label: 'Caution Tape' },
+  { code: 'DSP-CC',               label: 'Concrete Crayons' },
+  { code: 'DSP-CORRTAPE',         label: 'Corrosion Tape' },
+  { code: 'DSP-DEF PIPE DOPE',    label: 'DEF Pipe Dope' },
+  { code: 'DSP-6"BLADE',          label: '6" Diablo Blade' },
+  { code: 'DSP-9"BLADE',          label: '9" Diablo Blade' },
+  { code: 'DSP-DSPGLOVES',        label: 'Disposable Gloves' },
+  { code: 'DSP-EAR',              label: 'Earplugs' },
+  { code: 'DSP-ELTAPE',           label: 'Electrical Tape' },
+  { code: 'DSP-EZWIRE',           label: 'EZ Pull Wire Lube' },
+  { code: 'DSP-FACEMASK',         label: 'Face Masks' },
+  { code: 'DSP-LEAK',             label: 'Leak Detector' },
+  { code: 'DSP-MOUNTING TAPE',    label: 'Mounting Tape' },
+  { code: 'DSP-OSC-BLADE',        label: 'Oscillating Blade' },
+  { code: 'DSP-PBBLAST',          label: 'PB Blaster' },
+  { code: 'DSP-RAZOR',            label: 'Razor Blades' },
+  { code: 'DSP-SHOP-TOWEL',       label: 'Shop Towels' },
+  { code: 'DSP-SMPLGREEN',        label: 'Simple Green' },
+  { code: 'DSP-SORBS',            label: 'Sorbs' },
+  { code: 'DSP-WHT-GREASE',       label: 'White Lithium Grease' },
+  { code: 'DSP-WHITEVINEGAR',     label: 'White Vinegar' },
+  { code: 'DSP-WGLOVES',          label: 'Work Gloves' },
+] as const
+
+// Paper forms the crew carries; tracked by how many copies are left.
+export const CON_DISPOSABLE_FORMS = [
+  'Drop Tube', "EOD Disposable's", 'HydrX', 'JSA', 'LOTO', 'PTI',
+] as const

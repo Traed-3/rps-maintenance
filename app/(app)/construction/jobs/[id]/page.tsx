@@ -12,6 +12,7 @@ import { ScheduleEntryForm } from '@/components/construction/schedule-entry-form
 import { CloseoutChecklist } from '@/components/construction/closeout-checklist'
 import { JobLaborForm } from '@/components/construction/job-labor-form'
 import { DailyUpdateForm } from '@/components/construction/daily-update-form'
+import { DisposablesForm } from '@/components/construction/disposables-form'
 import { DocumentUpload } from '@/components/construction/document-upload'
 import { DeleteButton } from '@/components/construction/delete-button'
 import { AssignSubcontractor } from '@/components/construction/assign-subcontractor'
@@ -22,7 +23,7 @@ import {
   saveScheduleEntry, deleteScheduleEntry,
   toggleCloseoutTask, deleteCloseoutTask, addCloseoutTask, seedCloseoutTasks,
   addJobLabor, deleteJobLabor, deleteDocument,
-  addDailyUpdate, deleteDailyUpdate,
+  addDailyUpdate, deleteDailyUpdate, addDisposablesForm, deleteDisposablesForm,
   assignSubcontractor, unassignSubcontractor,
 } from '../../actions'
 
@@ -60,7 +61,7 @@ export default async function JobDetailPage({
   const [
     { data: quotes }, { data: invoices }, { data: materials },
     { data: schedule }, { data: closeout }, { data: labor }, { data: documents },
-    { data: dailyUpdates },
+    { data: dailyUpdates }, { data: disposables },
     { data: assignedSubs }, { data: allSubs }, { data: vendorRows },
   ] = await Promise.all([
     admin.from('con_quotes').select('id, quote_number, proposal_date, status, final_total').eq('job_id', id).order('created_at', { ascending: false }),
@@ -71,6 +72,7 @@ export default async function JobDetailPage({
     admin.from('con_job_labor').select('*').eq('job_id', id).order('work_date', { ascending: false }),
     admin.from('con_documents').select('*').eq('job_id', id).order('created_at', { ascending: false }),
     admin.from('con_daily_updates').select('*, con_daily_update_techs(*), con_documents(id, file_name, doc_type)').eq('job_id', id).order('work_date', { ascending: false }),
+    admin.from('con_disposables_forms').select('*').eq('job_id', id).order('form_date', { ascending: false }),
     admin.from('con_job_subcontractors').select('id, role, con_subcontractors(id, name, trade, phone)').eq('job_id', id),
     admin.from('con_subcontractors').select('id, name, trade').eq('company_id', company_id).eq('is_active', true).order('name'),
     admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
@@ -357,6 +359,54 @@ export default async function JobDetailPage({
                 <DailyUpdateForm action={addDailyUpdate.bind(null, id)} />
               </div>
             )}
+
+            {/* ── Disposables ─────────────────────────────── */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-900">Disposables ({disposables?.length ?? 0})</h2>
+              </div>
+              {!disposables?.length ? (
+                <p className="px-4 py-4 text-sm text-gray-400">No disposables recorded.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {disposables.map((f: any) => {
+                    const items = (f.items ?? []) as any[]
+                    const forms = (f.forms ?? []) as any[]
+                    const reorder = items.filter((i) => Number(i.ordered) > 0)
+                    return (
+                      <li key={f.id} className="px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-gray-900">{fmtDate(f.form_date)}</span>
+                              {f.tech_name && <span className="text-xs text-gray-500">· {f.tech_name}</span>}
+                              {f.truck && <span className="text-xs text-gray-500">· Truck {f.truck}</span>}
+                              <span className="text-xs text-gray-400">· {items.length} items</span>
+                            </div>
+                            {reorder.length > 0 && (
+                              <p className="text-xs text-amber-700 mt-1">
+                                To order: {reorder.map((i) => `${i.label} (${i.ordered})`).join(', ')}
+                              </p>
+                            )}
+                            {forms.length > 0 && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Forms: {forms.map((x) => `${x.name} ${x.copies}`).join(' · ')}
+                              </p>
+                            )}
+                          </div>
+                          {canWrite && <DeleteButton action={deleteDisposablesForm.bind(null, f.id)} confirm="Delete this disposables form?" iconOnly />}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {canWrite && (
+                <div className="px-4 py-3 border-t border-gray-100">
+                  <DisposablesForm action={addDisposablesForm} jobId={id} />
+                </div>
+              )}
+            </div>
           </div>
         )
       })()}
