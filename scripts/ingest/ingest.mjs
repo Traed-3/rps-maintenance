@@ -17,7 +17,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'crypto'
 import { readdirSync, readFileSync, statSync, mkdirSync, writeFileSync } from 'fs'
 import { join, sep } from 'path'
-import { classifyDocument, storeCandidates, resolveStore, isIgnored, mimeFor } from './classify.mjs'
+import { classifyDocument, storeCandidates, resolveStore, isIgnored, mimeFor, cpgSite, pathYear } from './classify.mjs'
 
 const BUCKET = 'construction-docs'
 const DEFAULT_ROOT = '/Volumes/External Storage/RP Dropbox/Construction projects (Team)/Construction Department Documents/Completed Projects'
@@ -48,7 +48,7 @@ try {
   // undici aborts it — without them a dead socket can hang the request forever.
   const mk = () => new Agent({
     connections: 4, keepAliveTimeout: 15000, keepAliveMaxTimeout: 120000,
-    connect: { timeout: 20000 }, headersTimeout: 30000, bodyTimeout: 60000,
+    connect: { timeout: 20000 }, headersTimeout: 30000, bodyTimeout: 900000,
   })
   setGlobalDispatcher(mk())
   resetPool = () => setGlobalDispatcher(mk())
@@ -67,11 +67,11 @@ const withTimeout = (p, ms, label) => {
 
 // Retry a Supabase call, resetting the connection pool between attempts so a
 // poisoned pool can't cascade. Retries thrown network errors AND returned errors.
-async function retry(fn, tries = 6) {
+async function retry(fn, tries = 6, timeoutMs = 75000) {
   let delay = 400
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await withTimeout(fn, 75000, 'supabase call')
+      const r = await withTimeout(fn, timeoutMs, 'supabase call')
       if (!r || !r.error) return r
       if (i === tries - 1) return r
     } catch (e) {
@@ -104,10 +104,13 @@ if (ONLY_SITE) console.log(`site filter: ${ONLY_SITE}`)
 const jobs = await fetchAll('con_jobs', 'id, company_id, site_number, stage')
 const jobsByStore = new Map()
 for (const j of jobs) {
-  const d = digits(j.site_number)
-  if (!d) continue
-  if (!jobsByStore.has(d)) jobsByStore.set(d, [])
-  jobsByStore.get(d).push(j)
+  const site = String(j.site_number ?? '').trim()
+  // CPG sites are addressed, not numbered — key them whole so "CPG703" never
+  // collapses into store 703.
+  const key = /^CPG\d+$/i.test(site) ? site.toUpperCase() : digits(site)
+  if (!key) continue
+  if (!jobsByStore.has(key)) jobsByStore.set(key, [])
+  jobsByStore.get(key).push(j)
 }
 console.log(`loaded ${jobs.length} jobs across ${jobsByStore.size} store numbers`)
 
@@ -142,12 +145,31 @@ for (const path of walk(ROOT)) {
   const segs = path.split(sep)
   const filename = segs[segs.length - 1]
   const dirSegs = segs.slice(rootSegs.length, segs.length - 1) // folders under root
-  const store = resolveStore(storeCandidates(dirSegs, filename), jobsByStore)
+  // Capitol/Capital Petroleum folders are addresses ("703 N. Washington
+  // Street"), so they resolve to CPG703 rather than store 703.
+  const cpg = cpgSite(dirSegs)
+  const store = cpg || resolveStore(storeCandidates(dirSegs, filename), jobsByStore)
   if (ONLY_SITE && store !== ONLY_SITE) continue
 
   stats.scanned++
   const rec = byStore.get(store) || { files: 0, matched: 0, ambiguous: 0, unmatched: 0 }
   rec.files++
+
+  // A CPG address folder is its own job. These have real paperwork behind
+  // them, so create the job on first sight and number it from the folder year.
+  if (COMMIT && cpg && !jobsByStore.has(cpg)) {
+    const yr = pathYear(dirSegs)
+    const { data: made, error: mkErr } = await retry(() => admin.from('con_jobs').insert({
+      company_id: jobs[0].company_id,
+      site_number: cpg,
+      job_number: yr ? `${cpg}-${String(yr % 100).padStart(2, '0')}` : null,
+      stage: 'complete',
+      notes: 'Created by rps-doc-ingest from the Dropbox project folder.',
+    }).select('id, company_id, site_number, stage').single())
+    if (mkErr) { stats.errors++; continue }
+    jobsByStore.set(cpg, [made])
+    stats.jobsCreated = (stats.jobsCreated || 0) + 1
+  }
 
   const matches = store ? (jobsByStore.get(store) || []) : []
   const { category, docType, confident } = classifyDocument(filename, dirSegs.join(' '))
@@ -176,7 +198,13 @@ for (const path of walk(ROOT)) {
   // upload + insert
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
   const storagePath = `${job.company_id}/${job.id}/ingest/${hash.slice(0, 12)}-${safe}`
-  const { error: upErr } = await retry(() => admin.storage.from(BUCKET).upload(storagePath, buf, { contentType: mimeFor(filename), upsert: true }))
+  // Big closeout PDFs run to a gigabyte; give the call room proportional to
+  // the payload instead of the flat 75s that suits a photo.
+  const upTimeout = Math.max(75000, Math.round(buf.length / 1e6) * 4000)
+  const { error: upErr } = await retry(
+    () => admin.storage.from(BUCKET).upload(storagePath, buf, { contentType: mimeFor(filename), upsert: true }),
+    6, upTimeout,
+  )
   if (upErr) { stats.errors++; console.warn(`  upload fail ${filename}: ${upErr.message}`); continue }
   const { error: insErr } = await retry(() => admin.from('con_documents').insert({
     company_id: job.company_id, job_id: job.id,

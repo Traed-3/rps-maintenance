@@ -50,11 +50,16 @@ export function extractSiteNumber(name) {
 // folder first (the project folder is the strongest signal), then shallower
 // folders, then the filename. The caller resolves which candidate to use,
 // preferring ones that match a real job and skipping year-like numbers.
+// Camera roll names carry a sequence number, not a store: IMG_4415.HEIC is not
+// site 4415. Left unchecked these silently file a site's photos onto whatever
+// job happens to own that number.
+const CAMERA_FILE = /^(img|dsc|dscn|dji|gopro|photo|video|mov|pxl|screenshot)[ _-]?\d+/i
+
 export function storeCandidates(dirSegments, filename) {
   const out = []
   const push = n => { if (n && !out.includes(n)) out.push(n) }
   for (let i = dirSegments.length - 1; i >= 0; i--) push(extractSiteNumber(dirSegments[i]))
-  push(extractSiteNumber(filename))
+  if (!CAMERA_FILE.test(filename)) push(extractSiteNumber(filename))
   return out
 }
 
