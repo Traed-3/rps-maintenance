@@ -53,7 +53,13 @@ try {
   setGlobalDispatcher(mk())
   resetPool = () => setGlobalDispatcher(mk())
   console.log('undici keep-alive dispatcher active (pool auto-resets on failure)')
-} catch { console.log('undici not available — using default fetch') }
+} catch {
+  // Without undici one failed upload poisons the pool and every later request
+  // dies instantly with "fetch failed". Both helpers are installed --no-save,
+  // so installing either one alone silently prunes the other — always name both.
+  console.warn('\n*** undici MISSING — uploads will cascade into "fetch failed". Stop and run:')
+  console.warn('***   npm i undici tus-js-client --no-save\n')
+}
 
 // Hard wall-clock timeout for a single call. The live setTimeout handle keeps
 // Node's event loop alive, so even a promise orphaned by pool corruption can't
