@@ -29,13 +29,20 @@ const TYPES = [
   ['change_order',        'change_orders', ['change order','change-order','chg order']],
   ['plan_notes',          'quotes',        ['plan notes','plan-notes','breakdown']],
   ['quote',               'quotes',        ['quote','bid','proposal','estimate']],
+  // The assembled closeout package itself. Deliberately last of the closeout
+  // rules: a lien waiver or an invoice that happens to live in a "Close Out"
+  // folder is still a lien waiver or an invoice. Matched on the FILENAME only —
+  // otherwise every site photo in a "Close Out" folder becomes a package.
+  ['closeout_package',    'closeout',      ['close out','closeout','close-out'], true],
   ['photo',               'photos',        ['.jpg','.jpeg','.png','.heic','.gif','img_','image','photo','pic']],
 ]
 
 export function classifyDocument(filename, folderHint) {
   const hay = `${folderHint ?? ''} ${filename}`.toLowerCase()
-  for (const [type, category, matches] of TYPES) {
-    if (matches.some(m => hay.includes(m))) return { category, docType: type, confident: true }
+  const nameOnly = String(filename).toLowerCase()
+  for (const [type, category, matches, filenameOnly] of TYPES) {
+    const target = filenameOnly ? nameOnly : hay
+    if (matches.some(m => target.includes(m))) return { category, docType: type, confident: true }
   }
   return { category: 'other', docType: null, confident: false }
 }

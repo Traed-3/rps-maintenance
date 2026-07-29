@@ -333,6 +333,10 @@ export const CON_DOC_TYPES = [
   { value: 'change_order',         label: 'Change Order',                 category: 'change_orders', match: ['change order','change-order','chg order'] },
   { value: 'plan_notes',           label: 'Plan Notes Breakdown',         category: 'quotes',        match: ['plan notes','plan-notes','breakdown'] },
   { value: 'quote',                label: 'Quote / Bid',                  category: 'quotes',        match: ['quote','bid','proposal','estimate'] },
+  // The assembled closeout package. Last of the closeout rules on purpose — a
+  // lien waiver or invoice inside a "Close Out" folder keeps its own type — and
+  // filename-only, so site photos in that folder stay photos.
+  { value: 'closeout_package',     label: 'Closeout Package',             category: 'closeout',      match: ['close out','closeout','close-out'], filenameOnly: true },
   { value: 'photo',                label: 'Photo',                        category: 'photos',        match: ['.jpg','.jpeg','.png','.heic','.gif','img_','image','photo','pic'] },
 ] as const
 
@@ -350,8 +354,10 @@ export function classifyDocument(
   folderHint?: string | null,
 ): { category: ConDocCategory; docType: string | null; confident: boolean } {
   const hay = `${folderHint ?? ''} ${filename}`.toLowerCase()
+  const nameOnly = filename.toLowerCase()
   for (const t of CON_DOC_TYPES) {
-    if (t.match.some(m => hay.includes(m))) {
+    const target = 'filenameOnly' in t && t.filenameOnly ? nameOnly : hay
+    if (t.match.some(m => target.includes(m))) {
       return { category: t.category as ConDocCategory, docType: t.value, confident: true }
     }
   }
