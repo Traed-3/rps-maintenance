@@ -80,12 +80,14 @@ export const QUOTE_STATUSES = [
   { value: 'rejected', label: 'Rejected', className: 'bg-red-100 text-red-800 border-red-200' },
 ] as const
 
+// RPS does not run accounts receivable here. Once a job is invoiced it is
+// revenue and accounting takes it from there — so there is no "paid" to chase
+// and nothing goes overdue. The stored value stays 'sent' (the DB check
+// constraint predates this) but it reads as Invoiced everywhere.
 export const INVOICE_STATUSES = [
-  { value: 'draft',   label: 'Draft',   className: 'bg-gray-100 text-gray-700 border-gray-200' },
-  { value: 'sent',    label: 'Sent',    className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { value: 'paid',    label: 'Paid',    className: 'bg-green-200 text-green-900 border-green-300' },
-  { value: 'overdue', label: 'Overdue', className: 'bg-red-200 text-red-900 border-red-300' },
-  { value: 'void',    label: 'Void',    className: 'bg-gray-100 text-gray-400 border-gray-200' },
+  { value: 'draft', label: 'Draft',    className: 'bg-gray-100 text-gray-700 border-gray-200' },
+  { value: 'sent',  label: 'Invoiced', className: 'bg-green-200 text-green-900 border-green-300' },
+  { value: 'void',  label: 'Void',     className: 'bg-gray-100 text-gray-400 border-gray-200' },
 ] as const
 
 export const MATERIAL_STATUSES = [

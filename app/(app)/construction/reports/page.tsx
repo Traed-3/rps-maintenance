@@ -34,16 +34,21 @@ export default async function ReportsPage() {
     return { stage: s.value, label: s.label, count: inStage.length, avgAge: avg }
   }).filter(s => s.count > 0)
 
-  // A/R aging
-  const { data: openInv } = await admin
-    .from('con_invoices').select('id, invoice_number, status, invoice_grand_total, due_date, sent_date, con_customers(name)')
-    .eq('company_id', company_id).in('status', ['sent', 'overdue']).order('due_date', { nullsFirst: false })
-  const todayIso = iso(today)
-  const ar = (openInv ?? []).map(inv => {
-    const days = inv.due_date ? Math.floor((today.getTime() - new Date(inv.due_date + 'T00:00:00').getTime()) / 86400000) : 0
-    return { ...inv, daysOverdue: inv.due_date && inv.due_date < todayIso ? days : 0 }
-  })
-  const arTotal = ar.reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
+  // Invoiced revenue by year. RPS runs no receivables here — once a job is
+  // invoiced it is revenue, so what matters is the history, not who owes what.
+  const { data: allInv } = await admin
+    .from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, con_customers(name)')
+    .eq('company_id', company_id).neq('status', 'void').order('invoice_date', { ascending: false, nullsFirst: false })
+  const invoiced = allInv ?? []
+  const invoicedTotal = invoiced.reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
+  const byYear = new Map<string, { year: string; count: number; total: number }>()
+  for (const inv of invoiced) {
+    const y = String(inv.invoice_date ?? '').slice(0, 4) || 'Undated'
+    const cur = byYear.get(y) ?? { year: y, count: 0, total: 0 }
+    cur.count++; cur.total += Number(inv.invoice_grand_total) || 0
+    byYear.set(y, cur)
+  }
+  const years = [...byYear.values()].sort((a, b) => b.year.localeCompare(a.year))
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -52,7 +57,7 @@ export default async function ReportsPage() {
           <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">
             Construction Reports
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Job cost · margin · pipeline aging · A/R</p>
+          <p className="text-sm text-gray-500 mt-0.5">Job cost · margin · pipeline aging · invoiced revenue</p>
         </div>
         <Link href="/construction" className="text-sm text-gray-500 hover:text-gray-700">← Construction</Link>
       </div>
@@ -124,16 +129,15 @@ export default async function ReportsPage() {
           </table>
         </Section>
 
-        {/* A/R */}
-        <Section title={`Open A/R — ${money(arTotal)}`} csv="ar">
+        {/* Invoiced revenue by year */}
+        <Section title={`Invoiced — ${money(invoicedTotal)}`} csv="invoiced">
           <table className="w-full text-sm">
             <tbody className="divide-y divide-gray-50">
-              {ar.length === 0 ? <tr><td className="px-4 py-6 text-gray-400">No open invoices.</td></tr> : ar.map(r => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2"><Link href={`/construction/invoices/${r.id}`} className="font-mono text-xs text-blue-600">{r.invoice_number}</Link></td>
-                  <td className="px-4 py-2 text-gray-600 text-xs hidden sm:table-cell">{(r as any).con_customers?.name ?? ''}</td>
-                  <td className="px-4 py-2 text-right text-xs">{r.daysOverdue > 0 ? <span className="text-red-600 font-medium">{r.daysOverdue}d overdue</span> : <span className="text-gray-400">due {fmtDate(r.due_date)}</span>}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-gray-900">{money(r.invoice_grand_total)}</td>
+              {years.length === 0 ? <tr><td className="px-4 py-6 text-gray-400">Nothing invoiced yet.</td></tr> : years.map(y => (
+                <tr key={y.year} className="hover:bg-gray-50">
+                  <td className="px-4 py-2 font-medium text-gray-900">{y.year}</td>
+                  <td className="px-4 py-2 text-gray-500 text-xs">{y.count} {y.count === 1 ? 'invoice' : 'invoices'}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-gray-900">{money(y.total)}</td>
                 </tr>
               ))}
             </tbody>

@@ -453,16 +453,75 @@ export default async function JobDetailPage({
       )}
 
       {/* ── CLOSE-OUT ──────────────────────────────────────── */}
-      {tab === 'closeout' && (
-        <CloseoutChecklist
-          tasks={closeout ?? []}
-          canWrite={canWrite}
-          onToggle={toggleCloseoutTask}
-          onDelete={deleteCloseoutTask}
-          onAdd={addCloseoutTask.bind(null, id)}
-          onSeed={seedCloseoutTasks.bind(null, id)}
-        />
-      )}
+      {tab === 'closeout' && (() => {
+        // Everything already filed under Closeout for this job. The checklist
+        // says what the package needs; this says what has actually been
+        // collected, so nobody has to dig through Documents to find out.
+        const closeoutDocs = (documents ?? []).filter((d: any) => d.category === 'closeout')
+        const byType = new Map<string, any[]>()
+        for (const d of closeoutDocs) {
+          const k = d.doc_type || 'other'
+          byType.set(k, [...(byType.get(k) ?? []), d])
+        }
+        const groups = [...byType.entries()]
+          .map(([type, docs]) => ({ type, label: docTypeLabel(type) ?? 'Other closeout', docs }))
+          .sort((a, b) => a.label.localeCompare(b.label))
+
+        return (
+          <div className="space-y-5">
+            <CloseoutChecklist
+              tasks={closeout ?? []}
+              canWrite={canWrite}
+              onToggle={toggleCloseoutTask}
+              onDelete={deleteCloseoutTask}
+              onAdd={addCloseoutTask.bind(null, id)}
+              onSeed={seedCloseoutTasks.bind(null, id)}
+            />
+
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-900">Closeout Documents ({closeoutDocs.length})</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Everything filed under Closeout for this job, grouped by what it is.
+                </p>
+              </div>
+              {closeoutDocs.length === 0 ? (
+                <p className="px-4 py-6 text-sm text-gray-400">
+                  Nothing filed under Closeout yet for this job.
+                </p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {groups.map(g => (
+                    <div key={g.type} className="px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
+                        {g.label} ({g.docs.length})
+                      </p>
+                      <ul className="space-y-1">
+                        {g.docs.map((d: any) => (
+                          <li key={d.id} className="flex items-center gap-3 py-1">
+                            <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                            <a
+                              href={`/api/construction/documents/${d.id}`}
+                              target="_blank"
+                              rel="noopener"
+                              className="flex-1 text-sm font-medium text-blue-600 hover:text-blue-800 truncate"
+                            >
+                              {d.file_name}
+                            </a>
+                            {canWrite && (
+                              <DeleteButton action={deleteDocument.bind(null, d.id)} confirm="Delete this document?" iconOnly />
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── DOCUMENTS ──────────────────────────────────────── */}
       {tab === 'documents' && (

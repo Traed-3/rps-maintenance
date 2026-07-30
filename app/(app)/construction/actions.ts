@@ -421,7 +421,6 @@ export async function saveInvoice(id: string | null, _state: ActionState, formDa
     status:       str(formData.get('status')) ?? 'draft',
     prepared_by:  str(formData.get('prepared_by')) ?? 'Starsky Dodson, Construction Manager',
     sent_date:    str(formData.get('sent_date')),
-    due_date:     str(formData.get('due_date')),
     paid_date:    str(formData.get('paid_date')),
     ...totalsRest,
     invoice_grand_total: final_total,
@@ -470,8 +469,8 @@ export async function setInvoiceStatus(id: string, status: string): Promise<void
   const admin = createAdminClient()
   const today = new Date().toISOString().split('T')[0]
   const updates: Record<string, unknown> = { status }
+  // No receivables here: 'sent' means invoiced and that is the end state.
   if (status === 'sent') updates.sent_date = today
-  if (status === 'paid') updates.paid_date = today
   await admin.from('con_invoices').update(updates).eq('id', id).eq('company_id', profile.company_id)
   revalidatePath('/construction/invoices')
   revalidatePath(`/construction/invoices/${id}`)

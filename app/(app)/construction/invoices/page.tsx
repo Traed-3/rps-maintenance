@@ -14,15 +14,15 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
 
   let query = admin
     .from('con_invoices')
-    .select('id, invoice_number, invoice_date, due_date, status, invoice_grand_total, store_label, con_customers(name)')
+    .select('id, invoice_number, invoice_date, status, invoice_grand_total, store_label, con_customers(name)')
     .eq('company_id', company_id)
     .order('invoice_date', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
   if (status) query = query.eq('status', status)
   const { data: invoices } = await query
 
-  const today = new Date().toISOString().split('T')[0]
-  const STATUSES = ['', 'draft', 'sent', 'paid', 'overdue', 'void']
+  // Invoiced is the end state — RPS runs no receivables here.
+  const STATUSES = ['', 'draft', 'sent', 'void']
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -62,21 +62,18 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Customer</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Date</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Due</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Total</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {invoices.map(inv => {
-                  const isOverdue = inv.status === 'sent' && inv.due_date && inv.due_date < today
                   return (
                     <ClickableRow key={inv.id} href={`/construction/invoices/${inv.id}`}>
                       <td className="px-4 py-3 font-mono text-xs text-gray-700">{inv.invoice_number}</td>
                       <td className="px-4 py-3 text-gray-700 hidden sm:table-cell">{(inv as any).con_customers?.name ?? '—'}</td>
-                      <td className="px-4 py-3"><InvoiceStatusBadge status={isOverdue ? 'overdue' : inv.status} /></td>
+                      <td className="px-4 py-3"><InvoiceStatusBadge status={inv.status} /></td>
                       <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">{fmtDate(inv.invoice_date)}</td>
-                      <td className={`px-4 py-3 text-xs hidden lg:table-cell ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>{fmtDate(inv.due_date)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{money(inv.invoice_grand_total)}</td>
                       <td className="px-4 py-3 text-right"><span className="text-xs font-medium text-blue-600">View →</span></td>
                     </ClickableRow>
