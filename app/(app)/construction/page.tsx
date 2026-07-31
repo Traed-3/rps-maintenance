@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
 import { CON_STAGES, money, fmtDate, projectNotificationStatus } from '@/lib/construction'
 import { InvoiceStatusBadge } from '@/components/construction/badges'
-import { Users, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck, Inbox } from 'lucide-react'
+import { Users, Contact, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck, Inbox } from 'lucide-react'
 
 function iso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -59,6 +59,7 @@ export default async function ConstructionDashboard() {
     { href: '/construction/trackers', label: 'Sunoco Trackers', icon: ClipboardList },
     { href: '/construction/checklist', label: 'Checklist', icon: ListChecks },
     { href: '/construction/customers', label: 'Customers', icon: Users },
+    { href: '/construction/contacts', label: 'Contacts', icon: Contact },
     { href: '/construction/documents/review', label: 'Doc Review', icon: Inbox, value: reviewCount ?? 0, sub: 'to review' },
     { href: '/construction/reports', label: 'Reports', icon: BarChart3 },
   ]
