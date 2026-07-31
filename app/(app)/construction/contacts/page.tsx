@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
+import { safeSearchTerm } from '@/lib/construction'
 import { ClickableRow } from '@/components/clickable-row'
 import { Users } from 'lucide-react'
 
@@ -36,7 +37,8 @@ export default async function ContactsPage({
     .order('kind')
     .order('name')
   if (sp.kind) query = query.eq('kind', sp.kind)
-  if (sp.q) query = query.or(`name.ilike.%${sp.q}%,email.ilike.%${sp.q}%,phone.ilike.%${sp.q}%`)
+  const q = safeSearchTerm(sp.q)
+  if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`)
   const { data: contacts } = await query
 
   const counts: Record<string, number> = {}

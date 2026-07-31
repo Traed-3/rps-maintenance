@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
-import { CON_STAGES, stageMeta, fmtDate } from '@/lib/construction'
+import { CON_STAGES, stageMeta, fmtDate, safeSearchTerm } from '@/lib/construction'
 import { StageBadge, ConPriorityBadge } from '@/components/construction/badges'
 import { Button } from '@/components/ui/button'
 import { Plus, LayoutGrid, List } from 'lucide-react'
@@ -32,7 +32,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   if (sp.priority) query = query.eq('priority', sp.priority)
   if (sp.brand)    query = query.ilike('gas_brand', `%${sp.brand}%`)
   if (sp.program)  query = query.ilike('program', `%${sp.program}%`)
-  if (sp.q)        query = query.or(`site_number.ilike.%${sp.q}%,work_order_number.ilike.%${sp.q}%,scope_of_work.ilike.%${sp.q}%`)
+  const q = safeSearchTerm(sp.q)
+  if (q)           query = query.or(`site_number.ilike.%${q}%,work_order_number.ilike.%${q}%,scope_of_work.ilike.%${q}%`)
   // stage filter only applies in table view (kanban shows all stages as columns)
   if (view === 'table' && sp.stage) query = query.eq('stage', sp.stage)
 

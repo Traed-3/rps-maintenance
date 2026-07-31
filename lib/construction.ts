@@ -411,3 +411,19 @@ export const CON_DISPOSABLE_ITEMS = [
 export const CON_DISPOSABLE_FORMS = [
   'Drop Tube', "EOD Disposable's", 'HydrX', 'JSA', 'LOTO', 'PTI',
 ] as const
+
+/**
+ * Make a user-typed search box safe to interpolate into a PostgREST filter.
+ *
+ * Supabase's `.or()` takes a filter LIST as a string — commas separate
+ * conditions and parentheses group them — so a search term containing either
+ * can close the intended condition and append filters of its own. `%` and `_`
+ * are LIKE wildcards and let a term match far more than it looks like it
+ * should. None of those characters are useful in a name, email or store
+ * number, so they are dropped rather than escaped.
+ */
+export function safeSearchTerm(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const cleaned = raw.replace(/[,()%_\\*"']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 64)
+  return cleaned || null
+}
