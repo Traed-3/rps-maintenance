@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
 import { CON_STAGES, money, fmtDate, projectNotificationStatus } from '@/lib/construction'
+import { loadPermitGraph, computeAlerts, loadHashEnteredAt } from '@/lib/permits-data'
 import { InvoiceStatusBadge } from '@/components/construction/badges'
-import { Users, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck } from 'lucide-react'
+import { Users, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck, FileCheck2, AlertTriangle } from 'lucide-react'
 
 function iso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -17,12 +18,17 @@ export default async function ConstructionDashboard() {
   const monday = new Date(today); monday.setDate(today.getDate() + ((today.getDay() === 0 ? -6 : 1) - today.getDay()))
   const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
 
-  const [{ data: jobs }, { data: invoices }, { data: neededMaterials }, { data: schedule }] = await Promise.all([
+  const [{ data: jobs }, { data: invoices }, { data: neededMaterials }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
     admin.from('con_jobs').select('id, site_number, stage, priority, project_start_date, notification_sent_at, notification_waived, con_customers(name)').eq('company_id', company_id),
     admin.from('con_invoices').select('id, invoice_number, status, invoice_grand_total, due_date, con_customers(name)').eq('company_id', company_id).in('status', ['draft', 'sent', 'overdue']),
     admin.from('con_job_materials').select('id').eq('company_id', company_id).in('status', ['needed', 'ordered']),
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id).gte('schedule_date', iso(monday)).lte('schedule_date', iso(sunday)).order('schedule_date'),
+    loadPermitGraph(admin, company_id),
+    loadHashEnteredAt(admin, company_id),
   ])
+  const permitAlerts = computeAlerts(permitGraph, { hashEnteredAt })
+  const topAlert = permitAlerts.find(a => a.key === 'unknown-window')
+  const otherAlerts = permitAlerts.filter(a => a.key !== 'unknown-window')
 
   const allJobs = jobs ?? []
   const notifyDue = allJobs
@@ -42,6 +48,7 @@ export default async function ConstructionDashboard() {
 
   const tiles = [
     { href: '/construction/jobs', label: 'Jobs', icon: HardHat, value: allJobs.length },
+    { href: '/construction/permits', label: 'Permits', icon: FileCheck2, value: permitGraph.enriched.filter(p => p.requirement_status === 'Required').length, sub: 'tracked' },
     { href: '/construction/quotes', label: 'Quotes', icon: FileText },
     { href: '/construction/invoices', label: 'Invoices', icon: Receipt, value: money(arOpen), sub: 'open A/R' },
     { href: '/construction/materials', label: 'Materials', icon: Package, value: neededMaterials?.length ?? 0, sub: 'to order/receive' },
@@ -70,6 +77,31 @@ export default async function ConstructionDashboard() {
             <t.icon className="w-5 h-5 text-blue-600 mb-2" />
             <p className="text-sm font-semibold text-gray-900 break-words leading-tight">{t.label}</p>
             {t.value != null && <p className="text-xs text-gray-500 mt-0.5">{t.value}{t.sub ? ` ${t.sub}` : ''}</p>}
+          </Link>
+        ))}
+      </div>
+
+      {/* Permit alert #1 — impossible to ignore */}
+      {topAlert && topAlert.count > 0 && (
+        <Link href="/construction/permits?alert=unknown-window" className="block mb-4 rounded-2xl border-2 border-red-400 bg-red-50 shadow-sm hover:bg-red-100 transition-colors">
+          <div className="px-5 py-4 flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-bold text-red-900">{topAlert.count} permit{topAlert.count !== 1 ? 's' : ''} may be needed and nobody has confirmed it</p>
+              <p className="text-sm text-red-800 mt-0.5">{topAlert.description}</p>
+              <p className="text-xs text-red-700 mt-1 font-semibold">Review now →</p>
+            </div>
+          </div>
+        </Link>
+      )}
+
+      {/* The other four permit alerts, as counts that click through */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        {otherAlerts.map(a => (
+          <Link key={a.key} href={`/construction/permits?alert=${a.key}`}
+            className={`rounded-2xl border shadow-sm p-4 transition-all ${a.count > 0 ? 'bg-white border-amber-300 hover:border-amber-400' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}>
+            <p className={`text-2xl font-bold ${a.count > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{a.count}</p>
+            <p className="text-xs font-semibold text-gray-700 mt-0.5 leading-tight">{a.label}</p>
           </Link>
         ))}
       </div>
