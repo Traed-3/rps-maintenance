@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
-import { CON_STAGES, stageMeta, fmtDate } from '@/lib/construction'
+import { CON_STAGES, stageMeta, fmtDate, safeSearchTerm } from '@/lib/construction'
 import { StageBadge, ConPriorityBadge } from '@/components/construction/badges'
 import { Button } from '@/components/ui/button'
 import { Plus, LayoutGrid, List } from 'lucide-react'
@@ -23,7 +23,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
   let query = admin
     .from('con_jobs')
-    .select('id, site_number, work_order_number, stage, priority, gas_brand, program, status_detail, date_received, customer_id, con_customers(name)')
+    .select('id, site_number, job_number, work_order_number, stage, priority, gas_brand, program, status_detail, date_received, customer_id, con_customers(name)')
     .eq('company_id', company_id)
     .order('date_received', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -32,7 +32,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   if (sp.priority) query = query.eq('priority', sp.priority)
   if (sp.brand)    query = query.ilike('gas_brand', `%${sp.brand}%`)
   if (sp.program)  query = query.ilike('program', `%${sp.program}%`)
-  if (sp.q)        query = query.or(`site_number.ilike.%${sp.q}%,work_order_number.ilike.%${sp.q}%,scope_of_work.ilike.%${sp.q}%`)
+  const q = safeSearchTerm(sp.q)
+  if (q)           query = query.or(`site_number.ilike.%${q}%,work_order_number.ilike.%${q}%,scope_of_work.ilike.%${q}%`)
   // stage filter only applies in table view (kanban shows all stages as columns)
   if (view === 'table' && sp.stage) query = query.eq('stage', sp.stage)
 
@@ -117,7 +118,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                     {col.map(j => (
                       <Link key={j.id} href={`/construction/jobs/${j.id}`} className="block bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:border-blue-300 hover:shadow transition-all">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-sm text-gray-900">{j.site_number ?? '—'}</span>
+                          <span className="font-semibold text-sm text-gray-900">{j.job_number ?? j.site_number ?? "—"}</span>
                           <ConPriorityBadge priority={j.priority} />
                         </div>
                         {(j as any).con_customers?.name && <div className="text-xs text-gray-500 mt-0.5">{(j as any).con_customers.name}</div>}
@@ -152,7 +153,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                 {list.map(j => (
                   <ClickableRow key={j.id} href={`/construction/jobs/${j.id}`}>
                     <td className="px-4 py-3">
-                      <span className="font-medium text-gray-900">{j.site_number ?? '—'}</span>
+                      <span className="font-medium text-gray-900">{j.job_number ?? j.site_number ?? "—"}</span>
                       {j.gas_brand && <div className="text-xs text-gray-400">{j.gas_brand}</div>}
                     </td>
                     <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{(j as any).con_customers?.name ?? '—'}</td>

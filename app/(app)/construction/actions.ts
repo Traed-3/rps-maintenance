@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation'
 import {
   canWriteConstruction,
   computeDocumentTotals,
+  CON_DOC_CATEGORY_VALUES,
   type LineItemInput,
 } from '@/lib/construction'
 
@@ -420,7 +421,6 @@ export async function saveInvoice(id: string | null, _state: ActionState, formDa
     status:       str(formData.get('status')) ?? 'draft',
     prepared_by:  str(formData.get('prepared_by')) ?? 'Starsky Dodson, Construction Manager',
     sent_date:    str(formData.get('sent_date')),
-    due_date:     str(formData.get('due_date')),
     paid_date:    str(formData.get('paid_date')),
     ...totalsRest,
     invoice_grand_total: final_total,
@@ -469,8 +469,8 @@ export async function setInvoiceStatus(id: string, status: string): Promise<void
   const admin = createAdminClient()
   const today = new Date().toISOString().split('T')[0]
   const updates: Record<string, unknown> = { status }
+  // No receivables here: 'sent' means invoiced and that is the end state.
   if (status === 'sent') updates.sent_date = today
-  if (status === 'paid') updates.paid_date = today
   await admin.from('con_invoices').update(updates).eq('id', id).eq('company_id', profile.company_id)
   revalidatePath('/construction/invoices')
   revalidatePath(`/construction/invoices/${id}`)
@@ -845,6 +845,176 @@ export async function deleteJobLabor(id: string): Promise<void> {
 }
 
 // ============================================================
+// DAILY UPDATES (Phase 2) — ticket + techs/initials/hours -> man-hours
+// ============================================================
+export async function addDailyUpdate(jobId: string, _state: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!canWriteConstruction(profile)) return { error: 'No permission.' }
+
+  const workDescription = str(formData.get('work_description'))
+  // Tech rows arrive as parallel arrays: tech_name[], initials[], hours[]
+  const names = formData.getAll('tech_name').map((v) => (v as string)?.trim())
+  const inits = formData.getAll('initials').map((v) => (v as string)?.trim())
+  const hrs = formData.getAll('hours').map((v) => num(v))
+  const techs = names
+    .map((name, i) => ({ tech_name: name, initials: inits[i] || null, hours: hrs[i] ?? 0 }))
+    .filter((t) => t.tech_name)
+
+  if (!workDescription && techs.length === 0) {
+    return { error: 'Add a work description or at least one tech.' }
+  }
+
+  const admin = createAdminClient()
+
+  // The update row comes first so every file we file in the doc center can point
+  // back at it — that link is what lets an update show its own gallery.
+  const { data: du, error } = await admin.from('con_daily_updates').insert({
+    company_id: profile.company_id,
+    job_id: jobId,
+    work_date: str(formData.get('work_date')),
+    work_description: workDescription || '',
+    notes: str(formData.get('notes')),
+    submitted_by: profile.id,
+  }).select('id').single()
+  if (error) return { error: error.message }
+
+  // Upload a file to storage and file it in the doc center against this update.
+  const fileIt = async (f: File, category: string, docType: string) => {
+    const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+    const path = `${profile.company_id}/${jobId}/daily/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
+    const buf = Buffer.from(await f.arrayBuffer())
+    const { error: upErr } = await admin.storage.from('construction-docs')
+      .upload(path, buf, { contentType: f.type || 'application/octet-stream', upsert: true })
+    if (upErr) return { path: null as string | null, docId: null as string | null, error: upErr.message }
+    const { data: doc } = await admin.from('con_documents').insert({
+      company_id: profile.company_id, job_id: jobId, daily_update_id: du.id,
+      file_name: f.name, original_filename: f.name,
+      storage_path: path, category, doc_type: docType,
+      uploaded_by: profile.id, review_status: 'filed',
+    }).select('id').single()
+    return { path, docId: doc?.id ?? null, error: null as string | null }
+  }
+
+  const ticket = formData.get('ticket') as File | null
+  if (ticket && typeof ticket === 'object' && ticket.size > 0) {
+    const r = await fileIt(ticket, 'daily_updates', 'daily_ticket')
+    if (r.error) return { error: `Ticket upload failed: ${r.error}` }
+    await admin.from('con_daily_updates')
+      .update({ ticket_storage_path: r.path, ticket_document_id: r.docId })
+      .eq('id', du.id)
+  }
+
+  const photos = formData.getAll('photos').filter(
+    (f): f is File => typeof f === 'object' && f !== null && (f as File).size > 0,
+  )
+  for (const photo of photos) {
+    const r = await fileIt(photo, 'photos', 'photo')
+    if (r.error) return { error: `Photo upload failed: ${r.error}` }
+  }
+
+  if (techs.length > 0) {
+    const { error: tErr } = await admin.from('con_daily_update_techs').insert(
+      techs.map((t) => ({ company_id: profile.company_id, daily_update_id: du.id, ...t })),
+    )
+    if (tErr) return { error: tErr.message }
+  }
+
+  revalidatePath(`/construction/jobs/${jobId}`)
+  return null
+}
+
+// ── Disposables (Phase 2, increment 2) ──────────────────────
+// Rows arrive as parallel arrays, the same shape the tech rows use. Only
+// items the crew actually put a number against are stored, so a form with
+// three entries doesn't persist twenty empty ones.
+export async function addDisposablesForm(state: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!canWriteConstruction(profile)) return { error: 'No permission.' }
+
+  const jobId = str(formData.get('job_id'))
+  if (!jobId) return { error: 'Missing job.' }
+
+  const codes  = formData.getAll('item_code').map((v) => v as string)
+  const labels = formData.getAll('item_label').map((v) => v as string)
+  const amts   = formData.getAll('item_amount').map((v) => num(v))
+  const ords   = formData.getAll('item_ordered').map((v) => num(v))
+
+  const items = codes
+    .map((code, i) => ({ code, label: labels[i] ?? code, amount: amts[i] ?? null, ordered: ords[i] ?? null }))
+    .filter((r) => r.amount !== null || r.ordered !== null)
+
+  const xLabels = formData.getAll('extra_label').map((v) => (v as string)?.trim())
+  const xAmts   = formData.getAll('extra_amount').map((v) => num(v))
+  const xOrds   = formData.getAll('extra_ordered').map((v) => num(v))
+  xLabels.forEach((label, i) => {
+    if (label) items.push({ code: 'DSP-OTHER', label, amount: xAmts[i] ?? null, ordered: xOrds[i] ?? null })
+  })
+
+  const formNames  = formData.getAll('form_name').map((v) => v as string)
+  const formCopies = formData.getAll('form_copies').map((v) => num(v))
+  const forms = formNames
+    .map((name, i) => ({ name, copies: formCopies[i] ?? null }))
+    .filter((f) => f.copies !== null)
+
+  if (items.length === 0 && forms.length === 0) {
+    return { error: 'Enter a count against at least one item or form.' }
+  }
+
+  const admin = createAdminClient()
+  const { error } = await admin.from('con_disposables_forms').insert({
+    company_id: profile.company_id,
+    job_id: jobId,
+    tech_name: str(formData.get('tech_name')),
+    truck: str(formData.get('truck')),
+    form_date: str(formData.get('form_date')) || undefined,
+    items,
+    forms,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(`/construction/jobs/${jobId}`)
+  return null
+}
+
+export async function deleteDisposablesForm(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  const { data } = await admin.from('con_disposables_forms')
+    .select('job_id').eq('id', id).eq('company_id', profile.company_id).single()
+  await admin.from('con_disposables_forms').delete().eq('id', id).eq('company_id', profile.company_id)
+  if (data?.job_id) revalidatePath(`/construction/jobs/${data.job_id}`)
+}
+
+/** Crew-facing variant: the job comes from the form's dropdown, not the URL. */
+export async function addDailyUpdateForPickedJob(state: ActionState, formData: FormData): Promise<ActionState> {
+  const jobId = str(formData.get('job_id'))
+  if (!jobId) return { error: 'Pick a job first.' }
+  return addDailyUpdate(jobId, state, formData)
+}
+
+export async function deleteDailyUpdate(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  const { data } = await admin.from('con_daily_updates')
+    .select('job_id, ticket_storage_path, ticket_document_id').eq('id', id).eq('company_id', profile.company_id).single()
+  if (data?.ticket_storage_path) {
+    await admin.storage.from('construction-docs').remove([data.ticket_storage_path])
+  }
+  // Drop the doc-center row too, or it lingers pointing at the file we just removed.
+  if (data?.ticket_document_id) {
+    await admin.from('con_documents').delete()
+      .eq('id', data.ticket_document_id).eq('company_id', profile.company_id)
+  }
+  // techs cascade-delete via FK
+  await admin.from('con_daily_updates').delete().eq('id', id).eq('company_id', profile.company_id)
+  if (data?.job_id) revalidatePath(`/construction/jobs/${data.job_id}`)
+}
+
+// ============================================================
 // DOCUMENTS
 // ============================================================
 export async function deleteDocument(id: string): Promise<void> {
@@ -857,5 +1027,21 @@ export async function deleteDocument(id: string): Promise<void> {
     await admin.storage.from('construction-docs').remove([doc.storage_path])
   }
   await admin.from('con_documents').delete().eq('id', id).eq('company_id', profile.company_id)
+  if (doc?.job_id) revalidatePath(`/construction/jobs/${doc.job_id}`)
+}
+
+// File a document into a category and clear it from the review queue.
+// Used by the "Needs Review" page to approve/reassign an importer guess.
+export async function fileDocument(id: string, category: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  if (!CON_DOC_CATEGORY_VALUES.includes(category)) return
+  const admin = createAdminClient()
+  const { data: doc } = await admin.from('con_documents')
+    .select('job_id').eq('id', id).eq('company_id', profile.company_id).single()
+  await admin.from('con_documents')
+    .update({ category, review_status: 'filed' })
+    .eq('id', id).eq('company_id', profile.company_id)
+  revalidatePath('/construction/documents/review')
   if (doc?.job_id) revalidatePath(`/construction/jobs/${doc.job_id}`)
 }

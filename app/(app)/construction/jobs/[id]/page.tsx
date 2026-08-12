@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
-import { money, fmtDate, projectNotificationStatus } from '@/lib/construction'
+import { money, fmtDate, projectNotificationStatus, CON_DOC_CATEGORIES, docTypeLabel } from '@/lib/construction'
 import { NotificationCard } from '@/components/construction/notification-card'
 import { ConPriorityBadge, QuoteStatusBadge, InvoiceStatusBadge, MaterialStatusBadge } from '@/components/construction/badges'
 import { StageSelect } from '@/components/construction/stage-select'
@@ -11,16 +11,19 @@ import { MaterialStatusSelect } from '@/components/construction/material-status-
 import { ScheduleEntryForm } from '@/components/construction/schedule-entry-form'
 import { CloseoutChecklist } from '@/components/construction/closeout-checklist'
 import { JobLaborForm } from '@/components/construction/job-labor-form'
+import { DailyUpdateForm } from '@/components/construction/daily-update-form'
+import { DisposablesForm } from '@/components/construction/disposables-form'
 import { DocumentUpload } from '@/components/construction/document-upload'
 import { DeleteButton } from '@/components/construction/delete-button'
 import { AssignSubcontractor } from '@/components/construction/assign-subcontractor'
 import { Button } from '@/components/ui/button'
-import { Pencil, Plus, FileText } from 'lucide-react'
+import { Pencil, Plus, FileText, Image as ImageIcon } from 'lucide-react'
 import {
   changeJobStage, saveMaterial, setMaterialStatus, deleteMaterial,
   saveScheduleEntry, deleteScheduleEntry,
   toggleCloseoutTask, deleteCloseoutTask, addCloseoutTask, seedCloseoutTasks,
   addJobLabor, deleteJobLabor, deleteDocument,
+  addDailyUpdate, deleteDailyUpdate, addDisposablesForm, deleteDisposablesForm,
   assignSubcontractor, unassignSubcontractor,
 } from '../../actions'
 
@@ -30,6 +33,7 @@ const TABS = [
   { key: 'invoice',   label: 'Invoices' },
   { key: 'materials', label: 'Materials' },
   { key: 'schedule',  label: 'Schedule' },
+  { key: 'daily',     label: 'Daily Updates' },
   { key: 'subs',      label: 'Subcontractors' },
   { key: 'closeout',  label: 'Close-Out' },
   { key: 'documents', label: 'Documents' },
@@ -57,6 +61,7 @@ export default async function JobDetailPage({
   const [
     { data: quotes }, { data: invoices }, { data: materials },
     { data: schedule }, { data: closeout }, { data: labor }, { data: documents },
+    { data: dailyUpdates }, { data: disposables },
     { data: assignedSubs }, { data: allSubs }, { data: vendorRows },
   ] = await Promise.all([
     admin.from('con_quotes').select('id, quote_number, proposal_date, status, final_total').eq('job_id', id).order('created_at', { ascending: false }),
@@ -66,10 +71,28 @@ export default async function JobDetailPage({
     admin.from('con_closeout_tasks').select('*').eq('job_id', id).order('created_at'),
     admin.from('con_job_labor').select('*').eq('job_id', id).order('work_date', { ascending: false }),
     admin.from('con_documents').select('*').eq('job_id', id).order('created_at', { ascending: false }),
+    admin.from('con_daily_updates').select('*, con_daily_update_techs(*), con_documents(id, file_name, doc_type)').eq('job_id', id).order('work_date', { ascending: false }),
+    admin.from('con_disposables_forms').select('*').eq('job_id', id).order('form_date', { ascending: false }),
     admin.from('con_job_subcontractors').select('id, role, con_subcontractors(id, name, trade, phone)').eq('job_id', id),
     admin.from('con_subcontractors').select('id, name, trade').eq('company_id', company_id).eq('is_active', true).order('name'),
     admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
   ])
+
+  // Documents filed against the site's OTHER projects. A site often runs
+  // several jobs, and the importer could only tell which site a file came
+  // from, not which of that site's projects — so surface them here rather
+  // than let paperwork look missing.
+  const siteJobIds = job.site_number
+    ? ((await admin.from('con_jobs').select('id')
+        .eq('company_id', company_id).eq('site_number', job.site_number)).data ?? [])
+        .map((j) => j.id).filter((jid) => jid !== id)
+    : []
+  const { data: siteDocuments } = siteJobIds.length
+    ? await admin.from('con_documents')
+        .select('id, job_id, file_name, con_jobs(job_number, site_number)')
+        .in('job_id', siteJobIds)
+        .order('created_at', { ascending: false })
+    : { data: [] as any[] }
 
   const customerName = (job as any).con_customers?.name
   const managerName = (job as any).profiles?.full_name
@@ -83,7 +106,10 @@ export default async function JobDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-3 mt-2">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{job.site_number ?? 'Job'}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{job.job_number ?? job.site_number ?? 'Job'}</h1>
+              {job.job_number && job.site_number && (
+                <span className="text-sm text-gray-400">Site {job.site_number}</span>
+              )}
               <ConPriorityBadge priority={job.priority} />
             </div>
             <div className="text-sm text-gray-500 mt-1">
@@ -258,6 +284,133 @@ export default async function JobDetailPage({
         </div>
       )}
 
+      {/* ── DAILY UPDATES ──────────────────────────────────── */}
+      {tab === 'daily' && (() => {
+        const updates = (dailyUpdates ?? []) as any[]
+        const hoursOf = (u: any) => (u.con_daily_update_techs ?? []).reduce((s: number, t: any) => s + Number(t.hours ?? 0), 0)
+        const totalManHours = updates.reduce((s, u) => s + hoursOf(u), 0)
+        return (
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-900">Daily Updates ({updates.length})</h2>
+                <span className="text-sm text-gray-500">Total man-hours: <span className="font-semibold text-gray-800">{totalManHours.toFixed(2)}</span></span>
+              </div>
+              {!updates.length ? (
+                <p className="px-4 py-6 text-sm text-gray-400">No daily updates yet.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {updates.map((u) => {
+                    const techs = (u.con_daily_update_techs ?? []) as any[]
+                    return (
+                      <li key={u.id} className="px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-gray-900">{fmtDate(u.work_date)}</span>
+                              {u.update_number && <span className="text-xs text-gray-400">{u.update_number}</span>}
+                              <span className="text-xs font-medium text-gray-600">· {hoursOf(u).toFixed(2)} hrs</span>
+                            </div>
+                            {u.work_description && <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{u.work_description}</p>}
+                            {techs.length > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {techs.map((t: any, i: number) => (
+                                  <span key={t.id ?? i}>{i > 0 && ', '}{t.tech_name}{t.initials ? ` (${t.initials})` : ''} — {Number(t.hours ?? 0)}h</span>
+                                ))}
+                              </div>
+                            )}
+                            {u.notes && <p className="text-xs text-gray-400 mt-1">{u.notes}</p>}
+                            {(() => {
+                              // Everything filed against this update — the ticket plus any
+                              // job photos — so the crew can see it without leaving the tab.
+                              const files = ((u.con_documents ?? []) as any[])
+                              if (!files.length) return null
+                              return (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {files.map((f: any) => (
+                                    <a
+                                      key={f.id}
+                                      href={`/api/construction/documents/${f.id}`}
+                                      target="_blank"
+                                      rel="noopener"
+                                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                                    >
+                                      {f.doc_type === 'daily_ticket' ? <FileText size={12} /> : <ImageIcon size={12} />}
+                                      <span className="max-w-[10rem] truncate">
+                                        {f.doc_type === 'daily_ticket' ? 'Ticket' : f.file_name}
+                                      </span>
+                                    </a>
+                                  ))}
+                                </div>
+                              )
+                            })()}
+                          </div>
+                          {canWrite && <DeleteButton action={deleteDailyUpdate.bind(null, u.id)} confirm="Delete this daily update?" iconOnly />}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+            {canWrite && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <h3 className="font-semibold text-gray-900 mb-3">Add Daily Update</h3>
+                <DailyUpdateForm action={addDailyUpdate.bind(null, id)} />
+              </div>
+            )}
+
+            {/* ── Disposables ─────────────────────────────── */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-900">Disposables ({disposables?.length ?? 0})</h2>
+              </div>
+              {!disposables?.length ? (
+                <p className="px-4 py-4 text-sm text-gray-400">No disposables recorded.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {disposables.map((f: any) => {
+                    const items = (f.items ?? []) as any[]
+                    const forms = (f.forms ?? []) as any[]
+                    const reorder = items.filter((i) => Number(i.ordered) > 0)
+                    return (
+                      <li key={f.id} className="px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-gray-900">{fmtDate(f.form_date)}</span>
+                              {f.tech_name && <span className="text-xs text-gray-500">· {f.tech_name}</span>}
+                              {f.truck && <span className="text-xs text-gray-500">· Truck {f.truck}</span>}
+                              <span className="text-xs text-gray-400">· {items.length} items</span>
+                            </div>
+                            {reorder.length > 0 && (
+                              <p className="text-xs text-amber-700 mt-1">
+                                To order: {reorder.map((i) => `${i.label} (${i.ordered})`).join(', ')}
+                              </p>
+                            )}
+                            {forms.length > 0 && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Forms: {forms.map((x) => `${x.name} ${x.copies}`).join(' · ')}
+                              </p>
+                            )}
+                          </div>
+                          {canWrite && <DeleteButton action={deleteDisposablesForm.bind(null, f.id)} confirm="Delete this disposables form?" iconOnly />}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {canWrite && (
+                <div className="px-4 py-3 border-t border-gray-100">
+                  <DisposablesForm action={addDisposablesForm} jobId={id} />
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── SUBCONTRACTORS ─────────────────────────────────── */}
       {tab === 'subs' && (
         <div className="space-y-5">
@@ -300,16 +453,75 @@ export default async function JobDetailPage({
       )}
 
       {/* ── CLOSE-OUT ──────────────────────────────────────── */}
-      {tab === 'closeout' && (
-        <CloseoutChecklist
-          tasks={closeout ?? []}
-          canWrite={canWrite}
-          onToggle={toggleCloseoutTask}
-          onDelete={deleteCloseoutTask}
-          onAdd={addCloseoutTask.bind(null, id)}
-          onSeed={seedCloseoutTasks.bind(null, id)}
-        />
-      )}
+      {tab === 'closeout' && (() => {
+        // Everything already filed under Closeout for this job. The checklist
+        // says what the package needs; this says what has actually been
+        // collected, so nobody has to dig through Documents to find out.
+        const closeoutDocs = (documents ?? []).filter((d: any) => d.category === 'closeout')
+        const byType = new Map<string, any[]>()
+        for (const d of closeoutDocs) {
+          const k = d.doc_type || 'other'
+          byType.set(k, [...(byType.get(k) ?? []), d])
+        }
+        const groups = [...byType.entries()]
+          .map(([type, docs]) => ({ type, label: docTypeLabel(type) ?? 'Other closeout', docs }))
+          .sort((a, b) => a.label.localeCompare(b.label))
+
+        return (
+          <div className="space-y-5">
+            <CloseoutChecklist
+              tasks={closeout ?? []}
+              canWrite={canWrite}
+              onToggle={toggleCloseoutTask}
+              onDelete={deleteCloseoutTask}
+              onAdd={addCloseoutTask.bind(null, id)}
+              onSeed={seedCloseoutTasks.bind(null, id)}
+            />
+
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-900">Closeout Documents ({closeoutDocs.length})</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Everything filed under Closeout for this job, grouped by what it is.
+                </p>
+              </div>
+              {closeoutDocs.length === 0 ? (
+                <p className="px-4 py-6 text-sm text-gray-400">
+                  Nothing filed under Closeout yet for this job.
+                </p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {groups.map(g => (
+                    <div key={g.type} className="px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
+                        {g.label} ({g.docs.length})
+                      </p>
+                      <ul className="space-y-1">
+                        {g.docs.map((d: any) => (
+                          <li key={d.id} className="flex items-center gap-3 py-1">
+                            <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                            <a
+                              href={`/api/construction/documents/${d.id}`}
+                              target="_blank"
+                              rel="noopener"
+                              className="flex-1 text-sm font-medium text-blue-600 hover:text-blue-800 truncate"
+                            >
+                              {d.file_name}
+                            </a>
+                            {canWrite && (
+                              <DeleteButton action={deleteDocument.bind(null, d.id)} confirm="Delete this document?" iconOnly />
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── DOCUMENTS ──────────────────────────────────────── */}
       {tab === 'documents' && (
@@ -321,22 +533,79 @@ export default async function JobDetailPage({
             </div>
           )}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Documents ({documents?.length ?? 0})</h2></div>
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Documents ({documents?.length ?? 0})</h2>
+            </div>
             {!documents?.length ? (
               <p className="px-4 py-6 text-sm text-gray-400">No documents uploaded.</p>
             ) : (
-              <ul className="divide-y divide-gray-50">
-                {documents.map(d => (
-                  <li key={d.id} className="flex items-center gap-3 px-4 py-3">
-                    <FileText className="w-4 h-4 text-gray-400 shrink-0" />
-                    <a href={`/api/construction/documents/${d.id}`} target="_blank" rel="noopener" className="flex-1 text-sm font-medium text-blue-600 hover:text-blue-800 truncate">{d.file_name}</a>
-                    {d.doc_type && <span className="text-xs text-gray-400 capitalize">{d.doc_type.replace(/_/g, ' ')}</span>}
-                    {canWrite && <DeleteButton action={deleteDocument.bind(null, d.id)} confirm="Delete this document?" iconOnly />}
-                  </li>
-                ))}
-              </ul>
+              <div className="divide-y divide-gray-100">
+                {CON_DOC_CATEGORIES.map(cat => {
+                  const inCat = documents.filter(d => (d.category ?? 'other') === cat.value)
+                  if (!inCat.length) return null
+                  return (
+                    <div key={cat.value} className="px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{cat.label} ({inCat.length})</p>
+                      <ul className="space-y-1">
+                        {inCat.map(d => (
+                          <li key={d.id} className="flex items-center gap-3 py-1.5">
+                            <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                            <a href={`/api/construction/documents/${d.id}`} target="_blank" rel="noopener" className="flex-1 text-sm font-medium text-blue-600 hover:text-blue-800 truncate">{d.file_name}</a>
+                            {d.review_status === 'needs_review' && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">Needs review</span>}
+                            {docTypeLabel(d.doc_type) && <span className="text-xs text-gray-400 shrink-0">{docTypeLabel(d.doc_type)}</span>}
+                            {canWrite && <DeleteButton action={deleteDocument.bind(null, d.id)} confirm="Delete this document?" iconOnly />}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
+
+          {siteDocuments && siteDocuments.length > 0 && (() => {
+            // Documents now sit on the project they belong to, so listing every
+            // sibling file here would just bury this job's own paperwork. Show
+            // one line per sibling project instead.
+            const bySibling = new Map<string, { jobId: string; label: string; count: number }>()
+            for (const d of siteDocuments as any[]) {
+              const label = d.con_jobs?.job_number ?? 'Unnumbered project'
+              const cur = bySibling.get(d.job_id) ?? { jobId: d.job_id, label, count: 0 }
+              cur.count++
+              bySibling.set(d.job_id, cur)
+            }
+            const siblings = [...bySibling.values()].sort((a, b) => a.label.localeCompare(b.label))
+            return (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <h2 className="font-semibold text-gray-900">
+                    Other projects at site {job.site_number}
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {siteDocuments.length} more documents across {siblings.length}{' '}
+                    {siblings.length === 1 ? 'project' : 'projects'} at this site.
+                  </p>
+                </div>
+                <ul className="divide-y divide-gray-50">
+                  {siblings.map((s) => (
+                    <li key={s.jobId}>
+                      <Link
+                        href={`/construction/jobs/${s.jobId}?tab=documents`}
+                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50"
+                      >
+                        <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span className="flex-1 text-sm font-medium text-blue-700">{s.label}</span>
+                        <span className="text-xs text-gray-500">
+                          {s.count} {s.count === 1 ? 'document' : 'documents'} →
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })()}
         </div>
       )}
 

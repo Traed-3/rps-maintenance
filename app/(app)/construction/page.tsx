@@ -4,7 +4,7 @@ import { requireConstruction } from '@/lib/construction-guard'
 import { CON_STAGES, money, fmtDate, projectNotificationStatus } from '@/lib/construction'
 import { loadPermitGraph, computeAlerts, loadHashEnteredAt } from '@/lib/permits-data'
 import { InvoiceStatusBadge } from '@/components/construction/badges'
-import { Users, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck, FileCheck2, AlertTriangle } from 'lucide-react'
+import { Users, Contact, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck, Inbox, FileCheck2, AlertTriangle } from 'lucide-react'
 
 function iso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -20,7 +20,7 @@ export default async function ConstructionDashboard() {
 
   const [{ data: jobs }, { data: invoices }, { data: neededMaterials }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
     admin.from('con_jobs').select('id, site_number, stage, priority, project_start_date, notification_sent_at, notification_waived, con_customers(name)').eq('company_id', company_id),
-    admin.from('con_invoices').select('id, invoice_number, status, invoice_grand_total, due_date, con_customers(name)').eq('company_id', company_id).in('status', ['draft', 'sent', 'overdue']),
+    admin.from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, con_customers(name)').eq('company_id', company_id).neq('status', 'void'),
     admin.from('con_job_materials').select('id').eq('company_id', company_id).in('status', ['needed', 'ordered']),
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id).gte('schedule_date', iso(monday)).lte('schedule_date', iso(sunday)).order('schedule_date'),
     loadPermitGraph(admin, company_id),
@@ -39,18 +39,26 @@ export default async function ConstructionDashboard() {
   const needingInvoice = allJobs.filter(j => j.stage === 'invoicing')
   const waitingMaterial = allJobs.filter(j => j.stage === 'material_ordering')
 
-  const arRows = (invoices ?? []).map(inv => {
-    const overdue = inv.status === 'sent' && inv.due_date && inv.due_date < todayIso
-    return { ...inv, effectiveStatus: overdue ? 'overdue' : inv.status }
-  })
-  const arOpen = arRows.reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
-  const arOverdue = arRows.filter(r => r.effectiveStatus === 'overdue').reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
+  // Invoiced means done — accounting takes it from there. No A/R, nothing
+  // overdue. What's useful here is how much has been invoiced this year and
+  // what is still sitting unbilled.
+  const thisYear = String(new Date().getFullYear())
+  const invoiced = (invoices ?? []).filter(i => i.status !== 'draft')
+  const invoicedThisYear = invoiced
+    .filter(i => String(i.invoice_date ?? '').startsWith(thisYear))
+    .reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
+  const invoicedAllTime = invoiced.reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
+  const draftInvoices = (invoices ?? []).filter(i => i.status === 'draft')
+
+  const { count: reviewCount } = await admin.from('con_documents')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', company_id).eq('review_status', 'needs_review')
 
   const tiles = [
     { href: '/construction/jobs', label: 'Jobs', icon: HardHat, value: allJobs.length },
     { href: '/construction/permits', label: 'Permits', icon: FileCheck2, value: permitGraph.enriched.filter(p => p.requirement_status === 'Required').length, sub: 'tracked' },
     { href: '/construction/quotes', label: 'Quotes', icon: FileText },
-    { href: '/construction/invoices', label: 'Invoices', icon: Receipt, value: money(arOpen), sub: 'open A/R' },
+    { href: '/construction/invoices', label: 'Invoices', icon: Receipt, value: money(invoicedThisYear), sub: `invoiced ${thisYear}` },
     { href: '/construction/materials', label: 'Materials', icon: Package, value: neededMaterials?.length ?? 0, sub: 'to order/receive' },
     { href: '/construction/vendors', label: 'Vendors', icon: Truck },
     { href: '/construction/subcontractors', label: 'Subcontractors', icon: Hammer },
@@ -58,6 +66,8 @@ export default async function ConstructionDashboard() {
     { href: '/construction/trackers', label: 'Sunoco Trackers', icon: ClipboardList },
     { href: '/construction/checklist', label: 'Checklist', icon: ListChecks },
     { href: '/construction/customers', label: 'Customers', icon: Users },
+    { href: '/construction/contacts', label: 'Contacts', icon: Contact },
+    { href: '/construction/documents/review', label: 'Doc Review', icon: Inbox, value: reviewCount ?? 0, sub: 'to review' },
     { href: '/construction/reports', label: 'Reports', icon: BarChart3 },
   ]
 
@@ -158,20 +168,24 @@ export default async function ConstructionDashboard() {
           ))}
         </Panel>
 
-        {/* A/R */}
-        <Panel title="Open Invoices (A/R)" count={arRows.length} href="/construction/invoices">
-          {arRows.length === 0 ? <Empty>No open invoices.</Empty> : (
-            <>
-              {arOverdue > 0 && <p className="px-4 py-1.5 text-xs text-red-600 font-medium">{money(arOverdue)} overdue</p>}
-              {arRows.slice(0, 6).map(r => (
-                <Link key={r.id} href={`/construction/invoices/${r.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-gray-50">
-                  <span className="font-mono text-xs text-gray-700">{r.invoice_number}</span>
-                  <InvoiceStatusBadge status={r.effectiveStatus} />
-                  <span className="text-sm font-semibold text-gray-900 w-24 text-right">{money(r.invoice_grand_total)}</span>
-                </Link>
-              ))}
-            </>
+        {/* Invoiced — revenue, not receivables */}
+        <Panel title="Invoiced" count={invoiced.length} href="/construction/invoices">
+          <div className="px-4 py-3 border-b border-gray-50">
+            <p className="text-xs text-gray-500">{thisYear} to date</p>
+            <p className="text-xl font-semibold text-gray-900">{money(invoicedThisYear)}</p>
+            <p className="text-xs text-gray-400 mt-1">{money(invoicedAllTime)} all time</p>
+          </div>
+          {draftInvoices.length > 0 && (
+            <p className="px-4 py-1.5 text-xs text-amber-700 font-medium">
+              {draftInvoices.length} still in draft
+            </p>
           )}
+          {invoiced.slice(0, 5).map(r => (
+            <Link key={r.id} href={`/construction/invoices/${r.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-gray-50">
+              <span className="font-mono text-xs text-gray-700">{r.invoice_number}</span>
+              <span className="text-sm font-semibold text-gray-900 w-24 text-right">{money(r.invoice_grand_total)}</span>
+            </Link>
+          ))}
         </Panel>
       </div>
 
