@@ -222,12 +222,19 @@ export function fmtDate(d: string | null | undefined) {
 export const NOTIFY_WINDOW_OPEN_DAYS = 7
 export const NOTIFY_DEADLINE_DAYS = 3
 
-export type NotifyState = 'sent' | 'waived' | 'no_start' | 'scheduled' | 'send_now' | 'due_soon' | 'overdue' | 'started'
+export type NotifyState = 'sent' | 'waived' | 'no_start' | 'scheduled' | 'send_now' | 'due_soon' | 'overdue' | 'started' | 'not_applicable'
 
 type NotifyJob = {
   project_start_date: string | null
   notification_sent_at: string | null
   notification_waived: boolean | null
+  program?: string | null
+}
+
+// The Dispenser Replacement program does not send brand Project Notifications,
+// so those jobs are never "due" for one.
+export function programSkipsProjectNotification(program: string | null | undefined): boolean {
+  return /dispenser\s*replacement/i.test(program ?? '')
 }
 
 export type NotifyStatus = {
@@ -253,6 +260,7 @@ function dayDiff(a: Date, b: Date) { return Math.round((a.getTime() - b.getTime(
 
 export function projectNotificationStatus(job: NotifyJob, now = new Date()): NotifyStatus {
   const base = { startDate: job.project_start_date, windowOpen: null, deadline: null, daysToDeadline: null, isDue: false }
+  if (programSkipsProjectNotification(job.program)) return { ...base, state: 'not_applicable', label: 'Not required (Dispenser Replacement)', className: 'bg-gray-100 text-gray-500 border-gray-200' }
   if (job.notification_waived) return { ...base, state: 'waived', label: 'Not required', className: 'bg-gray-100 text-gray-500 border-gray-200' }
   if (job.notification_sent_at) return { ...base, state: 'sent', label: `Sent ${fmtDate(job.notification_sent_at)}`, className: 'bg-green-100 text-green-700 border-green-200' }
   if (!job.project_start_date) return { ...base, state: 'no_start', label: 'No start date', className: 'bg-gray-100 text-gray-400 border-gray-200' }

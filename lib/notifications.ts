@@ -360,7 +360,7 @@ export async function checkProjectNotifications(
 ): Promise<number> {
   const { data: jobs } = await admin
     .from('con_jobs')
-    .select('id, site_number, project_start_date, notification_sent_at, notification_waived')
+    .select('id, site_number, project_start_date, notification_sent_at, notification_waived, program')
     .eq('company_id', companyId)
     .not('project_start_date', 'is', null)
     .is('notification_sent_at', null)

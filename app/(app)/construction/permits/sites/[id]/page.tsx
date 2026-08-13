@@ -9,9 +9,10 @@ import { PermitStatusSelect } from '@/components/construction/permit-status-sele
 import { PermitRequirementSelect } from '@/components/construction/permit-requirement-select'
 import { ReadyToWorkButton } from '@/components/construction/ready-to-work-button'
 import { DeliverableUpload } from '@/components/construction/deliverable-upload'
+import { AddPermitForm } from '@/components/construction/add-permit-form'
 import { DeleteButton } from '@/components/construction/delete-button'
 import {
-  updatePermitStatus, setPermitRequirement, markReadyToWork, clearReadyToWork, deleteDeliverable,
+  updatePermitStatus, setPermitRequirement, markReadyToWork, clearReadyToWork, deleteDeliverable, addPermit,
 } from '../../actions'
 import { CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
 
@@ -130,6 +131,12 @@ export default async function SiteViewPage({ params }: { params: Promise<{ id: s
             )
           })}
         </ul>
+        {canWrite && projects[0] && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+            <p className="text-xs font-medium text-gray-500 mb-1.5">Add a permit (e.g. Building or Mechanical, if the jurisdiction wants one)</p>
+            <AddPermitForm action={addPermit.bind(null, projects[0].id)} />
+          </div>
+        )}
       </div>
 
       {/* Pending confirmation — Unknown placeholders awaiting a decision */}
