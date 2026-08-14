@@ -6,17 +6,8 @@ import { ScheduleMove } from '@/components/construction/schedule-move'
 import { DeleteButton } from '@/components/construction/delete-button'
 import { saveScheduleEntry, moveScheduleEntry, deleteScheduleEntry } from '../actions'
 import { stageMeta, CON_STAGES } from '@/lib/construction'
+import { iso, addDays, mondayOnOrBefore } from '@/lib/date'
 import { ChevronLeft, ChevronRight, Users, Plane } from 'lucide-react'
-
-// YYYY-MM-DD in local terms (no TZ shift)
-function iso(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x }
-function mondayOnOrBefore(d: Date) {
-  const x = new Date(d); const day = x.getDay() // 0 Sun … 6 Sat
-  x.setDate(x.getDate() + ((day === 0 ? -6 : 1) - day)); x.setHours(0, 0, 0, 0); return x
-}
 
 type Entry = {
   id: string; schedule_date: string; entry_type: string | null; job_id: string | null

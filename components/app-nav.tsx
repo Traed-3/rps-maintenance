@@ -15,6 +15,7 @@ import {
   Receipt,
   Home,
   HardHat,
+  CalendarDays,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -32,6 +33,8 @@ const navItems: NavItem[] = [
   // `construction: true` marks this link as gated to the Construction
   // allowlist (see CON_ALLOWED_USER_IDS) while the module is being refined.
   { href: '/construction', label: 'Construction', icon: HardHat, construction: true },
+  // Company-wide calendar that overlays Maintenance and Construction items.
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/expenses', label: 'Expenses', icon: Receipt },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
