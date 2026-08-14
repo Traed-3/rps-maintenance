@@ -131,21 +131,8 @@ for r in perm:
     )
 out.append("")
 
-# ---- Unknown placeholders for Dispenser Replacement projects ----
-out.append("-- Unknown Building/Mechanical placeholders (Dispenser Replacement rule)")
-ph = 0
-for sn, r in sites.items():
-    if r.get("Project Type") != "Dispenser Replacement":
-        continue
-    for ptype, code in [("Building", "BLDG"), ("Mechanical", "MECH")]:
-        if ptype in present.get(sn, set()):
-            continue
-        ph += 1
-        out.append(
-            "INSERT INTO con_permits (company_id,project_id,permit_key,permit_type,pulled_by,requirement_status,status) VALUES ("
-            f"{CID},{project_sub(sn)},{q(f'{sn}-{code}')},{q(ptype)},'RPS','Unknown','Not Started');"
-        )
-out.append("")
+# Building/Mechanical permits are added by hand on the rare occasions a
+# jurisdiction wants them, so we do NOT auto-create Unknown placeholders.
 
 # ---- deliverables (17) ----
 out.append(f"-- Deliverables ({len(deliv)})")
@@ -173,7 +160,6 @@ out.append("COMMIT;")
 open(f"{SP}/permits_seed.sql", "w").write("\n".join(out))
 print("sites:", len(sites))
 print("permits(spreadsheet):", len(perm))
-print("unknown placeholders:", ph)
 print("jurisdictions:", len(jur))
 print("deliverables:", len(deliv))
 print("wrote permits_seed.sql")

@@ -75,11 +75,9 @@ export function PermitProjectForm({
         <textarea name="scope" rows={2} className={inp} />
       </div>
 
-      {projectType === 'Dispenser Replacement' && (
-        <p className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-          Creating this will automatically open an Electrical permit (Hash Construction) plus Building &amp; Mechanical placeholders. Any requirement the jurisdiction already has on file is pre-filled.
-        </p>
-      )}
+      <p className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+        Creating this opens the Electrical permit (Hash Construction). Add a Building or Mechanical permit by hand from the site page if a jurisdiction asks for one.
+      </p>
 
       <Button type="submit" disabled={isPending}>{isPending ? 'Creating…' : 'Create Project'}</Button>
     </form>

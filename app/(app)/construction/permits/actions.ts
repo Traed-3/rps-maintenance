@@ -168,36 +168,52 @@ export async function createPermitProject(_state: ActionState, formData: FormDat
   if (proj.error) return { error: proj.error.message }
   const projectId = proj.data.id
 
-  if (projectType === 'Dispenser Replacement') {
-    // Pull the jurisdiction's known inheritance flags to pre-fill requirements.
-    let reqBuilding = 'Unknown', reqMech = 'Unknown'
-    if (site.jurisdiction_id) {
-      const { data: jur } = await admin.from('con_jurisdictions')
-        .select('requires_building_with_electrical, requires_mechanical_with_electrical')
-        .eq('id', site.jurisdiction_id).single()
-      if (jur?.requires_building_with_electrical === 'yes') reqBuilding = 'Required'
-      else if (jur?.requires_building_with_electrical === 'no') reqBuilding = 'Not Required'
-      if (jur?.requires_mechanical_with_electrical === 'yes') reqMech = 'Required'
-      else if (jur?.requires_mechanical_with_electrical === 'no') reqMech = 'Not Required'
-    }
-    await admin.from('con_permits').insert([
-      { company_id: profile.company_id, project_id: projectId, permit_key: `${siteNumber}-ELEC`,
-        permit_type: 'Electrical', pulled_by: defaultPulledBy('Electrical'), requirement_status: 'Required', status: 'Not Started' },
-      { company_id: profile.company_id, project_id: projectId, permit_key: `${siteNumber}-BLDG`,
-        permit_type: 'Building', pulled_by: defaultPulledBy('Building'), requirement_status: reqBuilding, status: 'Not Started' },
-      { company_id: profile.company_id, project_id: projectId, permit_key: `${siteNumber}-MECH`,
-        permit_type: 'Mechanical', pulled_by: defaultPulledBy('Mechanical'), requirement_status: reqMech, status: 'Not Started' },
-    ])
-  } else {
-    await admin.from('con_permits').insert({
-      company_id: profile.company_id, project_id: projectId, permit_key: `${siteNumber}-ELEC`,
-      permit_type: 'Electrical', pulled_by: defaultPulledBy('Electrical'), requirement_status: 'Required', status: 'Not Started',
-    })
-  }
+  // Every project starts with its Electrical permit. Building/Mechanical
+  // permits are added manually on the rare occasions a jurisdiction wants them.
+  await admin.from('con_permits').insert({
+    company_id: profile.company_id, project_id: projectId, permit_key: `${siteNumber}-ELEC`,
+    permit_type: 'Electrical', pulled_by: defaultPulledBy('Electrical'), requirement_status: 'Required', status: 'Not Started',
+  })
 
   revalidatePath('/construction/permits')
   revalidatePath('/construction')
   redirect(`/construction/permits/sites/${site.id}`)
+}
+
+// ── Add a permit to an existing project (e.g. a Building or Mechanical
+//    permit a jurisdiction turns out to want) ──
+export async function addPermit(projectId: string, _state: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Not authenticated.' }
+  if (!canWriteConstruction(profile)) return { error: 'No permission.' }
+  const admin = createAdminClient()
+
+  const { data: project } = await admin.from('con_permit_projects')
+    .select('id, site_id').eq('id', projectId).eq('company_id', profile.company_id).single()
+  if (!project) return { error: 'Project not found.' }
+  const { data: site } = await admin.from('con_permit_sites')
+    .select('site_number').eq('id', project.site_id).single()
+
+  const permitType = str(formData.get('permit_type')) ?? 'Building'
+  const codeMap: Record<string, string> = {
+    Electrical: 'ELEC', Building: 'BLDG', Mechanical: 'MECH', Plumbing: 'PLMB', Fire: 'FIRE', Zoning: 'ZON', Other: 'OTH',
+  }
+  const key = site?.site_number ? `${site.site_number}-${codeMap[permitType] ?? 'OTH'}` : null
+
+  const { error } = await admin.from('con_permits').insert({
+    company_id: profile.company_id,
+    project_id: projectId,
+    permit_key: key,
+    permit_type: permitType,
+    pulled_by: str(formData.get('pulled_by')) ?? defaultPulledBy(permitType),
+    requirement_status: str(formData.get('requirement_status')) ?? 'Required',
+    status: 'Not Started',
+    notes: str(formData.get('notes')),
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/construction/permits')
+  revalidatePath(`/construction/permits/sites/${project.site_id}`)
+  return null
 }
 
 // ── Mark a project ready to work — gated in code, not just the UI ──

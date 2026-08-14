@@ -57,12 +57,13 @@ to prove out.
    (click the row) and expand **History** under the permit — you'll see a dated line saying who
    changed it and from what to what. Every status change is logged; nothing is overwritten silently.
 
-3. **★ Test C — auto-resolve.** On the Permit Board, find **`33701-ELEC`** and set its Status to
-   **"Permit In-Hand."** Now click that row to open site **33701**. The building and mechanical
-   permits that were "pending confirmation" have automatically flipped to **Not Required**, and each
-   one's History says **"auto-resolved: electrical issued."** (Once the electrical is in hand, the
-   jurisdiction didn't want anything else — the software does this for you so nothing hides behind an
-   issued electrical permit.)
+3. **★ Test C — auto-resolve.** Open site **`33701`**. Under the Permits section, use **Add a
+   permit** to add a **Building** permit and set it to **Unknown** (this is the rare manual case —
+   normally you'd only do this if a jurisdiction asked). Now set the site's **`33701-ELEC`** status to
+   **"Permit In-Hand."** The Unknown building permit automatically flips to **Not Required**, and its
+   History says **"auto-resolved: electrical issued."** (Once the electrical is in hand, the
+   jurisdiction didn't want anything else — the software clears it so nothing hides behind an issued
+   electrical permit.)
 
 4. **★ Test D — license mismatch alert.** Go to **Construction** (the dashboard). One of the four
    amber alert boxes is **"License mismatch."** Click it. It flags **`34688-ELEC`** — because Hash
@@ -93,12 +94,15 @@ to prove out.
   nothing already in the system was changed or overwritten.
 - **Loaded all 25 permits exactly as the spreadsheet had them**, all marked "Required" — those are
   the 25 board rows.
-- **For every Dispenser Replacement I auto-added hidden Building + Mechanical "Unknown" placeholders**
-  (39 in total). These stay off the main board but power the top alert and the auto-resolve rule.
+- **New projects only open the Electrical permit automatically.** Building and Mechanical permits are
+  added by hand from the site page (**Add a permit**) on the rare occasions a jurisdiction wants one —
+  nothing extra is created for you.
 - **Permit Due Date is always the work date minus 28 days** and is calculated, never typed.
-- **The main board shows only confirmed "Required" permits.** The "Unknown" ones appear only in each
-  site's "Pending confirmation" box and in the top alert — so the board stays clean at 25.
+- **The main board shows only confirmed "Required" permits.** Anything you mark "Unknown" waits in that
+  site's "Pending confirmation" box and drives the top alert — so the board stays clean at 25.
 - **Electrical defaults to Hash Construction; Building and Mechanical default to RPS.**
+- **The Dispenser Replacement program does not send brand Project Notifications**, so those jobs no
+  longer show up on the "Project Notifications to send" list.
 - **28960 (Frederick County, MD) was left without a linked jurisdiction** because that office isn't on
   your 16-office Jurisdiction Contacts tab. Everything else matched to one of the 16.
 - **Culpeper permits point at the "Culpeper (town vs county)" record** — its cheat sheet reminds you to

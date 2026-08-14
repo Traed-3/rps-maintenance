@@ -19,7 +19,7 @@ export default async function ConstructionDashboard() {
   const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
 
   const [{ data: jobs }, { data: invoices }, { data: neededMaterials }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
-    admin.from('con_jobs').select('id, site_number, stage, priority, project_start_date, notification_sent_at, notification_waived, con_customers(name)').eq('company_id', company_id),
+    admin.from('con_jobs').select('id, site_number, stage, priority, project_start_date, notification_sent_at, notification_waived, program, con_customers(name)').eq('company_id', company_id),
     admin.from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, con_customers(name)').eq('company_id', company_id).neq('status', 'void'),
     admin.from('con_job_materials').select('id').eq('company_id', company_id).in('status', ['needed', 'ordered']),
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id).gte('schedule_date', iso(monday)).lte('schedule_date', iso(sunday)).order('schedule_date'),
