@@ -38,19 +38,24 @@ export type ConProfile = { id: string; company_id: string; role: string }
 // ── Pipeline stages ─────────────────────────────────────────
 // Ordered the way a job moves through the shop. `className` follows the
 // existing Green/Yellow/Orange/Red/Gray badge bands used elsewhere in the app.
+// Stages, labels, and colors mirror the RPS Master Schedule "COLOR CODE" key
+// exactly (the legend in the first rows of the workbook's Job List tab). The
+// hex values are the resolved fill colors from that key, so a stage badge in
+// the app reads the same as the cell color in the spreadsheet.
 export const CON_STAGES = [
-  { value: 'survey',            label: 'Survey',            className: 'bg-gray-100 text-gray-700 border-gray-200' },
-  { value: 'quoting',           label: 'Quoting',           className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { value: 'permitting',        label: 'Permitting',        className: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
-  { value: 'material_ordering', label: 'Material Ordering', className: 'bg-amber-100 text-amber-800 border-amber-200' },
-  { value: 'needs_scheduled',   label: 'Needs Scheduled',   className: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-  { value: 'scheduled',         label: 'Scheduled',         className: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
-  { value: 'in_progress',       label: 'In Progress',       className: 'bg-green-100 text-green-800 border-green-200' },
-  { value: 'on_hold',           label: 'On Hold',           className: 'bg-orange-100 text-orange-800 border-orange-200' },
-  { value: 'return_needed',     label: 'Return Needed',     className: 'bg-red-100 text-red-800 border-red-200' },
-  { value: 'close_out',         label: 'Close-Out',         className: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { value: 'invoicing',         label: 'Invoicing',         className: 'bg-teal-100 text-teal-800 border-teal-200' },
-  { value: 'complete',          label: 'Complete',          className: 'bg-green-200 text-green-900 border-green-300' },
+  { value: 'survey',            label: 'Survey',              className: 'bg-gray-100 text-gray-700 border border-gray-300' },
+  { value: 'quoting',           label: 'Quote',               className: 'bg-[#ED7D31] text-white border border-black/10' },
+  { value: 'permitting',        label: 'Permitting',          className: 'bg-[#223962] text-white border border-black/10' },
+  { value: 'material_ordering', label: 'Waiting on Material', className: 'bg-[#F8CBAD] text-[#7c2d12] border border-black/10' },
+  { value: 'needs_scheduled',   label: 'Needs Scheduled',     className: 'bg-[#FFC000] text-[#3d2e00] border border-black/10' },
+  { value: 'scheduled',         label: 'Scheduled',           className: 'bg-[#385624] text-white border border-black/10' },
+  { value: 'in_progress',       label: 'In-Progress',         className: 'bg-[#04FAE1] text-[#083b38] border border-black/10' },
+  { value: 'on_hold',           label: 'On Hold',             className: 'bg-[#C00000] text-white border border-black/10' },
+  { value: 'return_needed',     label: 'Return Needed',       className: 'bg-[#FF0000] text-white border border-black/10' },
+  { value: 'close_out',         label: 'Close Out/Invoice',   className: 'bg-[#7030A0] text-white border border-black/10' },
+  { value: 'invoicing',         label: 'Need Invoiced',       className: 'bg-[#FFFF00] text-[#3d3d00] border border-black/10' },
+  { value: 'complete',          label: 'Complete',            className: 'bg-[#A9CE91] text-[#1a3d1a] border border-black/10' },
+  { value: 'overspill_program', label: 'Overspill Program',   className: 'bg-[#9DC3E6] text-[#0c2d48] border border-black/10' },
 ] as const
 
 export const CON_STAGE_VALUES = CON_STAGES.map(s => s.value)
