@@ -16,6 +16,7 @@ import {
   Home,
   HardHat,
   CalendarDays,
+  Fuel,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -33,6 +34,8 @@ const navItems: NavItem[] = [
   // `construction: true` marks this link as gated to the Construction
   // allowlist (see CON_ALLOWED_USER_IDS) while the module is being refined.
   { href: '/construction', label: 'Construction', icon: HardHat, construction: true },
+  // 7-Eleven / Wawa / Sunoco service calls, synced from rpdispatcher + rpinvoicing.
+  { href: '/service', label: 'Service Dispatch', icon: Fuel },
   // Company-wide calendar that overlays Maintenance and Construction items.
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/expenses', label: 'Expenses', icon: Receipt },
