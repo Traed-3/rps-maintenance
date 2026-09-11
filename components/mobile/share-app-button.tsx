@@ -8,8 +8,8 @@ export function ShareAppButton() {
   async function handleShare() {
     const url = window.location.origin + '/mobile'
     const shareData = {
-      title: 'RPS Maintenance',
-      text: 'Add the RPS Maintenance shortcut to your phone',
+      title: 'RPS Intelligence',
+      text: 'Add the RPS Intelligence shortcut to your phone',
       url,
     }
 

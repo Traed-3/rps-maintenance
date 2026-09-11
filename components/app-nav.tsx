@@ -78,7 +78,7 @@ export default function AppNav({ email, role, userId }: { email: string; role?: 
         <div className="px-4 py-4 border-b border-gray-200">
           <Image
             src="/logo-full-v2.png"
-            alt="RPS Maintenance"
+            alt="RPS Intelligence"
             width={220}
             height={100}
             priority
