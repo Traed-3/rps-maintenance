@@ -23,3 +23,16 @@ jobs:
           curl --fail-with-body -sS --max-time 90 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/gmail/sync?secret=$CRON_SECRET&max=30"
+
+
+  svc-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Hit /api/svc/gmail-sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body -sS --max-time 90 \
+            -w "\nHTTP %{http_code}\n" \
+            "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET"
