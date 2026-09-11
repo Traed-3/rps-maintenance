@@ -158,10 +158,17 @@ async function syncDispatcher(): Promise<SvcSyncResult['dispatcher']> {
 
 // ── Pass 2: rpinvoicing → update completion status ──────────────────────────
 
-const STATUS_FOR: Record<string, string> = {
-  complete:   'completed',
-  rtn:        'rtn_needed',
-  incomplete: 'in_progress',
+// The office reviews and archives every rpinvoicing message almost immediately
+// (the "reviewed" label), so its Inbox is essentially always empty — searching
+// in:inbox here would silently process nothing. Search all mail instead.
+// Scoped to a recent window for now (this mailbox has 120k+ messages of
+// history); a wider one-time historical backfill is a separate, deliberate step.
+function recentWindowQuery(days: number): string {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  const y = since.getFullYear()
+  const m = String(since.getMonth() + 1).padStart(2, '0')
+  const d = String(since.getDate()).padStart(2, '0')
+  return `-in:spam -in:trash after:${y}/${m}/${d}`
 }
 
 async function syncInvoicing(): Promise<SvcSyncResult['invoicing']> {
@@ -170,7 +177,7 @@ async function syncInvoicing(): Promise<SvcSyncResult['invoicing']> {
 
   let msgIds: string[]
   try {
-    msgIds = await listMessages('invoicing', 'in:inbox', 200)
+    msgIds = await listMessages('invoicing', recentWindowQuery(14), 200)
   } catch (e: any) {
     result.errors.push(`List failed: ${e.message}`)
     return result
