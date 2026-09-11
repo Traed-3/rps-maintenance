@@ -32,13 +32,17 @@ export default async function ServiceDispatchPage({
   const { data: { user } } = await supabase.auth.getUser()
   const admin = createAdminClient()
 
+  const { data: profile } = await admin
+    .from('profiles').select('company_id').eq('id', user!.id).single()
+  const companyId = profile!.company_id
+
   // Summary counts — the supervisor view: what's overdue, what needs a return trip,
   // what's unbilled. These drive the cards above the table.
   const [{ count: openCount }, { count: rtnCount }, { count: rejectedCount }, { data: staleCandidates }] = await Promise.all([
-    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).in('status', OPEN_STATUSES),
-    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)'),
-    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('invoice_rejected', true),
-    admin.from('svc_work_orders').select('id, last_update_at').in('status', OPEN_STATUSES).not('last_update_at', 'is', null),
+    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).in('status', OPEN_STATUSES),
+    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)'),
+    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('invoice_rejected', true),
+    admin.from('svc_work_orders').select('id, last_update_at').eq('company_id', companyId).in('status', OPEN_STATUSES).not('last_update_at', 'is', null),
   ])
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
   const staleCount = (staleCandidates ?? []).filter(w => new Date(w.last_update_at as string).getTime() < sevenDaysAgo).length
@@ -51,6 +55,7 @@ export default async function ServiceDispatchPage({
       return_trip_needed, invoice_rejected,
       svc_technicians(full_name)
     `)
+    .eq('company_id', companyId)
     .order('last_update_at', { ascending: true })
     .limit(200)
 

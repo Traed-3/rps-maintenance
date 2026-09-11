@@ -23,6 +23,11 @@ import {
   parseDispatchEmail, parseCompletionEmail,
 } from '@/lib/svc-work-order-parser'
 
+// Single-company deployment today (same constant used by the fleet gmail-sync) —
+// every write is scoped to it so app-level company_id filtering (see app/(app)/service/*)
+// actually has something to match against instead of silently returning nothing.
+const COMPANY_ID = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
+
 export interface SvcSyncResult {
   dispatcher: { processed: number; created: number; updated: number; skipped: number; errors: string[] }
   invoicing:  { processed: number; matched: number; noMatch: number; skipped: number; errors: string[] }
@@ -111,6 +116,7 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
             : null
 
           const { data: inserted } = await admin.from('svc_work_orders').insert({
+            company_id:         COMPANY_ID,
             source_portal:      parsed.sourcePortal,
             client_name:        parsed.clientName,
             portal_wo_number:   parsed.woNumber,
@@ -138,6 +144,7 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
       }
 
       await admin.from('svc_gmail_imports').insert({
+        company_id:         COMPANY_ID,
         mailbox:            'rpdispatcher',
         gmail_message_id:   msgId,
         sender:             senderEmail,
@@ -249,6 +256,7 @@ export async function syncInvoicing(maxResults = 50): Promise<SvcSyncResult['inv
       }
 
       await admin.from('svc_gmail_imports').insert({
+        company_id:         COMPANY_ID,
         mailbox:            'rpinvoicing',
         gmail_message_id:   msgId,
         sender:              techEmail,

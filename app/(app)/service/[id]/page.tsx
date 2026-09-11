@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { WorkOrderStatusBadge, PriorityBadge, clientLabel } from '@/components/svc/work-order-badges'
 
 function fmt(d: string | null): string {
@@ -15,12 +16,19 @@ export default async function WorkOrderDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
   const admin = createAdminClient()
+
+  const { data: profile } = await admin
+    .from('profiles').select('company_id').eq('id', user!.id).single()
 
   const { data: w } = await admin
     .from('svc_work_orders')
     .select(`*, svc_technicians(full_name, personal_email)`)
     .eq('id', id)
+    .eq('company_id', profile!.company_id)
     .single()
 
   if (!w) notFound()
