@@ -40,13 +40,13 @@ async function alreadyLogged(admin: ReturnType<typeof createAdminClient>, mailbo
 
 // ── Pass 1: rpdispatcher → create/update work orders ───────────────────────
 
-async function syncDispatcher(): Promise<SvcSyncResult['dispatcher']> {
+export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['dispatcher']> {
   const admin = createAdminClient()
   const result = { processed: 0, created: 0, updated: 0, skipped: 0, errors: [] as string[] }
 
   let msgIds: string[]
   try {
-    msgIds = await listMessages('dispatcher', 'in:inbox', 200)
+    msgIds = await listMessages('dispatcher', 'in:inbox', maxResults)
   } catch (e: any) {
     result.errors.push(`List failed: ${e.message}`)
     return result
@@ -171,13 +171,13 @@ function recentWindowQuery(days: number): string {
   return `-in:spam -in:trash after:${y}/${m}/${d}`
 }
 
-async function syncInvoicing(): Promise<SvcSyncResult['invoicing']> {
+export async function syncInvoicing(maxResults = 50): Promise<SvcSyncResult['invoicing']> {
   const admin = createAdminClient()
   const result = { processed: 0, matched: 0, noMatch: 0, skipped: 0, errors: [] as string[] }
 
   let msgIds: string[]
   try {
-    msgIds = await listMessages('invoicing', recentWindowQuery(14), 200)
+    msgIds = await listMessages('invoicing', recentWindowQuery(14), maxResults)
   } catch (e: any) {
     result.errors.push(`List failed: ${e.message}`)
     return result
@@ -267,11 +267,3 @@ async function syncInvoicing(): Promise<SvcSyncResult['invoicing']> {
   return result
 }
 
-// ── Entry point ───────────────────────────────────────────────────────────────
-
-export async function syncServiceDispatch(): Promise<SvcSyncResult> {
-  // Dispatcher pass first — invoicing matches need the work order to already exist.
-  const dispatcher = await syncDispatcher()
-  const invoicing = await syncInvoicing()
-  return { dispatcher, invoicing }
-}

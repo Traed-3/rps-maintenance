@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { syncServiceDispatch } from '@/lib/svc-gmail-sync'
+import { syncDispatcher, syncInvoicing } from '@/lib/svc-gmail-sync'
 
-// Allow enough time to walk both mailboxes.
+// Allow enough time for a full pass through one mailbox.
 export const maxDuration = 60
 
 /**
- * GET /api/svc/gmail-sync
+ * GET /api/svc/gmail-sync?pass=dispatcher|invoicing[&max=N]
  *
- * Reads rpdispatcher@gmail.com (new/updated work orders) and
- * rpinvoicing@gmail.com (tech completion notes, incl. RTN) and syncs both
- * into svc_work_orders. Same auth pattern as /api/gmail/sync.
+ * Each pass gets its own request (and its own 60s budget) — running both
+ * mailboxes in one call proved too slow once invoicing had real volume
+ * (first live run hit a 504 partway through). Omitting `pass` runs both
+ * sequentially, which is fine for a manual/low-volume check but NOT what
+ * the 15-min cron should do.
  */
 export async function GET(request: NextRequest) {
   const authHeader  = request.headers.get('authorization')
@@ -24,9 +26,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const pass = request.nextUrl.searchParams.get('pass')
+  const maxResults = parseInt(request.nextUrl.searchParams.get('max') ?? '50', 10)
+
   try {
-    const result = await syncServiceDispatch()
-    return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), ...result })
+    if (pass === 'dispatcher') {
+      const dispatcher = await syncDispatcher(maxResults)
+      return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), dispatcher })
+    }
+    if (pass === 'invoicing') {
+      const invoicing = await syncInvoicing(maxResults)
+      return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), invoicing })
+    }
+
+    const dispatcher = await syncDispatcher(maxResults)
+    const invoicing = await syncInvoicing(maxResults)
+    return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), dispatcher, invoicing })
   } catch (e: any) {
     console.error('[Service Dispatch Sync Error]', e)
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
