@@ -75,7 +75,7 @@ export async function assignImport(importId: string, assetId: string) {
   if (!asset) return
 
   await convert(admin, profile.company_id, importId, asset.id, asset.unit_number)
-  revalidatePath('/review'); revalidatePath('/tickets'); revalidatePath('/dashboard')
+  revalidatePath('/review'); revalidatePath('/tickets'); revalidatePath('/dashboard'); revalidatePath('/maintenance')
 }
 
 /** Create a brand-new asset from the email, then create the ticket. */
@@ -106,7 +106,7 @@ export async function createAssetForImport(importId: string, unitNumber: string,
   }
 
   await convert(admin, profile.company_id, importId, assetId, finalUnit)
-  revalidatePath('/review'); revalidatePath('/tickets'); revalidatePath('/dashboard'); revalidatePath('/assets')
+  revalidatePath('/review'); revalidatePath('/tickets'); revalidatePath('/dashboard'); revalidatePath('/maintenance'); revalidatePath('/assets')
 }
 
 /** Dismiss an email — no ticket created. */

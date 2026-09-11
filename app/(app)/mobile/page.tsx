@@ -179,9 +179,9 @@ export default async function MobilePage() {
           </Link>
 
           {isManager ? (
-            <Link href="/dashboard" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+            <Link href="/maintenance" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
               <span className="text-3xl">📊</span>
-              <span className="text-sm font-semibold text-gray-800">Dashboard</span>
+              <span className="text-sm font-semibold text-gray-800">Maintenance Dashboard</span>
             </Link>
           ) : (
             <Link href="/tickets" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">

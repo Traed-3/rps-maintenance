@@ -63,7 +63,7 @@ export async function clockIn() {
 
   revalidatePath('/shop')
   revalidatePath('/shop/clock')
-  revalidatePath('/dashboard')
+  revalidatePath('/dashboard'); revalidatePath('/maintenance')
 }
 
 // ── Clock Out ─────────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ export async function clockOut() {
 
   revalidatePath('/shop')
   revalidatePath('/shop/clock')
-  revalidatePath('/dashboard')
+  revalidatePath('/dashboard'); revalidatePath('/maintenance')
 }
 
 // ── Update Status ─────────────────────────────────────────────────────────────
@@ -167,5 +167,5 @@ export async function updateStatus(
 
   revalidatePath('/shop')
   revalidatePath('/shop/status')
-  revalidatePath('/dashboard')
+  revalidatePath('/dashboard'); revalidatePath('/maintenance')
 }

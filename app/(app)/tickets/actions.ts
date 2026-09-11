@@ -197,7 +197,7 @@ export async function assignTicket(id: string, assigneeId: string | null) {
   }
 
   revalidatePath('/tickets')
-  revalidatePath('/dashboard')
+  revalidatePath('/dashboard'); revalidatePath('/maintenance')
   revalidatePath(`/tickets/${id}`)
 }
 
@@ -249,7 +249,7 @@ export async function deleteTicket(id: string): Promise<void> {
   await admin.from('repair_tickets').delete().eq('id', id).eq('company_id', profile.company_id)
 
   revalidatePath('/tickets')
-  revalidatePath('/dashboard')
+  revalidatePath('/dashboard'); revalidatePath('/maintenance')
   redirect('/tickets')
 }
 
@@ -312,7 +312,7 @@ export async function addComment(_state: ActionState, formData: FormData): Promi
       await admin.from('repair_tickets').update(updates)
         .eq('id', ticketId).eq('company_id', profile.company_id)
       revalidatePath('/tickets')
-      revalidatePath('/dashboard')
+      revalidatePath('/dashboard'); revalidatePath('/maintenance')
     }
   }
 

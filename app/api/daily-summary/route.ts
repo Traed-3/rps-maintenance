@@ -224,7 +224,7 @@ export async function GET(request: NextRequest) {
       subject: `Daily shop summary — ${context.period.end}`,
       title:   `Shop update: ${context.period.start} → ${context.period.end}`,
       message: mdToInlineHtml(content),
-      link:    '/dashboard',
+      link:    '/maintenance',
     })
 
     return NextResponse.json({ ok: true, summary_id: saved?.id, period: context.period, sync_errors })
