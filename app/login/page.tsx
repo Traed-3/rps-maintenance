@@ -9,7 +9,7 @@ export default function LoginPage() {
         {/* Logo / brand */}
         <div className="text-center mb-8">
           <Image
-            src="/logo-full-v2.png"
+            src="/logo-full-v3.png"
             alt="RPS Intelligence"
             width={320}
             height={145}
