@@ -10,7 +10,7 @@ const CON_DONE_STAGES = ['closed', 'invoiced', 'complete', 'completed']
 type Figure = { label: string; value: string | number; alert?: boolean }
 
 function DepartmentCard({
-  href, title, icon: Icon, accent, figures, allClear,
+  href, title, icon: Icon, accent, figures, allClear, badge,
 }: {
   href: string
   title: string
@@ -18,12 +18,19 @@ function DepartmentCard({
   accent: string
   figures: Figure[]
   allClear?: boolean
+  badge?: string
 }) {
   return (
     <Link
       href={href}
-      className="group bg-white rounded-2xl border border-gray-200 shadow-sm p-5 hover:border-blue-300 hover:shadow-md transition-all flex flex-col"
+      className="group relative bg-white rounded-2xl border border-gray-200 shadow-sm p-5 hover:border-blue-300 hover:shadow-md transition-all flex flex-col"
     >
+      {badge && (
+        <span className="absolute -top-2.5 left-4 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 shadow-sm">
+          {badge}
+        </span>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2.5">
           <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${accent}`}>
@@ -174,6 +181,7 @@ export default async function CompanyDashboardPage() {
             title="Construction"
             icon={HardHat}
             accent="bg-amber-100 text-amber-700"
+            badge="Currently being built"
             figures={[
               { label: 'Active Jobs', value: conJobsActive },
               { label: 'Docs to Review', value: conReviewCount, alert: !!conReviewCount },
