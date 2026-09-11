@@ -34,12 +34,12 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // /api/gmail/* and /api/daily-summary routes enforce their own auth
-  // (CRON_SECRET for the cron path, session check for in-app dry_run), so
-  // they bypass the global login redirect.
+  // /api/gmail/*, /api/svc/* and /api/daily-summary routes enforce their own
+  // auth (CRON_SECRET for the cron paths, session check for in-app dry_run),
+  // so they bypass the global login redirect.
   // PWA manifest + service worker must be reachable without a session so the
   // app icon / theme apply on install.
-  const publicPaths = ['/login', '/auth/', '/api/auth/', '/api/gmail/', '/api/daily-summary', '/manifest.webmanifest', '/sw.js']
+  const publicPaths = ['/login', '/auth/', '/api/auth/', '/api/gmail/', '/api/svc/', '/api/daily-summary', '/manifest.webmanifest', '/sw.js']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
 
   if (!user && !isPublic) {
