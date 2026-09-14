@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/keys'
+import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -68,15 +69,23 @@ export async function GET(request: NextRequest) {
 
   console.log('[callback] session established for user:', data.user.id)
 
+  // Where this user lands after login — NULL/unset falls back to /dashboard.
+  // Filled in below once we know which profile row (existing or newly linked) applies.
+  let landingPage: string | null = null
+
   // Ensure a profile row exists for this user (first-login setup)
   try {
     const admin = createAdminClient()
 
     const { data: existingProfile } = await admin
       .from('profiles')
-      .select('id')
+      .select('id, default_landing_page')
       .eq('id', data.user.id)
       .maybeSingle()
+
+    if (existingProfile) {
+      landingPage = existingProfile.default_landing_page
+    }
 
     if (!existingProfile) {
       // Check if there's a pre-created profile for this email (added via "Add Employee" flow)
@@ -85,7 +94,7 @@ export async function GET(request: NextRequest) {
       // auth user ID, we fall back to an email lookup.
       const userEmail = data.user.email?.toLowerCase()
       const { data: emailProfile } = userEmail
-        ? await admin.from('profiles').select('id').eq('email', userEmail).maybeSingle()
+        ? await admin.from('profiles').select('id, default_landing_page').eq('email', userEmail).maybeSingle()
         : { data: null }
 
       if (emailProfile && emailProfile.id !== data.user.id) {
@@ -93,8 +102,11 @@ export async function GET(request: NextRequest) {
         // update it to the actual auth user ID so it matches going forward.
         // (This is rare; normally Supabase links identities and keeps the same UUID.)
         await admin.from('profiles').update({ id: data.user.id }).eq('id', emailProfile.id)
+        landingPage = emailProfile.default_landing_page
         console.log('[callback] linked pre-created profile to auth user')
-      } else if (!emailProfile) {
+      } else if (emailProfile) {
+        landingPage = emailProfile.default_landing_page
+      } else {
         // Genuinely new user — create their profile
         const { data: company } = await admin
           .from('companies')
@@ -134,6 +146,14 @@ export async function GET(request: NextRequest) {
     // Non-fatal — the app layout has a belt-and-suspenders fallback
     console.error('[callback] profile creation error:', profileErr)
   }
+
+  // redirectToDashboard already carries the session cookies (set via the
+  // cookies.setAll closure above) — just repoint its Location if this user
+  // has a non-default landing page configured in Settings > Users.
+  const finalPath = landingPage && (VALID_LANDING_PAGES as readonly string[]).includes(landingPage)
+    ? landingPage
+    : DEFAULT_LANDING_PAGE
+  redirectToDashboard.headers.set('location', `${origin}${finalPath}`)
 
   return redirectToDashboard
 }

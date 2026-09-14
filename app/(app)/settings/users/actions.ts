@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
 
 async function getProfile() {
   const supabase = await createClient()
@@ -67,6 +68,22 @@ export async function updateUserRole(userId: string, newRole: string) {
 
   const admin = createAdminClient()
   await admin.from('profiles').update({ role: newRole })
+    .eq('id', userId)
+    .eq('company_id', profile.company_id)
+
+  revalidatePath('/settings/users')
+}
+
+export async function updateDefaultLandingPage(userId: string, page: string) {
+  const profile = await getProfile()
+  if (!profile || !['owner', 'manager'].includes(profile.role)) return
+
+  // Store NULL for the default choice rather than the literal path — keeps
+  // "/dashboard" as the one true fallback if that route ever moves.
+  const value = page === DEFAULT_LANDING_PAGE || !VALID_LANDING_PAGES.includes(page as any) ? null : page
+
+  const admin = createAdminClient()
+  await admin.from('profiles').update({ default_landing_page: value })
     .eq('id', userId)
     .eq('company_id', profile.company_id)
 

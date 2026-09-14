@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/keys'
+import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
 
 // In Next.js 16, middleware is renamed to "proxy" and uses the nodejs runtime.
 export async function proxy(request: NextRequest) {
@@ -47,7 +48,17 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user && pathname === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    // Rare path (already-signed-in user manually hits /login, e.g. an old
+    // bookmark) — still honor their configured landing page for consistency
+    // with the actual login flows in auth/callback and the password form.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('default_landing_page')
+      .eq('id', user.id)
+      .maybeSingle()
+    const page = profile?.default_landing_page
+    const landingPage = page && (VALID_LANDING_PAGES as readonly string[]).includes(page) ? page : DEFAULT_LANDING_PAGE
+    return NextResponse.redirect(new URL(landingPage, request.url))
   }
 
   return supabaseResponse

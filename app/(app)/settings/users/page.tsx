@@ -3,10 +3,11 @@ import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { UserRoleForm } from './user-role-form'
+import { LandingPageForm } from './landing-page-form'
 import { AddEmployeeForm } from './add-employee-form'
 import { DeleteUserButton } from './delete-user-button'
 import { EditUserButton } from './edit-user-button'
-import { updateUserRole, toggleUserActive } from './actions'
+import { updateUserRole, toggleUserActive, updateDefaultLandingPage } from './actions'
 
 export default async function UsersSettingsPage() {
   const supabase = await createClient()
@@ -20,7 +21,7 @@ export default async function UsersSettingsPage() {
 
   const { data: users } = await admin
     .from('profiles')
-    .select('id, full_name, email, phone, role, is_active, created_at')
+    .select('id, full_name, email, phone, role, is_active, created_at, default_landing_page')
     .eq('company_id', profile!.company_id)
     .order('full_name')
 
@@ -54,6 +55,7 @@ export default async function UsersSettingsPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Email</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Role</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 hidden md:table-cell">Lands On</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
               {profile!.role === 'owner' && <th className="px-4 py-3" />}
             </tr>
@@ -68,6 +70,10 @@ export default async function UsersSettingsPage() {
               async function handleToggleActive() {
                 'use server'
                 await toggleUserActive(u.id, !u.is_active)
+              }
+              async function handleLandingPageChange(page: string) {
+                'use server'
+                await updateDefaultLandingPage(u.id, page)
               }
               return (
                 <tr key={u.id} className="hover:bg-gray-50">
@@ -91,6 +97,13 @@ export default async function UsersSettingsPage() {
                         disabled={isSelf}
                       />
                     )}
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    <LandingPageForm
+                      userId={u.id}
+                      currentPage={(u as any).default_landing_page ?? null}
+                      onUpdate={handleLandingPageChange}
+                    />
                   </td>
                   <td className="px-4 py-3">
                     {isSelf ? (
