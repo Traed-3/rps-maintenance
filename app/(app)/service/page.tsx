@@ -10,7 +10,6 @@ const STATUS_FILTERS = [
   { value: '',           label: 'All Open' },
   { value: 'new',        label: 'New' },
   { value: 'in_progress', label: 'In Progress' },
-  { value: 'rtn_needed', label: 'Return Trip Needed' },
   { value: 'completed',  label: 'Completed' },
 ]
 
@@ -24,9 +23,12 @@ const CLIENT_FILTERS = [
 export default async function ServiceDispatchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; client?: string; view?: string }>
+  searchParams: Promise<{ status?: string; client?: string; view?: string; priority?: string; rtn?: string }>
 }) {
-  const { status = '', client = '', view = '' } = await searchParams
+  const { status = '', client = '', view = '', priority = '', rtn = '' } = await searchParams
+  const priorityOnly = priority === '1'
+  const rtnOnly = rtn === '1'
+  const staleOnly = view === 'stale'
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -59,7 +61,7 @@ export default async function ServiceDispatchPage({
     .order('last_update_at', { ascending: true })
     .limit(200)
 
-  if (view === 'stale') {
+  if (staleOnly) {
     query = query.in('status', OPEN_STATUSES).lt('last_update_at', new Date(sevenDaysAgo).toISOString())
   } else if (status) {
     query = query.eq('status', status)
@@ -67,8 +69,53 @@ export default async function ServiceDispatchPage({
     query = query.in('status', OPEN_STATUSES)
   }
   if (client) query = query.eq('source_portal', client)
+  // Quick filters — combine on top of whatever status/client view is active.
+  if (priorityOnly) query = query.eq('priority_rank', 1)
+  if (rtnOnly) query = query.eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)')
 
   const { data: workOrders } = await query
+
+  // Build a href for a quick-filter pill that toggles one param on/off while
+  // preserving whatever else is already selected (status/client/etc).
+  function quickFilterHref(param: 'priority' | 'rtn' | 'view', onValue: string) {
+    const params = new URLSearchParams()
+    if (status) params.set('status', status)
+    if (client) params.set('client', client)
+    if (priorityOnly) params.set('priority', '1')
+    if (rtnOnly) params.set('rtn', '1')
+    if (staleOnly) params.set('view', 'stale')
+
+    const isActive = param === 'view' ? staleOnly : param === 'priority' ? priorityOnly : rtnOnly
+    if (isActive) {
+      params.delete(param)
+    } else {
+      params.set(param, onValue)
+    }
+    const qs = params.toString()
+    return `/service${qs ? `?${qs}` : ''}`
+  }
+
+  // Same idea for the status/client pills below — keep whatever quick filters
+  // (priority/rtn/stale) are active when switching status or client.
+  function statusFilterHref(statusValue: string) {
+    const params = new URLSearchParams()
+    if (statusValue) params.set('status', statusValue)
+    if (client) params.set('client', client)
+    if (priorityOnly) params.set('priority', '1')
+    if (rtnOnly) params.set('rtn', '1')
+    const qs = params.toString()
+    return `/service${qs ? `?${qs}` : ''}`
+  }
+  function clientFilterHref(clientValue: string) {
+    const params = new URLSearchParams()
+    if (clientValue) params.set('client', clientValue)
+    if (status) params.set('status', status)
+    if (priorityOnly) params.set('priority', '1')
+    if (rtnOnly) params.set('rtn', '1')
+    if (staleOnly) params.set('view', 'stale')
+    const qs = params.toString()
+    return `/service${qs ? `?${qs}` : ''}`
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -82,6 +129,42 @@ export default async function ServiceDispatchPage({
         </p>
       </div>
 
+      {/* Quick filters — the three things a supervisor needs to jump to first thing.
+          Independent toggles: combine freely with each other and with the status/client
+          pills below (e.g. P1 + Wawa + RTN all at once). */}
+      <div className="flex gap-1.5 flex-wrap mb-4">
+        <Link
+          href={quickFilterHref('priority', '1')}
+          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+            priorityOnly
+              ? 'bg-red-600 text-white border-red-600'
+              : 'bg-white text-red-700 border-red-200 hover:border-red-400'
+          }`}
+        >
+          🔴 P1 / Critical
+        </Link>
+        <Link
+          href={quickFilterHref('rtn', '1')}
+          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+            rtnOnly
+              ? 'bg-red-600 text-white border-red-600'
+              : 'bg-white text-red-700 border-red-200 hover:border-red-400'
+          }`}
+        >
+          ⟲ RTN — Return Trip Needed
+        </Link>
+        <Link
+          href={quickFilterHref('view', 'stale')}
+          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+            staleOnly
+              ? 'bg-amber-600 text-white border-amber-600'
+              : 'bg-white text-amber-700 border-amber-200 hover:border-amber-400'
+          }`}
+        >
+          ⏰ Updates Needed (7+ Days)
+        </Link>
+      </div>
+
       {/* Supervisor summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <Link href="/service" className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-blue-300 transition-colors">
@@ -92,7 +175,7 @@ export default async function ServiceDispatchPage({
           <p className={`text-2xl font-bold ${staleCount ? 'text-red-600' : 'text-gray-900'}`}>{staleCount}</p>
           <p className="text-xs text-gray-500 mt-0.5">No Update in 7+ Days</p>
         </Link>
-        <Link href="/service?status=rtn_needed" className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-red-300 transition-colors">
+        <Link href="/service?rtn=1" className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-red-300 transition-colors">
           <p className={`text-2xl font-bold ${rtnCount ? 'text-red-600' : 'text-gray-900'}`}>{rtnCount ?? 0}</p>
           <p className="text-xs text-gray-500 mt-0.5">Return Trip Needed</p>
         </Link>
@@ -107,9 +190,9 @@ export default async function ServiceDispatchPage({
         {STATUS_FILTERS.map((f) => (
           <Link
             key={f.value}
-            href={`/service?status=${f.value}${client ? `&client=${client}` : ''}`}
+            href={statusFilterHref(f.value)}
             className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-              status === f.value && !view
+              status === f.value && !staleOnly
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
             }`}
@@ -124,7 +207,7 @@ export default async function ServiceDispatchPage({
         {CLIENT_FILTERS.map((f) => (
           <Link
             key={f.value}
-            href={`/service?client=${f.value}${status ? `&status=${status}` : ''}`}
+            href={clientFilterHref(f.value)}
             className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
               client === f.value
                 ? 'bg-gray-800 text-white border-gray-800'
