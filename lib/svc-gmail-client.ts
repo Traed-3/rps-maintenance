@@ -98,14 +98,25 @@ export async function markAsRead(mailbox: SvcMailbox, id: string): Promise<void>
   })
 }
 
-/**
- * Archive a message (remove it from the inbox). Not called yet — reserved for
- * the "auto-archive completed dispatches" step, which comes after the sync
- * itself is verified working.
- */
+/** Archive a single message (remove it from the inbox). */
 export async function archiveMessage(mailbox: SvcMailbox, id: string): Promise<void> {
   const token = await getAccessToken(mailbox)
   await fetch(`${GMAIL_API}/messages/${id}/modify`, {
+    method:  'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ removeLabelIds: ['INBOX'] }),
+  })
+}
+
+/**
+ * Archive an entire thread (every message in it, not just one) — used when
+ * archiving a work order from the Service Dispatch dashboard, since a single
+ * dispatch is often split across more than one message (e.g. "assigned" +
+ * "dispatched") that share a thread.
+ */
+export async function archiveThread(mailbox: SvcMailbox, threadId: string): Promise<void> {
+  const token = await getAccessToken(mailbox)
+  await fetch(`${GMAIL_API}/threads/${threadId}/modify`, {
     method:  'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body:    JSON.stringify({ removeLabelIds: ['INBOX'] }),

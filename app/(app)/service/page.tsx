@@ -1,8 +1,7 @@
 import Link from 'next/link'
-import { ClickableRow } from '@/components/clickable-row'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-import { WorkOrderStatusBadge, PriorityBadge, StaleBadge, clientLabel } from '@/components/svc/work-order-badges'
+import { WorkOrderArchiveTable } from '@/components/svc/work-order-archive-table'
 
 const OPEN_STATUSES = ['new', 'dispatched', 'accepted', 'en_route', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
 
@@ -37,6 +36,7 @@ export default async function ServiceDispatchPage({
   const priorityRank = priority ? parseInt(priority, 10) : null
   const rtnOnly = rtn === '1'
   const staleOnly = view === 'stale'
+  const showArchived = view === 'archived'
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -49,10 +49,10 @@ export default async function ServiceDispatchPage({
   // Summary counts — the supervisor view: what's overdue, what needs a return trip,
   // what's unbilled. These drive the cards above the table.
   const [{ count: openCount }, { count: rtnCount }, { count: rejectedCount }, { data: staleCandidates }] = await Promise.all([
-    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).in('status', OPEN_STATUSES),
-    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)'),
-    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('invoice_rejected', true),
-    admin.from('svc_work_orders').select('id, last_update_at').eq('company_id', companyId).in('status', OPEN_STATUSES).not('last_update_at', 'is', null),
+    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('archived', false).in('status', OPEN_STATUSES),
+    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('archived', false).eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)'),
+    admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('archived', false).eq('invoice_rejected', true),
+    admin.from('svc_work_orders').select('id, last_update_at').eq('company_id', companyId).eq('archived', false).in('status', OPEN_STATUSES).not('last_update_at', 'is', null),
   ])
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
   const staleCount = (staleCandidates ?? []).filter(w => new Date(w.last_update_at as string).getTime() < sevenDaysAgo).length
@@ -62,32 +62,38 @@ export default async function ServiceDispatchPage({
     .select(`
       id, source_portal, client_name, portal_wo_number, site_number, site_name,
       priority_raw, priority_rank, status, last_update_at, dispatched_at,
-      return_trip_needed, invoice_rejected,
+      return_trip_needed, invoice_rejected, archived, archived_at, archived_reason,
       svc_technicians(full_name)
     `)
     .eq('company_id', companyId)
-    .order('last_update_at', { ascending: true })
     .limit(200)
 
-  if (staleOnly) {
-    query = query.in('status', OPEN_STATUSES).lt('last_update_at', new Date(sevenDaysAgo).toISOString())
-  } else if (status) {
-    query = query.eq('status', status)
+  if (showArchived) {
+    query = query.eq('archived', true).order('archived_at', { ascending: false })
   } else {
-    query = query.in('status', OPEN_STATUSES)
+    query = query.eq('archived', false).order('last_update_at', { ascending: true })
+    if (staleOnly) {
+      query = query.in('status', OPEN_STATUSES).lt('last_update_at', new Date(sevenDaysAgo).toISOString())
+    } else if (status) {
+      query = query.eq('status', status)
+    } else {
+      query = query.in('status', OPEN_STATUSES)
+    }
+    // Quick filters — combine on top of whatever status view is active.
+    if (priorityRank) query = query.eq('priority_rank', priorityRank)
+    if (rtnOnly) query = query.eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)')
   }
   if (client) query = query.eq('source_portal', client)
-  // Quick filters — combine on top of whatever status/client view is active.
-  if (priorityRank) query = query.eq('priority_rank', priorityRank)
-  if (rtnOnly) query = query.eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)')
 
   const { data: workOrders } = await query
 
   // Every quick/status/client pill below is built from the same current selection,
   // so clicking one preserves whatever else is already active (e.g. P1 + Wawa + RTN).
-  function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; stale?: boolean }) {
+  // `view` is single-select: '' | 'stale' | 'archived'.
+  function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; view?: string }) {
     const next = {
-      status, client, priority: priorityRank ? String(priorityRank) : '', rtn: rtnOnly, stale: staleOnly,
+      status, client, priority: priorityRank ? String(priorityRank) : '',
+      rtn: rtnOnly, view: showArchived ? 'archived' : staleOnly ? 'stale' : '',
       ...overrides,
     }
     const params = new URLSearchParams()
@@ -95,7 +101,7 @@ export default async function ServiceDispatchPage({
     if (next.client) params.set('client', next.client)
     if (next.priority) params.set('priority', next.priority)
     if (next.rtn) params.set('rtn', '1')
-    if (next.stale) params.set('view', 'stale')
+    if (next.view) params.set('view', next.view)
     const qs = params.toString()
     return `/service${qs ? `?${qs}` : ''}`
   }
@@ -107,10 +113,13 @@ export default async function ServiceDispatchPage({
     return buildHref({ rtn: !rtnOnly })
   }
   function staleFilterHref() {
-    return buildHref({ stale: !staleOnly })
+    return buildHref({ view: staleOnly ? '' : 'stale' })
+  }
+  function archivedFilterHref() {
+    return buildHref({ view: showArchived ? '' : 'archived', status: '', rtn: false, priority: null })
   }
   function statusFilterHref(statusValue: string) {
-    return buildHref({ status: statusValue, stale: false })
+    return buildHref({ status: statusValue, view: '' })
   }
   function clientFilterHref(clientValue: string) {
     return buildHref({ client: clientValue })
@@ -131,40 +140,43 @@ export default async function ServiceDispatchPage({
       {/* Quick filters — the things a supervisor needs to jump to first thing.
           Independent toggles: combine freely with each other and with the status/client
           pills below (e.g. P1 + Wawa + RTN all at once). Priority is single-select
-          (a work order only has one priority); RTN and Updates Needed toggle on their own. */}
-      <div className="flex gap-1.5 flex-wrap mb-4">
-        {PRIORITY_FILTERS.map((f) => (
+          (a work order only has one priority); RTN and Updates Needed toggle on their own.
+          None of these apply in the Archived view, so they're hidden there. */}
+      {!showArchived && (
+        <div className="flex gap-1.5 flex-wrap mb-4">
+          {PRIORITY_FILTERS.map((f) => (
+            <Link
+              key={f.rank}
+              href={priorityFilterHref(f.rank)}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+                priorityRank === f.rank ? f.activeClass : f.idleClass
+              }`}
+            >
+              {f.label}
+            </Link>
+          ))}
           <Link
-            key={f.rank}
-            href={priorityFilterHref(f.rank)}
+            href={rtnFilterHref()}
             className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
-              priorityRank === f.rank ? f.activeClass : f.idleClass
+              rtnOnly
+                ? 'bg-red-800 text-white border-red-800'
+                : 'bg-white text-red-700 border-red-200 hover:border-red-400'
             }`}
           >
-            {f.label}
+            ⟲ RTN — Return Trip Needed
           </Link>
-        ))}
-        <Link
-          href={rtnFilterHref()}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
-            rtnOnly
-              ? 'bg-red-800 text-white border-red-800'
-              : 'bg-white text-red-700 border-red-200 hover:border-red-400'
-          }`}
-        >
-          ⟲ RTN — Return Trip Needed
-        </Link>
-        <Link
-          href={staleFilterHref()}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
-            staleOnly
-              ? 'bg-gray-800 text-white border-gray-800'
-              : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
-          }`}
-        >
-          ⏰ Updates Needed (7+ Days)
-        </Link>
-      </div>
+          <Link
+            href={staleFilterHref()}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+              staleOnly
+                ? 'bg-gray-800 text-white border-gray-800'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
+            }`}
+          >
+            ⏰ Updates Needed (7+ Days)
+          </Link>
+        </div>
+      )}
 
       {/* Supervisor summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -187,99 +199,60 @@ export default async function ServiceDispatchPage({
       </div>
 
       {/* Status filter pills */}
-      <div className="flex gap-1.5 flex-wrap mb-3">
-        {STATUS_FILTERS.map((f) => (
-          <Link
-            key={f.value}
-            href={statusFilterHref(f.value)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-              status === f.value && !staleOnly
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
-            }`}
-          >
-            {f.label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Client filter pills */}
-      <div className="flex gap-1.5 flex-wrap mb-5">
-        {CLIENT_FILTERS.map((f) => (
-          <Link
-            key={f.value}
-            href={clientFilterHref(f.value)}
-            className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
-              client === f.value
-                ? 'bg-gray-800 text-white border-gray-800'
-                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-            }`}
-          >
-            {f.label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Table */}
-      {!workOrders?.length ? (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
-          <p className="text-gray-400 text-sm">No work orders match this view.</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 w-28">WO #</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Site</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Client</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Priority</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Tech</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Last Update</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {workOrders.map((w) => (
-                  <ClickableRow key={w.id} href={`/service/${w.id}`}>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{w.portal_wo_number}</td>
-                    <td className="px-4 py-3">
-                      <Link href={`/service/${w.id}`} className="font-medium text-gray-900 hover:text-blue-600">
-                        {w.site_number ?? '—'}
-                      </Link>
-                      {w.site_name && <div className="text-xs text-gray-400">{w.site_name}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">
-                      {clientLabel(w.source_portal, w.client_name)}
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
-                      <PriorityBadge priorityRaw={w.priority_raw} priorityRank={w.priority_rank} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1 items-start">
-                        <WorkOrderStatusBadge status={w.status} />
-                        <StaleBadge lastUpdateAt={w.last_update_at} status={w.status} />
-                        {w.invoice_rejected && (
-                          <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">Invoice Rejected</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 hidden lg:table-cell text-xs">
-                      {(w as any).svc_technicians?.full_name ?? <span className="text-gray-400">Unassigned</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">
-                      {w.last_update_at
-                        ? new Date(w.last_update_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                        : '—'}
-                    </td>
-                  </ClickableRow>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {!showArchived && (
+        <div className="flex gap-1.5 flex-wrap mb-3">
+          {STATUS_FILTERS.map((f) => (
+            <Link
+              key={f.value}
+              href={statusFilterHref(f.value)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                status === f.value && !staleOnly
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              {f.label}
+            </Link>
+          ))}
         </div>
       )}
+
+      {/* Client filter pills + Archived toggle */}
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
+        <div className="flex gap-1.5 flex-wrap">
+          {CLIENT_FILTERS.map((f) => (
+            <Link
+              key={f.value}
+              href={clientFilterHref(f.value)}
+              className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+                client === f.value
+                  ? 'bg-gray-800 text-white border-gray-800'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              {f.label}
+            </Link>
+          ))}
+        </div>
+        <Link
+          href={archivedFilterHref()}
+          className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+            showArchived
+              ? 'bg-gray-800 text-white border-gray-800'
+              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+          }`}
+        >
+          🗄 {showArchived ? 'Back to Active' : 'Archived'}
+        </Link>
+      </div>
+
+      {showArchived && (
+        <p className="text-xs text-gray-500 mb-3">
+          Archived work orders — hidden from the active dashboard. Click ↩ to bring one back.
+        </p>
+      )}
+
+      <WorkOrderArchiveTable workOrders={workOrders ?? []} showArchived={showArchived} />
     </div>
   )
 }
