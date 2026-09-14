@@ -20,13 +20,21 @@ const CLIENT_FILTERS = [
   { value: 'it_service_desk', label: 'Sunoco' },
 ]
 
+// Rank 1 = most urgent .. 4 = routine (matches PriorityBadge's PRIORITY_CLASS).
+const PRIORITY_FILTERS = [
+  { rank: 1, label: 'P1 · Critical',  activeClass: 'bg-red-600 text-white border-red-600',       idleClass: 'bg-white text-red-700 border-red-200 hover:border-red-400' },
+  { rank: 2, label: 'P2 · Emergency', activeClass: 'bg-orange-600 text-white border-orange-600', idleClass: 'bg-white text-orange-700 border-orange-200 hover:border-orange-400' },
+  { rank: 3, label: 'P3 · Rush',      activeClass: 'bg-amber-600 text-white border-amber-600',   idleClass: 'bg-white text-amber-700 border-amber-200 hover:border-amber-400' },
+  { rank: 4, label: 'P4 · Routine',   activeClass: 'bg-blue-600 text-white border-blue-600',     idleClass: 'bg-white text-blue-700 border-blue-200 hover:border-blue-400' },
+]
+
 export default async function ServiceDispatchPage({
   searchParams,
 }: {
   searchParams: Promise<{ status?: string; client?: string; view?: string; priority?: string; rtn?: string }>
 }) {
   const { status = '', client = '', view = '', priority = '', rtn = '' } = await searchParams
-  const priorityOnly = priority === '1'
+  const priorityRank = priority ? parseInt(priority, 10) : null
   const rtnOnly = rtn === '1'
   const staleOnly = view === 'stale'
 
@@ -70,51 +78,42 @@ export default async function ServiceDispatchPage({
   }
   if (client) query = query.eq('source_portal', client)
   // Quick filters — combine on top of whatever status/client view is active.
-  if (priorityOnly) query = query.eq('priority_rank', 1)
+  if (priorityRank) query = query.eq('priority_rank', priorityRank)
   if (rtnOnly) query = query.eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)')
 
   const { data: workOrders } = await query
 
-  // Build a href for a quick-filter pill that toggles one param on/off while
-  // preserving whatever else is already selected (status/client/etc).
-  function quickFilterHref(param: 'priority' | 'rtn' | 'view', onValue: string) {
-    const params = new URLSearchParams()
-    if (status) params.set('status', status)
-    if (client) params.set('client', client)
-    if (priorityOnly) params.set('priority', '1')
-    if (rtnOnly) params.set('rtn', '1')
-    if (staleOnly) params.set('view', 'stale')
-
-    const isActive = param === 'view' ? staleOnly : param === 'priority' ? priorityOnly : rtnOnly
-    if (isActive) {
-      params.delete(param)
-    } else {
-      params.set(param, onValue)
+  // Every quick/status/client pill below is built from the same current selection,
+  // so clicking one preserves whatever else is already active (e.g. P1 + Wawa + RTN).
+  function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; stale?: boolean }) {
+    const next = {
+      status, client, priority: priorityRank ? String(priorityRank) : '', rtn: rtnOnly, stale: staleOnly,
+      ...overrides,
     }
+    const params = new URLSearchParams()
+    if (next.status) params.set('status', next.status)
+    if (next.client) params.set('client', next.client)
+    if (next.priority) params.set('priority', next.priority)
+    if (next.rtn) params.set('rtn', '1')
+    if (next.stale) params.set('view', 'stale')
     const qs = params.toString()
     return `/service${qs ? `?${qs}` : ''}`
   }
 
-  // Same idea for the status/client pills below — keep whatever quick filters
-  // (priority/rtn/stale) are active when switching status or client.
+  function priorityFilterHref(rank: number) {
+    return buildHref({ priority: priorityRank === rank ? null : String(rank) })
+  }
+  function rtnFilterHref() {
+    return buildHref({ rtn: !rtnOnly })
+  }
+  function staleFilterHref() {
+    return buildHref({ stale: !staleOnly })
+  }
   function statusFilterHref(statusValue: string) {
-    const params = new URLSearchParams()
-    if (statusValue) params.set('status', statusValue)
-    if (client) params.set('client', client)
-    if (priorityOnly) params.set('priority', '1')
-    if (rtnOnly) params.set('rtn', '1')
-    const qs = params.toString()
-    return `/service${qs ? `?${qs}` : ''}`
+    return buildHref({ status: statusValue, stale: false })
   }
   function clientFilterHref(clientValue: string) {
-    const params = new URLSearchParams()
-    if (clientValue) params.set('client', clientValue)
-    if (status) params.set('status', status)
-    if (priorityOnly) params.set('priority', '1')
-    if (rtnOnly) params.set('rtn', '1')
-    if (staleOnly) params.set('view', 'stale')
-    const qs = params.toString()
-    return `/service${qs ? `?${qs}` : ''}`
+    return buildHref({ client: clientValue })
   }
 
   return (
@@ -129,36 +128,38 @@ export default async function ServiceDispatchPage({
         </p>
       </div>
 
-      {/* Quick filters — the three things a supervisor needs to jump to first thing.
+      {/* Quick filters — the things a supervisor needs to jump to first thing.
           Independent toggles: combine freely with each other and with the status/client
-          pills below (e.g. P1 + Wawa + RTN all at once). */}
+          pills below (e.g. P1 + Wawa + RTN all at once). Priority is single-select
+          (a work order only has one priority); RTN and Updates Needed toggle on their own. */}
       <div className="flex gap-1.5 flex-wrap mb-4">
+        {PRIORITY_FILTERS.map((f) => (
+          <Link
+            key={f.rank}
+            href={priorityFilterHref(f.rank)}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+              priorityRank === f.rank ? f.activeClass : f.idleClass
+            }`}
+          >
+            {f.label}
+          </Link>
+        ))}
         <Link
-          href={quickFilterHref('priority', '1')}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
-            priorityOnly
-              ? 'bg-red-600 text-white border-red-600'
-              : 'bg-white text-red-700 border-red-200 hover:border-red-400'
-          }`}
-        >
-          🔴 P1 / Critical
-        </Link>
-        <Link
-          href={quickFilterHref('rtn', '1')}
+          href={rtnFilterHref()}
           className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
             rtnOnly
-              ? 'bg-red-600 text-white border-red-600'
+              ? 'bg-red-800 text-white border-red-800'
               : 'bg-white text-red-700 border-red-200 hover:border-red-400'
           }`}
         >
           ⟲ RTN — Return Trip Needed
         </Link>
         <Link
-          href={quickFilterHref('view', 'stale')}
+          href={staleFilterHref()}
           className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
             staleOnly
-              ? 'bg-amber-600 text-white border-amber-600'
-              : 'bg-white text-amber-700 border-amber-200 hover:border-amber-400'
+              ? 'bg-gray-800 text-white border-gray-800'
+              : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
           }`}
         >
           ⏰ Updates Needed (7+ Days)
