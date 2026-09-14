@@ -206,7 +206,7 @@ export function parseCompletionEmail(subject: string, body: string): ParsedCompl
   const noteLower = note.toLowerCase()
 
   let status: CompletionStatus = 'unknown'
-  if (/\brtn\b|retrip|return trip/i.test(noteLower)) {
+  if (/\brtn\b|re-?trip|return trip|return call|return needed|needs? (a )?return|return visit/i.test(noteLower)) {
     status = 'rtn'
   } else if (/incomplete/i.test(noteLower)) {
     status = 'incomplete'

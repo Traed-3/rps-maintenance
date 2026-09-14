@@ -11,13 +11,14 @@
  *     This is the ONLY source of real completion status — never trust the
  *     dispatch mailbox alone for "is this done."
  *
- * Nothing here archives or modifies the source mailboxes yet — read-only
- * against Gmail, writes only land in Supabase. Archiving completed dispatches
- * is a deliberate follow-up step once this sync is verified against real data.
+ * A completion email marked COMPLETE also archives the original dispatch
+ * email out of rpdispatcher's inbox (best-effort — a Gmail-side failure
+ * never blocks the status update itself). RTN/incomplete emails only update
+ * status; nothing gets archived until the job is actually done.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { listMessages, getMessage } from '@/lib/svc-gmail-client'
+import { listMessages, getMessage, archiveThread, archiveMessage } from '@/lib/svc-gmail-client'
 import {
   extractBody, getHeader, parseSender,
   parseDispatchEmail, parseCompletionEmail,
@@ -212,7 +213,7 @@ export async function syncInvoicing(maxResults = 50): Promise<SvcSyncResult['inv
       if (parsed.woNumber) {
         const { data: candidates } = await admin
           .from('svc_work_orders')
-          .select('id, dispatched_at')
+          .select('id, dispatched_at, dispatch_gmail_message_id, dispatch_gmail_thread_id')
           .eq('portal_wo_number', parsed.woNumber)
           .order('dispatched_at', { ascending: false })
 
@@ -235,6 +236,21 @@ export async function syncInvoicing(maxResults = 50): Promise<SvcSyncResult['inv
             updates.status = 'completed'
             updates.completed_at = receivedAt.toISOString()
             updates.return_trip_needed = false
+
+            // Clean up rpdispatcher now that the job is actually done — prefer
+            // archiving the whole thread (a dispatch is often split across more
+            // than one message, e.g. "assigned" + "dispatched"). Best-effort:
+            // never let a Gmail hiccup (expired token, already gone) block the
+            // completion status itself from being recorded.
+            try {
+              if (wo.dispatch_gmail_thread_id) {
+                await archiveThread('dispatcher', wo.dispatch_gmail_thread_id)
+              } else if (wo.dispatch_gmail_message_id) {
+                await archiveMessage('dispatcher', wo.dispatch_gmail_message_id)
+              }
+            } catch (archiveErr: any) {
+              result.errors.push(`Archive rpdispatcher for ${parsed.woNumber}: ${archiveErr.message}`)
+            }
           } else if (parsed.status === 'rtn') {
             updates.status = 'rtn_needed'
             updates.return_trip_needed = true
