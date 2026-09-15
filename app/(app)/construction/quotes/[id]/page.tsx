@@ -9,6 +9,7 @@ import { DeleteButton } from '@/components/construction/delete-button'
 import { Button } from '@/components/ui/button'
 import { FileDown, FileText } from 'lucide-react'
 import { saveQuote, setQuoteStatus, deleteQuote, convertQuoteToInvoice } from '../../actions'
+import { CategoryRollup } from '@/components/construction/category-rollup'
 
 export default async function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -19,7 +20,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
   if (!quote) notFound()
 
   const [{ data: items }, { data: customers }, { data: jobs }] = await Promise.all([
-    admin.from('con_quote_line_items').select('*').eq('quote_id', id).order('section').order('line_no'),
+    admin.from('con_quote_line_items').select('*, parts(part_number, category, taxable)').eq('quote_id', id).order('section').order('line_no'),
     admin.from('con_customers').select('id, name').eq('company_id', company_id).order('name'),
     admin.from('con_jobs').select('id, site_number, work_order_number').eq('company_id', company_id).order('created_at', { ascending: false }),
   ])
@@ -34,6 +35,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
     labor_rate: it.labor_rate != null ? String(it.labor_rate) : '',
     item_type: it.item_type ?? 'material',
     is_stock: !!it.is_stock,
+    part_id: it.part_id ?? null,
+    part_number: (it as { parts?: { part_number: string | null } | null }).parts?.part_number ?? null,
   }))
 
   return (
@@ -65,6 +68,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         )}
       </div>
 
+      <CategoryRollup lines={(items ?? []) as never} />
+
       {canWrite ? (
         <DocBuilder
           mode="quote"
@@ -89,6 +94,10 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
             proposal_date: quote.proposal_date,
             sent_date: quote.sent_date,
             decision_date: quote.decision_date,
+            department: quote.department,
+            valid_until: quote.valid_until,
+            nte_amount: quote.nte_amount,
+            portal_wo_number: quote.portal_wo_number,
           }}
         />
       ) : (

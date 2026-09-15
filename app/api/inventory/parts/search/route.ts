@@ -1,0 +1,52 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { sellPriceForLine } from '@/lib/inventory'
+
+/**
+ * GET /api/inventory/parts/search?q=drop%20tube&limit=15
+ * Catalog lookup for the quote/invoice/ticket line pickers. Session-scoped
+ * (proxy.ts already redirects anonymous callers). Returns the part plus a
+ * suggested line price = cost × (1 + markup) + freight, with document-level
+ * sales tax left to the document so nothing is taxed twice.
+ */
+export async function GET(request: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = createAdminClient()
+  const { data: profile } = await admin.from('profiles').select('company_id').eq('id', user.id).single()
+  if (!profile) return NextResponse.json({ error: 'No profile' }, { status: 403 })
+
+  const q = (request.nextUrl.searchParams.get('q') ?? '').trim()
+  const limit = Math.min(30, Math.max(1, parseInt(request.nextUrl.searchParams.get('limit') ?? '15', 10) || 15))
+  if (q.length < 2) return NextResponse.json({ parts: [] })
+
+  const like = `%${q.replace(/[%_,]/g, ' ')}%`
+  const { data, error } = await admin
+    .from('parts')
+    .select('id, part_number, description, category, subcategory, item_type, uom, taxable, unit_cost, cost_source, cost_vendor, cost_date, price_status, freight_per_unit, markup_pct, sell_price, sku')
+    .eq('company_id', profile.company_id)
+    .eq('active', true)
+    .or(`part_number.ilike.${like},description.ilike.${like},subcategory.ilike.${like}`)
+    .order('description')
+    .limit(limit * 3)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Rank by how trustworthy the price is (RPS rule: receipt beats vendor quote beats book beats web),
+  // then exact part-number hits, then description.
+  const RANK: Record<string, number> = { receipt: 0, vendor_quote: 1, book: 2, sell_billed: 3, web: 4, estimate: 5, rate_card: 6 }
+  const qUpper = q.toUpperCase()
+  const parts = (data ?? [])
+    .map(p => ({ ...p, suggested_price: sellPriceForLine(p, 0) }))
+    .sort((a, b) => {
+      const ea = (a.part_number ?? '').toUpperCase() === qUpper ? -1 : 0, eb = (b.part_number ?? '').toUpperCase() === qUpper ? -1 : 0
+      if (ea !== eb) return ea - eb
+      const ra = a.unit_cost != null ? (RANK[a.cost_source ?? ''] ?? 8) : 9, rb = b.unit_cost != null ? (RANK[b.cost_source ?? ''] ?? 8) : 9
+      if (ra !== rb) return ra - rb
+      return a.description.localeCompare(b.description)
+    })
+    .slice(0, limit)
+  return NextResponse.json({ parts })
+}

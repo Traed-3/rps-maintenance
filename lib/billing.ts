@@ -6,9 +6,7 @@
 // This is the shared source of truth for line-item money math,
 // quote/invoice statuses, and money/percent/date formatting.
 // New departments (Service, …) import directly from '@/lib/billing'.
-// The Construction module (lib/construction.ts) still carries its own
-// copy today and will converge onto this engine in a later step, so the
-// math here is kept byte-for-byte identical to Construction's.
+// lib/construction.ts re-exports these, so Construction and Service share one engine.
 // ============================================================
 
 // ── Quote / invoice statuses ────────────────────────────────
@@ -19,12 +17,13 @@ export const QUOTE_STATUSES = [
   { value: 'rejected', label: 'Rejected', className: 'bg-red-100 text-red-800 border-red-200' },
 ] as const
 
+// RPS does not run accounts receivable here. Once a job is invoiced it is revenue and
+// accounting takes it from there — so there is no "paid" to chase and nothing goes overdue.
+// The stored value stays 'sent' (the DB check constraint predates this) but reads as Invoiced.
 export const INVOICE_STATUSES = [
-  { value: 'draft',   label: 'Draft',   className: 'bg-gray-100 text-gray-700 border-gray-200' },
-  { value: 'sent',    label: 'Sent',    className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { value: 'paid',    label: 'Paid',    className: 'bg-green-200 text-green-900 border-green-300' },
-  { value: 'overdue', label: 'Overdue', className: 'bg-red-200 text-red-900 border-red-300' },
-  { value: 'void',    label: 'Void',    className: 'bg-gray-100 text-gray-400 border-gray-200' },
+  { value: 'draft', label: 'Draft',    className: 'bg-gray-100 text-gray-700 border-gray-200' },
+  { value: 'sent',  label: 'Invoiced', className: 'bg-green-200 text-green-900 border-green-300' },
+  { value: 'void',  label: 'Void',     className: 'bg-gray-100 text-gray-400 border-gray-200' },
 ] as const
 
 export function statusMeta(
@@ -45,6 +44,8 @@ export type LineItemInput = {
   labor_rate?: number | null
   item_type?: string | null
   is_stock?: boolean
+  part_id?: string | null        // catalog part this line was picked from (Inventory module)
+  part_number?: string | null
 }
 
 export type ComputedLineItem = LineItemInput & {

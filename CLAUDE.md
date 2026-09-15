@@ -197,5 +197,11 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
 - Source data + 207 pulled RPS invoices live in iCloud: RP - Rappahannock Petroleum/Operations/RPS Project
   Quote Docs/Quote and Invoice Documents/RPS Invoices - Email Pull 2026/.
 - Email pull for other inboxes: `scripts/pull-billing-emails.mjs --inbox <name>` needs GMAIL_TOKEN_<INBOX>.
-- Next: Phase 2 (quote lines pick from parts; converge Construction onto lib/billing.ts), Phase 3 (mobile
-  service ticket + signatures → invoice), Phase 4 (receive/transfer/count).
+- Phase 2 (done 2026-09-15): quote/invoice lines pick from the catalog (components/construction/part-picker.tsx
+  → GET /api/inventory/parts/search; fills description, part_id, item type, suggested price = cost×1.2+freight
+  with document-level tax left to the document). con_quote_line_items/con_invoice_line_items.part_id FK → parts.
+  Header fields: department (construction|service), portal_wo_number, valid_until + nte_amount (quotes).
+  REV19 category roll-up on the quote page (components/construction/category-rollup.tsx).
+  lib/construction.ts now re-exports statuses/money math/formatting from lib/billing.ts (one engine).
+  `computeSellPrice` / `sellPriceForLine` in lib/inventory.ts implement (Cost+Tax)×(1+Markup)+Freight.
+- Next: Phase 3 (mobile service ticket + signatures → invoice), Phase 4 (receive/transfer/count).

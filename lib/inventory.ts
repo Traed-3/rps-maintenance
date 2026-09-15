@@ -118,13 +118,25 @@ export function computeSellPrice(
   salesTaxRate: number,
   markup: number = DEFAULT_MATERIAL_MARKUP,
 ): number | null {
-  // TODO(human): implement the RPS line-price rule from the quote builder:
-  //   (Cost + Tax) × (1 + Markup) + Freight per unit
-  // where Tax applies only when the part is taxable (categories 1–4), the
-  // part's own markup_pct overrides the passed-in markup when set, and the
-  // result is rounded to cents. Return null when unit_cost is null or 0.
-  void part; void salesTaxRate; void markup
-  return null
+  // RPS line-price rule (quote builder REV19): (Cost + Tax) × (1 + Markup) + Freight per unit.
+  // Tax is RPS's own cost on taxable material (categories 1–4), recovered through the markup,
+  // never shown to the customer as a separate charge.
+  const cost = part.unit_cost
+  if (cost == null || !isFinite(cost) || cost <= 0) return null   // caller falls back to sell_price / "Price needed"
+  const tax = part.taxable ? cost * Math.max(0, salesTaxRate || 0) : 0
+  const mk = part.markup_pct != null && isFinite(part.markup_pct) ? part.markup_pct : markup
+  const freight = part.freight_per_unit && isFinite(part.freight_per_unit) ? part.freight_per_unit : 0
+  const sell = (cost + tax) * (1 + Math.max(0, mk)) + freight
+  return Math.round((sell + Number.EPSILON) * 100) / 100
+}
+
+/** Sell price to put on a quote line: computed from cost when we have one, else the explicit sell price. */
+export function sellPriceForLine(
+  part: Pick<Part, 'unit_cost' | 'freight_per_unit' | 'taxable' | 'markup_pct' | 'sell_price'>,
+  salesTaxRate: number,
+  markup: number = DEFAULT_MATERIAL_MARKUP,
+): number | null {
+  return computeSellPrice(part, salesTaxRate, markup) ?? part.sell_price ?? null
 }
 
 export function money(v: number | null | undefined) {

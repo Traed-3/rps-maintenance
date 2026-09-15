@@ -19,7 +19,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   if (!invoice) notFound()
 
   const [{ data: items }, { data: customers }, { data: jobs }] = await Promise.all([
-    admin.from('con_invoice_line_items').select('*').eq('invoice_id', id).order('section').order('line_no'),
+    admin.from('con_invoice_line_items').select('*, parts(part_number, category, taxable)').eq('invoice_id', id).order('section').order('line_no'),
     admin.from('con_customers').select('id, name').eq('company_id', company_id).order('name'),
     admin.from('con_jobs').select('id, site_number, work_order_number').eq('company_id', company_id).order('created_at', { ascending: false }),
   ])
@@ -34,6 +34,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     labor_rate: it.labor_rate != null ? String(it.labor_rate) : '',
     item_type: it.item_type ?? 'material',
     is_stock: !!it.is_stock,
+    part_id: it.part_id ?? null,
+    part_number: (it as { parts?: { part_number: string | null } | null }).parts?.part_number ?? null,
   }))
 
   return (
@@ -86,6 +88,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             po_number: invoice.po_number,
             due_date: invoice.due_date,
             paid_date: invoice.paid_date,
+            department: invoice.department,
+            portal_wo_number: invoice.portal_wo_number,
           }}
         />
       ) : (

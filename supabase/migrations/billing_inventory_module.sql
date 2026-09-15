@@ -360,3 +360,17 @@ FROM assets a JOIN asset_types t ON t.id = a.asset_type_id
 WHERE t.name IN ('Service Truck','Construction Truck','Pickup Truck')
   AND a.status IN ('active','available','in_shop','down')
 ON CONFLICT (company_id, name) DO NOTHING;
+
+-- ------------------------------------------------------------
+-- 8. (Phase 2, applied 2026-09-15) quote/invoice lines link to catalog parts
+-- ------------------------------------------------------------
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='con_quote_line_items_part_fk') THEN
+    ALTER TABLE con_quote_line_items ADD CONSTRAINT con_quote_line_items_part_fk FOREIGN KEY (part_id) REFERENCES parts ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='con_invoice_line_items_part_fk') THEN
+    ALTER TABLE con_invoice_line_items ADD CONSTRAINT con_invoice_line_items_part_fk FOREIGN KEY (part_id) REFERENCES parts ON DELETE SET NULL;
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS con_quote_line_items_part_idx ON con_quote_line_items (part_id);
+CREATE INDEX IF NOT EXISTS con_invoice_line_items_part_idx ON con_invoice_line_items (part_id);
