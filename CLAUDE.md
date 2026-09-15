@@ -204,4 +204,13 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
   REV19 category roll-up on the quote page (components/construction/category-rollup.tsx).
   lib/construction.ts now re-exports statuses/money math/formatting from lib/billing.ts (one engine).
   `computeSellPrice` / `sellPriceForLine` in lib/inventory.ts implement (Cost+Tax)×(1+Markup)+Freight.
-- Next: Phase 3 (mobile service ticket + signatures → invoice), Phase 4 (receive/transfer/count).
+- Phase 3 (built 2026-09-15): field service tickets. lib/service-tickets.ts (statuses, brand→rate card,
+  buildInvoiceLines = Peggy's layout: Labor M/D/YY + Trip rows per day, Disposables $17.50/tech-day, parts),
+  lib/service-ticket-data.ts (loader), app/(app)/service/tickets/actions.ts (create from svc_work_order or blank,
+  details, labor, parts via PartPicker, photos → ticket-attachments bucket, signTicket → PNG in
+  ticket-attachments/signatures/, both signatures ⇒ status 'signed' + inventory issue_to_ticket rows,
+  convertTicketToInvoice → con_invoices department='service' priced from billing_rate_cards, 6% tax default).
+  UI: /mobile/service-ticket (my tickets + dispatched WOs + blank), /mobile/service-ticket/[id] (TicketForm,
+  SignaturePad), /service/tickets (list + filters), /service/tickets/[id] (+ Create invoice). Entry points:
+  mobile home "Service Ticket" button, Service Dispatch "Field tickets →", work-order page "Start field ticket".
+- Next: Phase 4 (receive from packing slips, office→truck transfers, min/max, truck counts), Phase 5 (inbox tokens).

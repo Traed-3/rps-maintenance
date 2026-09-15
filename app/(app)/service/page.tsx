@@ -132,6 +132,7 @@ export default async function ServiceDispatchPage({
         <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">
           Service Dispatch
         </h1>
+          <Link href="/service/tickets" className="ml-3 text-sm text-blue-600 hover:text-blue-800 align-middle">Field tickets →</Link>
         <p className="text-sm text-gray-500 mt-0.5">
           7-Eleven, Wawa & Sunoco work orders — synced automatically from rpdispatcher and rpinvoicing every 15 minutes
         </p>
