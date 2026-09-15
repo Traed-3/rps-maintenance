@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Package, Warehouse, ArrowLeftRight, ClipboardCheck, AlertTriangle } from 'lucide-react'
+import { Package, PackagePlus, Warehouse, ArrowLeftRight, ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireInventory } from '@/lib/inventory-guard'
 
@@ -18,8 +18,9 @@ export default async function InventoryHubPage() {
   const tiles = [
     { href: '/inventory/parts', icon: Package, title: 'Parts catalog', body: `${partCount ?? 0} parts and services · ${needPrice ?? 0} need a price`, live: true },
     { href: '/inventory/locations', icon: Warehouse, title: 'Stock locations', body: `Office shelves and ${truckCount ?? 0} trucks`, live: true },
-    { href: '/inventory/transfers', icon: ArrowLeftRight, title: 'Transfers & receiving', body: txnCount ? `${txnCount} ledger entries` : 'Phase 4 · not built yet', live: false },
-    { href: '/inventory/counts', icon: ClipboardCheck, title: 'Truck counts', body: `${stockedCount ?? 0} parts flagged as tracked stock`, live: false },
+    { href: '/inventory/stock', icon: ClipboardCheck, title: 'Stock on hand', body: `${stockedCount ?? 0} tracked parts · ${txnCount ?? 0} ledger entries · counts and min/max per truck`, live: true },
+    { href: '/inventory/receive', icon: PackagePlus, title: 'Receive', body: 'Packing slips, vendor invoices, counter pickups', live: true },
+    { href: '/inventory/transfers', icon: ArrowLeftRight, title: 'Transfers', body: 'Office → truck, truck → truck', live: true },
   ]
 
   return (
@@ -31,7 +32,7 @@ export default async function InventoryHubPage() {
         <p className="text-sm text-gray-500 mt-0.5">Price book, truck and office stock, and every part that moves.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {tiles.map(t => {
           const Icon = t.icon
           const inner = (
