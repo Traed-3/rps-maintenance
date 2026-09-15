@@ -79,6 +79,7 @@ export const COST_SOURCE_LABEL: Record<string, string> = {
 export const SEED_TAG_LABEL: Record<string, string> = {
   REV19_LIBRARY: 'REV19 library', PRICE_BOOK: 'Price book', WEB_VERIFIED: 'Web verified 2026',
   SVC_INVOICES_2026: 'Service invoices 2026',
+  SNA_7ELEVEN_2026: 'Source NA 7-Eleven list 2026',
 }
 
 export const LOCATION_KINDS = [
