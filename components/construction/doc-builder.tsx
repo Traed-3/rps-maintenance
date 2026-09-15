@@ -4,6 +4,8 @@ import { useActionState, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Plus, Trash2 } from 'lucide-react'
 import { computeDocumentTotals, money, type LineItemInput } from '@/lib/construction'
+import { BILLING_DEPARTMENTS } from '@/lib/billing'
+import { PartPicker, type PickedPart } from '@/components/construction/part-picker'
 import type { ActionState } from '@/app/(app)/construction/actions'
 
 const inp = 'w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -22,6 +24,8 @@ export type LineRowState = {
   labor_rate: string
   item_type: string
   is_stock: boolean
+  part_id?: string | null
+  part_number?: string | null
 }
 
 export type DocHeader = {
@@ -47,11 +51,15 @@ export type DocHeader = {
   po_number?: string | null
   due_date?: string | null
   paid_date?: string | null
+  department?: string | null
+  valid_until?: string | null
+  nte_amount?: number | null
+  portal_wo_number?: string | null
 }
 
 let _k = 0
 function emptyRow(section: 'basic' | 'additional'): LineRowState {
-  return { key: `r${_k++}`, section, description: '', quantity: '', unit_cost: '', labor_hours: '', labor_rate: '', item_type: 'material', is_stock: false }
+  return { key: `r${_k++}`, section, description: '', quantity: '', unit_cost: '', labor_hours: '', labor_rate: '', item_type: 'material', is_stock: false, part_id: null, part_number: null }
 }
 
 const ITEM_TYPES = ['material', 'labor', 'trip', 'disposables', 'sub']
@@ -110,6 +118,8 @@ export function DocBuilder({
       labor_rate: l.labor_rate ? Number(l.labor_rate) : null,
       item_type: l.item_type || null,
       is_stock: l.is_stock,
+      part_id: l.part_id ?? null,
+      part_number: l.part_number ?? null,
     }))
     const { totals } = computeDocumentTotals(lineInputs, (Number(poPct) || 0) / 100, (Number(taxPct) || 0) / 100)
     return { totals, lineInputs }
@@ -148,7 +158,19 @@ export function DocBuilder({
                 return (
                   <tr key={l.key}>
                     <td className="px-3 py-1.5">
-                      <input value={l.description} onChange={e => update(l.key, { description: e.target.value })} className={inp} placeholder="Description" />
+                      <PartPicker
+                        value={l.description}
+                        onChange={text => update(l.key, { description: text, ...(l.part_id ? { part_id: null, part_number: null } : {}) })}
+                        onPick={(p: PickedPart) => update(l.key, {
+                          description: p.part_number ? `${p.description} (${p.part_number})` : p.description,
+                          part_id: p.id, part_number: p.part_number,
+                          item_type: p.item_type && ITEM_TYPES.includes(p.item_type) ? p.item_type : 'material',
+                          unit_cost: p.suggested_price != null ? String(p.suggested_price) : l.unit_cost,
+                          quantity: l.quantity || '1',
+                        })}
+                        className={inp}
+                      />
+                      {l.part_number && <span className="mt-1 mr-2 inline-block text-xs font-mono text-blue-700 bg-blue-50 border border-blue-100 rounded px-1">{l.part_number}</span>}
                       <label className="mt-1 inline-flex items-center gap-1 text-xs text-gray-400">
                         <input type="checkbox" checked={l.is_stock} onChange={e => update(l.key, { is_stock: e.target.checked })} className="rounded border-gray-300" />
                         Stock
@@ -242,6 +264,22 @@ export function DocBuilder({
           <label className={lbl}>Project Description</label>
           <textarea name="project_description" rows={2} className={inp} defaultValue={header?.project_description ?? ''} />
         </div>
+        <div>
+          <label className={lbl}>Department</label>
+          <select name="department" className={inp} defaultValue={header?.department ?? 'construction'}>
+            {BILLING_DEPARTMENTS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={lbl}>Portal Work Order # <span className="font-normal text-gray-400">(7help / Wawa / Sunoco)</span></label>
+          <input name="portal_wo_number" className={inp} defaultValue={header?.portal_wo_number ?? ''} placeholder="WOT1211757" />
+        </div>
+        {mode === 'quote' && (
+          <>
+            <div><label className={lbl}>Valid Until</label><input name="valid_until" type="date" className={inp} defaultValue={header?.valid_until ?? ''} /></div>
+            <div><label className={lbl}>Not-to-Exceed $ <span className="font-normal text-gray-400">(portal NTE, if any)</span></label><input name="nte_amount" type="number" step="any" className={inp} defaultValue={header?.nte_amount ?? ''} /></div>
+          </>
+        )}
         <div>
           <label className={lbl}>Status</label>
           <select name="status" className={inp} defaultValue={header?.status ?? 'draft'}>

@@ -17,6 +17,7 @@ import {
   HardHat,
   CalendarDays,
   Fuel,
+  Package,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { href: '/construction', label: 'Construction', icon: HardHat, construction: true },
   // 7-Eleven / Wawa / Sunoco service calls, synced from rpdispatcher + rpinvoicing.
   { href: '/service', label: 'Service Dispatch', icon: Fuel },
+  { href: '/inventory', label: 'Inventory', icon: Package },
   // Company-wide calendar that overlays Maintenance and Construction items.
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/expenses', label: 'Expenses', icon: Receipt },

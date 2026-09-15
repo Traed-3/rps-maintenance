@@ -232,6 +232,8 @@ function parseLines(formData: FormData): LineRow[] {
         labor_rate: r.labor_rate != null && r.labor_rate !== '' ? Number(r.labor_rate) : null,
         item_type: r.item_type?.toString().trim() || null,
         is_stock: !!r.is_stock,
+        part_id: typeof r.part_id === 'string' && r.part_id ? r.part_id : null,
+        part_number: r.part_number?.toString().trim() || null,
       }))
       // drop fully empty rows
       .filter(r => r.description || r.quantity || r.unit_cost || r.labor_hours)
@@ -253,6 +255,8 @@ function docHeaderFields(formData: FormData) {
     city_state_zip:      str(formData.get('city_state_zip')),
     profit_overhead_percent: poPctRaw / 100,
     sales_tax_percent:       taxPctRaw / 100,
+    department:          str(formData.get('department')) === 'service' ? 'service' : 'construction',
+    portal_wo_number:    str(formData.get('portal_wo_number')),
   }
 }
 
@@ -276,6 +280,8 @@ export async function saveQuote(id: string | null, _state: ActionState, formData
     prepared_by:   str(formData.get('prepared_by')) ?? 'Starsky Dodson, Construction Manager',
     sent_date:     str(formData.get('sent_date')),
     decision_date: str(formData.get('decision_date')),
+    valid_until:   str(formData.get('valid_until')),
+    nte_amount:    num(formData.get('nte_amount')),
     ...totals,
   }
 
@@ -306,6 +312,7 @@ export async function saveQuote(id: string | null, _state: ActionState, formData
         total_material_labor: l.total_material_labor,
         item_type: l.item_type,
         is_stock: l.is_stock ?? false,
+        part_id: l.part_id ?? null,
       }))
     )
     if (liErr) return { error: liErr.message }
@@ -371,6 +378,8 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<void> {
     tax_amount: q.tax_amount,
     invoice_grand_total: q.final_total,
     prepared_by: q.prepared_by,
+    department: q.department ?? 'construction',
+    portal_wo_number: q.portal_wo_number ?? null,
     status: 'draft',
   }).select('id').single()
   if (error || !inv) return
@@ -391,6 +400,7 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<void> {
         total_material_labor: it.total_material_labor,
         item_type: it.item_type,
         is_stock: it.is_stock,
+        part_id: it.part_id ?? null,
       }))
     )
   }
@@ -453,6 +463,7 @@ export async function saveInvoice(id: string | null, _state: ActionState, formDa
         total_material_labor: l.total_material_labor,
         item_type: l.item_type,
         is_stock: l.is_stock ?? false,
+        part_id: l.part_id ?? null,
       }))
     )
     if (liErr) return { error: liErr.message }

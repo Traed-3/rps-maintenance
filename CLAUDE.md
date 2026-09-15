@@ -174,3 +174,34 @@ employee, expense, etc.) MUST make the WHOLE row clickable — not just a "View 
 4. Always confirm before any destructive database operation (dropping columns, deleting rows).
 5. Build/change one piece at a time and keep the app deployable.
 6. Trae actively requests and approves changes during sessions — implement them directly. (The old pre-dad-demo "hold all edits" freeze is lifted.) Still confirm before destructive DB operations per rule 4.
+
+---
+
+## BILLING + INVENTORY MODULE (added 2026-09-15)
+
+Own top-level modules shared by Construction and Service (department-tagged), NOT under Construction.
+- Migration: `supabase/migrations/billing_inventory_module.sql` (APPLIED to project zktmhxheouwbyupeizjq on 2026-09-15).
+  Tables: parts, part_price_history, part_assemblies, billing_rate_cards (7-Eleven $78.50 / Global $82.50 /
+  Sunoco $80 / Independent $95), stock_locations (Office / Hill, Construction Shelf, Vendor RMA + one per
+  Service/Pickup truck linked to assets), stock_levels, inventory_transactions (append-only; on-hand = view
+  stock_on_hand), stock_transfers(+lines), service_tickets (+labor/parts/photos, signatures, links to
+  svc_work_orders + svc_technicians). con_quotes/con_invoices gained `department`, nte, portal WO columns.
+- Seed: `node scripts/seed-parts.mjs` (idempotent; `--reset` to reload). Sources in supabase/seed/*.csv:
+  REV19 price library + price books (552) and items billed on 2026 service invoices (229). Loaded 781 parts.
+- UI: /inventory (hub), /inventory/parts (search/filter, add), /inventory/parts/[id] (price history, on-hand,
+  edit), /inventory/locations. Guard: lib/inventory-guard.ts (everyone reads; INVENTORY_WRITE_ROLES write).
+  Helpers/types: lib/inventory.ts. `computeSellPrice` still carries the TODO for the RPS line-price rule.
+- Pricing rules (from the rps-quote-builder skill): never invent a price; cost from receipt/vendor quote/book
+  with its date; flat 20% material markup; tax on material (cats 1–4) only, recovered through markup;
+  freight per unit; prices older than 6 months → verify; two receipts disagree → HELD HIGH.
+- Source data + 207 pulled RPS invoices live in iCloud: RP - Rappahannock Petroleum/Operations/RPS Project
+  Quote Docs/Quote and Invoice Documents/RPS Invoices - Email Pull 2026/.
+- Email pull for other inboxes: `scripts/pull-billing-emails.mjs --inbox <name>` needs GMAIL_TOKEN_<INBOX>.
+- Phase 2 (done 2026-09-15): quote/invoice lines pick from the catalog (components/construction/part-picker.tsx
+  → GET /api/inventory/parts/search; fills description, part_id, item type, suggested price = cost×1.2+freight
+  with document-level tax left to the document). con_quote_line_items/con_invoice_line_items.part_id FK → parts.
+  Header fields: department (construction|service), portal_wo_number, valid_until + nte_amount (quotes).
+  REV19 category roll-up on the quote page (components/construction/category-rollup.tsx).
+  lib/construction.ts now re-exports statuses/money math/formatting from lib/billing.ts (one engine).
+  `computeSellPrice` / `sellPriceForLine` in lib/inventory.ts implement (Cost+Tax)×(1+Markup)+Freight.
+- Next: Phase 3 (mobile service ticket + signatures → invoice), Phase 4 (receive/transfer/count).
