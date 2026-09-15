@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { WorkOrderStatusBadge, PriorityBadge, clientLabel } from '@/components/svc/work-order-badges'
+import { createServiceTicket } from '@/app/(app)/service/tickets/actions'
 
 function fmt(d: string | null): string {
   if (!d) return '—'
@@ -32,6 +33,7 @@ export default async function WorkOrderDetailPage({
     .single()
 
   if (!w) notFound()
+  const { data: existingTicket } = await admin.from('service_tickets').select('id, ticket_number, status').eq('work_order_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()
 
   const tech = (w as any).svc_technicians as { full_name: string; personal_email: string | null } | null
 
@@ -54,6 +56,12 @@ export default async function WorkOrderDetailPage({
           <PriorityBadge priorityRaw={w.priority_raw} priorityRank={w.priority_rank} />
         </div>
       </div>
+
+      {(() => { const existing = (existingTicket as { id: string; ticket_number: string; status: string } | null); return existing ? (
+        <Link href={`/service/tickets/${existing.id}`} className="block bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-sm text-blue-900">Field ticket <b className="font-mono">{existing.ticket_number}</b> · {existing.status} →</Link>
+      ) : (
+        <form action={createServiceTicket} className="mb-5"><input type="hidden" name="work_order_id" value={w.id} /><button type="submit" className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700">Start field ticket</button></form>
+      ) })()}
 
       {w.return_trip_needed && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">

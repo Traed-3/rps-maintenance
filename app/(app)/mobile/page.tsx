@@ -129,6 +129,15 @@ export default async function MobilePage() {
       {/* Main actions */}
       <div className="flex-1 px-4 py-6 space-y-3">
 
+        {/* Field service ticket — sign on the phone, invoice from the office */}
+        <Link
+          href="/mobile/service-ticket"
+          className="flex items-center justify-between w-full rounded-2xl px-6 py-4 bg-white border border-gray-200 shadow-sm font-semibold text-gray-900"
+        >
+          <span>🧾 Service Ticket</span>
+          <span className="text-gray-400">→</span>
+        </Link>
+
         {/* Primary action — clock */}
         <Link
           href="/shop/clock"
