@@ -213,4 +213,12 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
   UI: /mobile/service-ticket (my tickets + dispatched WOs + blank), /mobile/service-ticket/[id] (TicketForm,
   SignaturePad), /service/tickets (list + filters), /service/tickets/[id] (+ Create invoice). Entry points:
   mobile home "Service Ticket" button, Service Dispatch "Field tickets →", work-order page "Start field ticket".
-- Next: Phase 4 (receive from packing slips, office→truck transfers, min/max, truck counts), Phase 5 (inbox tokens).
+- Phase 4 (built 2026-09-15): inventory in motion. app/(app)/inventory/stock-actions.ts: receiveStock (+qty,
+  receipt cost → parts.unit_cost/last_cost/avg_cost + price history, marks is_stocked), adjustStock,
+  createTransfer/setTransferStatus (pending→picked→received; received posts transfer_out/transfer_in legs under
+  one transfer_group), setStockLevel (min/max/bin per location), postCount (variance rows, txn 'count').
+  UI: /inventory/stock (per-location overview, below-min, inbound), /inventory/stock/[locationId] (on-hand +
+  inline min/max, count mode, quick adjust, movement history), /inventory/receive, /inventory/transfers
+  ("Fill to max" from below-min lines). Hub tiles all live.
+- Next: Phase 5 (connect econstruction/constructionreceipts/rpinvoicing tokens; packing-slip emails → receive
+  queue; vendor receipts → cost updates; invoice email-out), Phase 6 (warranty claims, compliance SKUs).
