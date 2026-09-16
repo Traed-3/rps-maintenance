@@ -181,15 +181,18 @@ export async function syncInbox(inbox: BillingInbox, opts: { maxResults?: number
       const primary = stored.find(s => /pdf/i.test(s.mime)) ?? stored.find(s => /^image\//i.test(s.mime)) ?? stored[0]
       const kind = classifyKind(inbox, subject, from.email, stored.map(s => s.name), body)
       const extractable = stored.some(s => /pdf|^image\/(jpeg|jpg|png|gif|webp)$|text\/(csv|plain)/i.test(s.mime) || /\.(pdf|jpe?g|png|gif|webp|csv|txt)$/i.test(s.name))
+      // Our own paperwork (a tech's startup report, an invoice we sent) is filed under "Our paperwork", not To-do,
+      // and Claude is not asked to read it — only vendor documents get line extraction.
+      const internal = kind === 'customer_invoice' || (kind === 'other' && RPS_SENDER.test(from.email))
 
       const { error } = await admin.from('billing_inbox_documents').insert({
         company_id, inbox, gmail_message_id: id, gmail_thread_id: msg.threadId,
         sender: from.name || from.email, sender_email: from.email, subject, received_at: receivedAt.toISOString(),
         body_preview: body.slice(0, 1200), kind, vendor: guessVendor(from.name, from.email), reference: findReference(subject, body),
         attachments: stored, primary_path: primary?.path ?? null,
-        extract_status: extractable ? 'pending' : 'skipped',
-        extract_error: extractable ? null : 'Attachment type not readable automatically (spreadsheet/HEIC) — enter the lines by hand.',
-        status: kind === 'customer_invoice' ? 'linked' : 'new',
+        extract_status: internal ? 'skipped' : extractable ? 'pending' : 'skipped',
+        extract_error: internal ? 'Internal paperwork (sent from an RPS address) — filed, not read.' : extractable ? null : 'Attachment type not readable automatically (spreadsheet/HEIC) — enter the lines by hand.',
+        status: internal ? 'linked' : 'new',
       })
       if (error) throw new Error(error.message)
       result.new++
