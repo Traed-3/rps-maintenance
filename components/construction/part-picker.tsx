@@ -11,6 +11,7 @@ export type PickedPart = {
   item_type: string | null
   uom: string | null
   unit_cost: number | null
+  freight_per_unit: number | null
   cost_source: string | null
   cost_vendor: string | null
   cost_date: string | null

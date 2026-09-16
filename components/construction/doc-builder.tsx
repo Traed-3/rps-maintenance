@@ -26,6 +26,8 @@ export type LineRowState = {
   is_stock: boolean
   part_id?: string | null
   part_number?: string | null
+  base_cost?: number | null   // catalog cost captured at pick time, so markup can re-price on demand
+  freight?: number | null
 }
 
 export type DocHeader = {
@@ -59,7 +61,14 @@ export type DocHeader = {
 
 let _k = 0
 function emptyRow(section: 'basic' | 'additional'): LineRowState {
-  return { key: `r${_k++}`, section, description: '', quantity: '', unit_cost: '', labor_hours: '', labor_rate: '', item_type: 'material', is_stock: false, part_id: null, part_number: null }
+  return { key: `r${_k++}`, section, description: '', quantity: '', unit_cost: '', labor_hours: '', labor_rate: '', item_type: 'material', is_stock: false, part_id: null, part_number: null, base_cost: null, freight: null }
+}
+
+/** Line price from catalog cost at a chosen markup: cost×(1+markup%) + freight (document tax handled separately). */
+function priceAtMarkup(cost: number | null | undefined, freight: number | null | undefined, markupPct: string): number | null {
+  if (cost == null || !isFinite(Number(cost))) return null
+  const m = Number(markupPct); const mk = isFinite(m) ? m : 20
+  return Math.round(Number(cost) * (1 + mk / 100) * 100) / 100 + (Number(freight) || 0)
 }
 
 const ITEM_TYPES = ['material', 'labor', 'trip', 'disposables', 'sub']
@@ -95,9 +104,19 @@ export function DocBuilder({
   )
   const [poPct, setPoPct] = useState<string>(String(header?.profit_overhead_percent ?? 0))
   const [taxPct, setTaxPct] = useState<string>(String(header?.sales_tax_percent ?? 0))
+  const [markupPct, setMarkupPct] = useState<string>('20')
 
   function update(key: string, patch: Partial<LineRowState>) {
     setLines(prev => prev.map(l => (l.key === key ? { ...l, ...patch } : l)))
+  }
+  /** Change the markup and re-price every catalog-picked line (lines with a stored base_cost). Manual prices are left alone. */
+  function applyMarkup(mk: string) {
+    setMarkupPct(mk)
+    setLines(prev => prev.map(l => {
+      if (l.base_cost == null) return l
+      const price = priceAtMarkup(l.base_cost, l.freight, mk)
+      return price != null ? { ...l, unit_cost: String(price) } : l
+    }))
   }
   function addRow(section: 'basic' | 'additional') {
     setLines(prev => [...prev, emptyRow(section)])
@@ -160,14 +179,18 @@ export function DocBuilder({
                     <td className="px-3 py-1.5">
                       <PartPicker
                         value={l.description}
-                        onChange={text => update(l.key, { description: text, ...(l.part_id ? { part_id: null, part_number: null } : {}) })}
-                        onPick={(p: PickedPart) => update(l.key, {
-                          description: p.part_number ? `${p.description} (${p.part_number})` : p.description,
-                          part_id: p.id, part_number: p.part_number,
-                          item_type: p.item_type && ITEM_TYPES.includes(p.item_type) ? p.item_type : 'material',
-                          unit_cost: p.suggested_price != null ? String(p.suggested_price) : l.unit_cost,
-                          quantity: l.quantity || '1',
-                        })}
+                        onChange={text => update(l.key, { description: text, ...(l.part_id ? { part_id: null, part_number: null, base_cost: null, freight: null } : {}) })}
+                        onPick={(p: PickedPart) => {
+                          const priced = priceAtMarkup(p.unit_cost, p.freight_per_unit, markupPct)
+                          update(l.key, {
+                            description: p.part_number ? `${p.description} (${p.part_number})` : p.description,
+                            part_id: p.id, part_number: p.part_number,
+                            item_type: p.item_type && ITEM_TYPES.includes(p.item_type) ? p.item_type : 'material',
+                            base_cost: p.unit_cost, freight: p.freight_per_unit ?? 0,
+                            unit_cost: priced != null ? String(priced) : (p.suggested_price != null ? String(p.suggested_price) : l.unit_cost),
+                            quantity: l.quantity || '1',
+                          })
+                        }}
                         className={inp}
                       />
                       {l.part_number && <span className="mt-1 mr-2 inline-block text-xs font-mono text-blue-700 bg-blue-50 border border-blue-100 rounded px-1">{l.part_number}</span>}
@@ -182,7 +205,7 @@ export function DocBuilder({
                       </select>
                     </td>
                     <td className="px-2 py-1.5 w-20"><input value={l.quantity} onChange={e => update(l.key, { quantity: e.target.value })} type="number" step="any" className={`${inp} text-right`} /></td>
-                    <td className="px-2 py-1.5 w-24"><input value={l.unit_cost} onChange={e => update(l.key, { unit_cost: e.target.value })} type="number" step="any" className={`${inp} text-right`} /></td>
+                    <td className="px-2 py-1.5 w-24"><input value={l.unit_cost} onChange={e => update(l.key, { unit_cost: e.target.value, base_cost: null })} type="number" step="any" className={`${inp} text-right`} /></td>
                     <td className="px-2 py-1.5 w-20"><input value={l.labor_hours} onChange={e => update(l.key, { labor_hours: e.target.value })} type="number" step="any" className={`${inp} text-right`} /></td>
                     <td className="px-2 py-1.5 w-24"><input value={l.labor_rate} onChange={e => update(l.key, { labor_rate: e.target.value })} type="number" step="any" className={`${inp} text-right`} /></td>
                     <td className="px-2 py-1.5 text-right font-medium text-gray-800 whitespace-nowrap">{money(matTotal + labTotal)}</td>
@@ -310,6 +333,10 @@ export function DocBuilder({
       {/* Percents + totals */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-3">
+          <div>
+            <label className={lbl}>Material markup % <span className="font-normal text-gray-400">(re-prices catalog-picked lines)</span></label>
+            <input value={markupPct} onChange={e => applyMarkup(e.target.value)} type="number" step="any" className={`${inp} max-w-32`} />
+          </div>
           <div>
             <label className={lbl}>Profit &amp; Overhead %</label>
             <input name="profit_overhead_percent" value={poPct} onChange={e => setPoPct(e.target.value)} type="number" step="any" className={`${inp} max-w-32`} />
