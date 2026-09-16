@@ -34,30 +34,30 @@ export async function runInboxSync(): Promise<SyncState> {
 
 /** Ask Claude to read this document (again). */
 export async function reextractDocument(id: string): Promise<ActionState> {
-  const { canWrite } = await requireInventory()
+  const { company_id, canWrite } = await requireInventory()
   if (!canWrite) return { error: 'No permission.' }
   const admin = createAdminClient()
-  await admin.from('billing_inbox_documents').update({ extract_status: 'pending', extract_error: null }).eq('id', id)
+  await admin.from('billing_inbox_documents').update({ extract_status: 'pending', extract_error: null }).eq('id', id).eq('company_id', company_id)
   const r = await extractDocument(id)
   refresh(id)
   return r.ok ? { ok: true } : { error: r.error ?? 'Extraction failed' }
 }
 
 export async function dismissDocument(id: string, _s: ActionState, formData: FormData): Promise<ActionState> {
-  const { id: userId, canWrite } = await requireInventory()
+  const { company_id, id: userId, canWrite } = await requireInventory()
   if (!canWrite) return { error: 'No permission.' }
   const admin = createAdminClient()
-  const { error } = await admin.from('billing_inbox_documents').update({ status: 'dismissed', note: str(formData, 'note'), processed_by: userId, processed_at: new Date().toISOString() }).eq('id', id).eq('status', 'new')
+  const { error } = await admin.from('billing_inbox_documents').update({ status: 'dismissed', note: str(formData, 'note'), processed_by: userId, processed_at: new Date().toISOString() }).eq('id', id).eq('company_id', company_id).eq('status', 'new')
   if (error) return { error: error.message }
   refresh(id)
   return { ok: true }
 }
 
 export async function reopenDocument(id: string): Promise<ActionState> {
-  const { canWrite } = await requireInventory()
+  const { company_id, canWrite } = await requireInventory()
   if (!canWrite) return { error: 'No permission.' }
   const admin = createAdminClient()
-  await admin.from('billing_inbox_documents').update({ status: 'new', processed_by: null, processed_at: null }).eq('id', id).eq('status', 'dismissed')
+  await admin.from('billing_inbox_documents').update({ status: 'new', processed_by: null, processed_at: null }).eq('id', id).eq('company_id', company_id).eq('status', 'dismissed')
   refresh(id)
   return { ok: true }
 }
@@ -122,15 +122,15 @@ export async function postInboxDocument(id: string, _s: ActionState, formData: F
       posted++
     }
     if (!l.create) {
-      if (unit_cost != null) await applyReceiptCost(admin, { part_id, unit_cost, qty: mode === 'receive' ? qty : 0, vendor, reference, date: docDate, stocked: mode === 'receive' })
-      else if (mode === 'receive') await admin.from('parts').update({ is_stocked: true }).eq('id', part_id).eq('is_stocked', false)
+      if (unit_cost != null) await applyReceiptCost(admin, { company_id, part_id, unit_cost, qty: mode === 'receive' ? qty : 0, vendor, reference, date: docDate, stocked: mode === 'receive' })
+      else if (mode === 'receive') await admin.from('parts').update({ is_stocked: true }).eq('id', part_id).eq('company_id', company_id).eq('is_stocked', false)
     }
   }
 
   await admin.from('billing_inbox_documents').update({
     status: mode === 'receive' ? 'received' : 'cost_updated', location_id: mode === 'receive' ? location_id : null, txn_group: group,
     vendor, reference, document_date: docDate, note: str(formData, 'note'), processed_by: userId, processed_at: new Date().toISOString(),
-  }).eq('id', id)
+  }).eq('id', id).eq('company_id', company_id)
   refresh(id)
   if (location_id) revalidatePath(`/inventory/stock/${location_id}`)
   return { ok: true }

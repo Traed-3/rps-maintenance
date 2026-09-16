@@ -32,9 +32,9 @@ export async function receiveStock(_s: ActionState, formData: FormData): Promise
   if (error) return { error: error.message }
   if (unit_cost != null) {
     // cost from the receipt beats anything else on file (RPS rule) — and keep the running average.
-    await applyReceiptCost(admin, { part_id, unit_cost, qty, vendor: str(formData, 'vendor'), reference: str(formData, 'ref_label'), date: new Date().toISOString().slice(0, 10) })
+    await applyReceiptCost(admin, { company_id, part_id, unit_cost, qty, vendor: str(formData, 'vendor'), reference: str(formData, 'ref_label'), date: new Date().toISOString().slice(0, 10) })
   } else {
-    await admin.from('parts').update({ is_stocked: true }).eq('id', part_id).eq('is_stocked', false)
+    await admin.from('parts').update({ is_stocked: true }).eq('id', part_id).eq('company_id', company_id).eq('is_stocked', false)
   }
   refresh(`/inventory/parts/${part_id}`, `/inventory/stock/${location_id}`)
   return { ok: true }
@@ -86,9 +86,9 @@ export async function setTransferStatus(id: string, status: 'picked' | 'received
     ])
     const { error } = await admin.from('inventory_transactions').insert(rows)
     if (error) return
-    await admin.from('stock_transfers').update({ status, received_by: userId, received_at: new Date().toISOString() }).eq('id', id)
+    await admin.from('stock_transfers').update({ status, received_by: userId, received_at: new Date().toISOString() }).eq('id', id).eq('company_id', company_id)
   } else {
-    await admin.from('stock_transfers').update({ status }).eq('id', id)
+    await admin.from('stock_transfers').update({ status }).eq('id', id).eq('company_id', company_id)
   }
   refresh(`/inventory/stock/${t.from_location}`, `/inventory/stock/${t.to_location}`)
 }
