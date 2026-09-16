@@ -1056,3 +1056,74 @@ export async function fileDocument(id: string, category: string): Promise<void> 
   revalidatePath('/construction/documents/review')
   if (doc?.job_id) revalidatePath(`/construction/jobs/${doc.job_id}`)
 }
+
+// ============================================================
+// EMAIL OUT (Phase 5) — invoice PDF to the customer via Resend
+// ============================================================
+export type EmailState = { error?: string; ok?: boolean; sentTo?: string } | null
+
+function splitEmails(s: string | null): string[] {
+  return (s ?? '').split(/[,;\s]+/).map(e => e.trim()).filter(e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
+}
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+}
+
+export async function emailInvoice(id: string, _state: EmailState, formData: FormData): Promise<EmailState> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return { error: 'You do not have permission to send invoices.' }
+  if (!process.env.RESEND_API_KEY) return { error: 'Email sending is not configured yet. Add RESEND_API_KEY and RESEND_FROM_EMAIL in Vercel → Settings → Environment Variables, then redeploy.' }
+
+  const to = splitEmails(str(formData.get('to')))
+  const cc = splitEmails(str(formData.get('cc')))
+  const subject = str(formData.get('subject'))
+  const message = str(formData.get('message')) ?? ''
+  if (!to.length) return { error: 'Enter at least one valid email address.' }
+  if (!subject) return { error: 'Subject is required.' }
+
+  const admin = createAdminClient()
+  const { buildInvoicePdf } = await import('@/lib/invoice-pdf')
+  const built = await buildInvoicePdf(admin, id, profile.company_id)
+  if (!built) return { error: 'Invoice not found.' }
+  const { pdf, invoice } = built
+  const number = invoice.invoice_number ?? 'Invoice'
+  const total = Number(invoice.invoice_grand_total) || 0
+
+  const { Resend } = await import('resend')
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  const from = process.env.RESEND_INVOICE_FROM ?? process.env.RESEND_FROM_EMAIL ?? 'RPS <invoices@rpsmaintenance.com>'
+  const replyTo = process.env.RESEND_REPLY_TO
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1a1a1a">
+      <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#6b7280;letter-spacing:.08em;text-transform:uppercase">Rappahannock Petroleum Services</p>
+      <h2 style="margin:0 0 12px;font-size:20px;font-weight:700">Invoice ${escapeHtml(number)}</h2>
+      <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;white-space:pre-line">${escapeHtml(message)}</p>
+      <table style="font-size:14px;color:#374151;border-collapse:collapse">
+        ${invoice.store_label ? `<tr><td style="padding:2px 12px 2px 0;color:#6b7280">Site</td><td>${escapeHtml(invoice.store_label)}</td></tr>` : ''}
+        ${invoice.po_number ? `<tr><td style="padding:2px 12px 2px 0;color:#6b7280">PO</td><td>${escapeHtml(invoice.po_number)}</td></tr>` : ''}
+        ${invoice.csr_number ? `<tr><td style="padding:2px 12px 2px 0;color:#6b7280">CSR</td><td>${escapeHtml(invoice.csr_number)}</td></tr>` : ''}
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Amount due</td><td><b>$${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></td></tr>
+        ${invoice.due_date ? `<tr><td style="padding:2px 12px 2px 0;color:#6b7280">Due</td><td>${escapeHtml(String(invoice.due_date))}</td></tr>` : ''}
+      </table>
+      <p style="margin:20px 0 0;font-size:12px;color:#9ca3af">The invoice is attached as a PDF.</p>
+    </div>`
+
+  const { data, error } = await resend.emails.send({
+    from, to, cc: cc.length ? cc : undefined, replyTo: replyTo || undefined, subject, html,
+    text: `${message}\n\nInvoice ${number} — amount due $${total.toFixed(2)}. PDF attached.`,
+    attachments: [{ filename: `${number}.pdf`, content: pdf }],
+  })
+
+  await admin.from('billing_emails').insert({
+    company_id: profile.company_id, invoice_id: id, to_emails: to, cc_emails: cc.length ? cc : null, subject, message,
+    provider: 'resend', provider_id: data?.id ?? null, status: error ? 'failed' : 'sent', error: error?.message ?? null, sent_by: profile.id,
+  })
+  if (error) return { error: `Send failed: ${error.message}` }
+
+  if (invoice.status === 'draft') {
+    await admin.from('con_invoices').update({ status: 'sent', sent_date: new Date().toISOString().split('T')[0] }).eq('id', id).eq('company_id', profile.company_id)
+  }
+  revalidatePath('/construction/invoices')
+  revalidatePath(`/construction/invoices/${id}`)
+  return { ok: true, sentTo: to.join(', ') }
+}

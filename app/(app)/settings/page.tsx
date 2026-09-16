@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { Users, Building2, CreditCard, BookOpen, Bell, Inbox } from 'lucide-react'
 import { GmailSyncPanel } from './gmail-sync-panel'
+import { BillingInboxPanel } from './billing-inbox-panel'
 
 const LINKS = [
   { href: '/review',                   icon: Inbox,       title: 'Email Review',           desc: "Resolve emails that didn't match an asset — suggested matches, assign, or create." },
@@ -20,7 +21,7 @@ export default async function SettingsPage() {
   const admin = createAdminClient()
 
   const { data: profile } = await admin
-    .from('profiles').select('role').eq('id', user!.id).single()
+    .from('profiles').select('role, company_id').eq('id', user!.id).single()
 
   if (!['owner', 'manager'].includes(profile?.role ?? '')) {
     redirect('/dashboard')
@@ -34,6 +35,7 @@ export default async function SettingsPage() {
       </div>
 
       <GmailSyncPanel />
+      <BillingInboxPanel companyId={profile!.company_id} />
 
       <div className="space-y-3 mt-6">
         {LINKS.map(l => (

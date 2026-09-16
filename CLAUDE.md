@@ -220,5 +220,33 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
   UI: /inventory/stock (per-location overview, below-min, inbound), /inventory/stock/[locationId] (on-hand +
   inline min/max, count mode, quick adjust, movement history), /inventory/receive, /inventory/transfers
   ("Fill to max" from below-min lines). Hub tiles all live.
-- Next: Phase 5 (connect econstruction/constructionreceipts/rpinvoicing tokens; packing-slip emails → receive
-  queue; vendor receipts → cost updates; invoice email-out), Phase 6 (warranty claims, compliance SKUs).
+- Phase 5 (built 2026-09-16): email-driven receiving + invoice email-out + shop count import.
+  Migration `supabase/migrations/billing_inbox_phase5.sql` (APPLIED): billing_inbox_documents (one row per email
+  with paperwork; attachments in private bucket `billing-inbox`; `extracted` jsonb = Claude-read lines matched to
+  the catalog), billing_emails (audit of invoices emailed out), inventory_transactions.inbox_document_id.
+  lib/billing-gmail-client.ts resolves a read-only token per inbox: GMAIL_TOKEN_<INBOX> (ECONSTRUCTION,
+  CONSTRUCTIONRECEIPTS, RPINVOICING, MAINTENANCE) with fallbacks to SVC_INVOICING_REFRESH_TOKEN (rpinvoicing) and
+  GMAIL_REFRESH_TOKEN (maintenance). lib/billing-inbox-sync.ts: syncInbox/syncAllInboxes (Gmail search per inbox
+  → store attachments → classify kind/vendor/ref), extractDocument/extractPending (Claude `claude-sonnet-5`, PDF/image
+  document blocks, forced `record_document` tool, fallback claude-sonnet-4-6) + matchLinesToCatalog (normalized
+  part number, prefix-stripped, then contains). Route GET /api/billing/inbox-sync?secret&pass=sync|extract|both
+  (CRON_SECRET); GitHub Actions gmail-sync.yml job `billing-inbox-sync` every 15 min. Never archives/marks read.
+  UI: /inventory/receive/queue (tabs by status, inbox status strip, Sync now), /inventory/receive/queue/[id]
+  (attachment preview via signed URL, editable lines with PartPicker re-match / "create as new part", mode
+  "Put into stock" (receive rows + receipt cost) or "Cost update only", duplicate-reference warning, dismiss).
+  Actions: app/(app)/inventory/inbox-actions.ts (runInboxSync, reextractDocument, dismiss/reopen, postInboxDocument).
+  Shared cost rule: lib/inventory-costing.ts applyReceiptCost (used by receiveStock and postInboxDocument).
+  Settings → "Billing inboxes" card (app/(app)/settings/billing-inbox-panel.tsx): connected/not per inbox + how to
+  mint a token (OAuth Playground, gmail.readonly, same GMAIL_CLIENT_ID) + Sync now. Hub/receive page show queue count.
+  Invoice email-out: lib/invoice-pdf.ts buildInvoicePdf (shared with the PDF route); emailInvoice action in
+  app/(app)/construction/actions.ts (Resend, PDF attached, logs billing_emails, draft → sent); UI
+  components/construction/email-invoice-form.tsx on /construction/invoices/[id]. Needs RESEND_API_KEY +
+  RESEND_FROM_EMAIL (optional RESEND_INVOICE_FROM, RESEND_REPLY_TO) in Vercel — not set as of 2026-09-16.
+  Shop count import: Smartsheet "2025/2026 INVENTORY 12/31/25" (Item ID / Description / QTY / LOCATION=bin) →
+  supabase/seed/smartsheet_shop_inventory_2025-12-31.csv → `node scripts/import-smartsheet-inventory.mjs --apply`
+  (idempotent, ref_label SMARTSHEET-2025-12-31, txn 'count' on "Office / Hill", bins on stock_levels, vendor prefix
+  GIL-/VDR-/GRD-… stripped for matching, unmatched parts created with sku SMARTSHEET_2025 + price_needed).
+  Applied 2026-09-16: 946 lines / 6,018 units / 839 new parts. Truck sheets were NOT visible to Trae's Smartsheet
+  login (only the Construction Department workspace is shared) — import them the same way once shared.
+- Next: connect econstruction + constructionreceipts tokens (Trae mints them), RESEND key for email-out, truck
+  inventory sheets from Smartsheet, Phase 6 (warranty claims, compliance SKUs, historical pull before Mar 2026).

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireInventory } from '@/lib/inventory-guard'
+import { applyReceiptCost } from '@/lib/inventory-costing'
 import type { ActionState } from './actions'
 
 const str = (fd: FormData, k: string) => { const v = fd.get(k); return typeof v === 'string' && v.trim() ? v.trim() : null }
@@ -31,12 +32,7 @@ export async function receiveStock(_s: ActionState, formData: FormData): Promise
   if (error) return { error: error.message }
   if (unit_cost != null) {
     // cost from the receipt beats anything else on file (RPS rule) — and keep the running average.
-    const { data: p } = await admin.from('parts').select('avg_cost, is_stocked').eq('id', part_id).single()
-    const { data: prior } = await admin.from('inventory_transactions').select('qty').eq('part_id', part_id).eq('txn_type', 'receive')
-    const priorQty = (prior ?? []).reduce((a, r) => a + Number(r.qty), 0) - qty
-    const avg = p?.avg_cost != null && priorQty > 0 ? ((Number(p.avg_cost) * priorQty) + unit_cost * qty) / (priorQty + qty) : unit_cost
-    await admin.from('parts').update({ last_cost: unit_cost, avg_cost: Math.round(avg * 10000) / 10000, unit_cost, cost_source: 'receipt', cost_vendor: str(formData, 'vendor'), cost_invoice_ref: str(formData, 'ref_label'), cost_date: new Date().toISOString().slice(0, 10), price_status: 'ok', is_stocked: true }).eq('id', part_id)
-    await admin.from('part_price_history').insert({ part_id, kind: 'cost_receipt', price: unit_cost, vendor: str(formData, 'vendor'), reference: str(formData, 'ref_label'), observed_on: new Date().toISOString().slice(0, 10), source_note: 'received into stock' })
+    await applyReceiptCost(admin, { part_id, unit_cost, qty, vendor: str(formData, 'vendor'), reference: str(formData, 'ref_label'), date: new Date().toISOString().slice(0, 10) })
   } else {
     await admin.from('parts').update({ is_stocked: true }).eq('id', part_id).eq('is_stocked', false)
   }

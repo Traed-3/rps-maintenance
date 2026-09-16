@@ -7,19 +7,20 @@ export default async function InventoryHubPage() {
   const { company_id } = await requireInventory()
   const admin = createAdminClient()
 
-  const [{ count: partCount }, { count: needPrice }, { count: stockedCount }, { count: truckCount }, { count: txnCount }] = await Promise.all([
+  const [{ count: partCount }, { count: needPrice }, { count: stockedCount }, { count: truckCount }, { count: txnCount }, { count: queued }] = await Promise.all([
     admin.from('parts').select('id', { count: 'exact', head: true }).eq('company_id', company_id).eq('active', true),
     admin.from('parts').select('id', { count: 'exact', head: true }).eq('company_id', company_id).eq('active', true).neq('price_status', 'ok'),
     admin.from('parts').select('id', { count: 'exact', head: true }).eq('company_id', company_id).eq('is_stocked', true),
     admin.from('stock_locations').select('id', { count: 'exact', head: true }).eq('company_id', company_id).eq('kind', 'truck').eq('active', true),
     admin.from('inventory_transactions').select('id', { count: 'exact', head: true }).eq('company_id', company_id),
+    admin.from('billing_inbox_documents').select('id', { count: 'exact', head: true }).eq('company_id', company_id).eq('status', 'new'),
   ])
 
   const tiles = [
     { href: '/inventory/parts', icon: Package, title: 'Parts catalog', body: `${partCount ?? 0} parts and services · ${needPrice ?? 0} need a price`, live: true },
     { href: '/inventory/locations', icon: Warehouse, title: 'Stock locations', body: `Office shelves and ${truckCount ?? 0} trucks`, live: true },
     { href: '/inventory/stock', icon: ClipboardCheck, title: 'Stock on hand', body: `${stockedCount ?? 0} tracked parts · ${txnCount ?? 0} ledger entries · counts and min/max per truck`, live: true },
-    { href: '/inventory/receive', icon: PackagePlus, title: 'Receive', body: 'Packing slips, vendor invoices, counter pickups', live: true },
+    { href: (queued ?? 0) > 0 ? '/inventory/receive/queue' : '/inventory/receive', icon: PackagePlus, title: 'Receive', body: (queued ?? 0) > 0 ? `${queued} email${queued === 1 ? '' : 's'} with paperwork waiting in the queue` : 'Packing slips, vendor invoices, counter pickups · email queue', live: true },
     { href: '/inventory/transfers', icon: ArrowLeftRight, title: 'Transfers', body: 'Office → truck, truck → truck', live: true },
   ]
 

@@ -6,6 +6,7 @@ import { pctFromDecimal, INVOICE_STATUSES } from '@/lib/construction'
 import { DocBuilder, type LineRowState } from '@/components/construction/doc-builder'
 import { StatusButtons } from '@/components/construction/status-buttons'
 import { DeleteButton } from '@/components/construction/delete-button'
+import { EmailInvoiceForm } from '@/components/construction/email-invoice-form'
 import { Button } from '@/components/ui/button'
 import { FileDown, FileText } from 'lucide-react'
 import { saveInvoice, setInvoiceStatus, deleteInvoice } from '../../actions'
@@ -18,11 +19,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const { data: invoice } = await admin.from('con_invoices').select('*').eq('id', id).eq('company_id', company_id).single()
   if (!invoice) notFound()
 
-  const [{ data: items }, { data: customers }, { data: jobs }] = await Promise.all([
+  const [{ data: items }, { data: customers }, { data: jobs }, { data: customer }, { data: emails }] = await Promise.all([
     admin.from('con_invoice_line_items').select('*, parts(part_number, category, taxable)').eq('invoice_id', id).order('section').order('line_no'),
     admin.from('con_customers').select('id, name').eq('company_id', company_id).order('name'),
     admin.from('con_jobs').select('id, site_number, work_order_number').eq('company_id', company_id).order('created_at', { ascending: false }),
+    invoice.customer_id ? admin.from('con_customers').select('name, email, billing_contact').eq('id', invoice.customer_id).maybeSingle() : Promise.resolve({ data: null }),
+    admin.from('billing_emails').select('id, to_emails, sent_at, status, error').eq('invoice_id', id).order('sent_at', { ascending: false }).limit(10),
   ])
+  const emailDefaults = {
+    to: customer?.email ?? '',
+    subject: `RPS Invoice ${invoice.invoice_number ?? ''}${invoice.store_label ? ` — ${invoice.store_label}` : ''}${invoice.po_number ? ` (PO ${invoice.po_number})` : ''}`,
+    message: `${customer?.billing_contact ? `Hi ${customer.billing_contact},` : 'Hello,'}\n\nPlease find attached invoice ${invoice.invoice_number ?? ''}${invoice.project_description ? ` for ${invoice.project_description}` : ''}.${invoice.due_date ? ` Payment is due ${invoice.due_date}.` : ''}\n\nThank you,\nRappahannock Petroleum Services`,
+  }
 
   const initialLines: LineRowState[] = (items ?? []).map((it, i) => ({
     key: `r${i}`,
@@ -59,6 +67,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <div className="mt-3">
             <StatusButtons id={id} current={invoice.status} options={INVOICE_STATUSES} action={setInvoiceStatus} />
           </div>
+        )}
+        {canWrite && (
+          <EmailInvoiceForm invoiceId={id} defaultTo={emailDefaults.to} defaultSubject={emailDefaults.subject} defaultMessage={emailDefaults.message} history={emails ?? []} configured={!!process.env.RESEND_API_KEY} />
         )}
       </div>
 

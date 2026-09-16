@@ -8,10 +8,11 @@ export default async function ReceivePage({ searchParams }: { searchParams: Prom
   const { loc } = await searchParams
   const { company_id, canWrite } = await requireInventory()
   const admin = createAdminClient()
-  const [{ data: locations }, { data: recent }] = await Promise.all([
+  const [{ data: locations }, { data: recent }, { count: queued }] = await Promise.all([
     admin.from('stock_locations').select('id, name, kind').eq('company_id', company_id).eq('active', true).in('kind', ['office', 'truck', 'jobsite']).order('kind').order('name'),
     admin.from('inventory_transactions').select('id, qty, unit_cost, ref_label, note, created_at, parts(part_number, description), stock_locations(name), profiles(full_name)')
       .eq('company_id', company_id).eq('txn_type', 'receive').order('created_at', { ascending: false }).limit(40),
+    admin.from('billing_inbox_documents').select('id', { count: 'exact', head: true }).eq('company_id', company_id).eq('status', 'new'),
   ])
 
   return (
@@ -21,7 +22,10 @@ export default async function ReceivePage({ searchParams }: { searchParams: Prom
           <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Receive stock</h1>
           <p className="text-sm text-gray-500 mt-0.5">Parts arriving from a packing slip, a vendor invoice, or the counter. The cost you type here becomes the part&apos;s receipt cost.</p>
         </div>
-        <Link href="/inventory" className="text-sm text-gray-500 hover:text-gray-700">← Inventory</Link>
+        <div className="flex items-center gap-3">
+          <Link href="/inventory/receive/queue" className={`text-sm rounded-lg border px-3 py-1.5 ${(queued ?? 0) > 0 ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-blue-300'}`}>Email queue{(queued ?? 0) > 0 ? ` (${queued})` : ''}</Link>
+          <Link href="/inventory" className="text-sm text-gray-500 hover:text-gray-700">← Inventory</Link>
+        </div>
       </div>
 
       {canWrite ? (
