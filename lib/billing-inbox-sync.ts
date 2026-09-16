@@ -32,11 +32,19 @@ const MAX_ATTACHMENTS = 6
 
 // Gmail search per inbox. constructionreceipts is a receipts-only mailbox, so no keyword gate there.
 const PAPERWORK = '(invoice OR "packing slip" OR "packing list" OR "pack slip" OR "pick ticket" OR receipt OR quote OR quotation OR proposal OR estimate OR "order confirmation" OR "order acknowledgment" OR shipment OR shipped OR "bill of lading")'
+// Tech completion forwards ("Fwd: 7-Eleven … Work Order WOT…", "WAWA Work Order … is Dispatched") carry jobsite
+// photos, not paperwork — Service Dispatch already handles them, so they are excluded here.
+const NOT_DISPATCH = '-subject:"Work Order" -subject:Dispatched -subject:WOT'
 const INBOX_QUERY: Record<BillingInbox, string> = {
-  econstruction:        `has:attachment -in:spam -in:trash ${PAPERWORK}`,
+  econstruction:        `has:attachment -in:spam -in:trash ${PAPERWORK} ${NOT_DISPATCH}`,
   constructionreceipts: 'has:attachment -in:spam -in:trash',
-  rpinvoicing:          `has:attachment -in:spam -in:trash ${PAPERWORK}`,
-  maintenance:          `has:attachment -in:spam -in:trash (invoice OR receipt OR "packing slip" OR "packing list")`,
+  rpinvoicing:          `has:attachment -in:spam -in:trash ${PAPERWORK} ${NOT_DISPATCH} (filename:pdf OR filename:xlsx OR filename:xls OR filename:csv)`,
+  maintenance:          `has:attachment -in:spam -in:trash (invoice OR receipt OR "packing slip" OR "packing list") ${NOT_DISPATCH}`,
+}
+
+/** A tech forwarding a portal dispatch back with photos — never paperwork for the receive queue. */
+export function isDispatchTraffic(subject: string, senderEmail: string): boolean {
+  return /work order|dispatched|\bWOT\d|\bFWKD\d|\bINC\d{4,}/i.test(subject) && RPS_SENDER.test(senderEmail)
 }
 
 const KEEP_MIME = /^(application\/pdf|image\/(jpeg|jpg|png|gif|webp|heic)|text\/csv|text\/plain|application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|application\/vnd\.ms-excel)$/i
@@ -157,6 +165,7 @@ export async function syncInbox(inbox: BillingInbox, opts: { maxResults?: number
       const subject = header(msg, 'Subject')
       const from = parseAddress(header(msg, 'From'))
       const receivedAt = msg.internalDate ? new Date(Number(msg.internalDate)) : new Date(header(msg, 'Date') || Date.now())
+      if (isDispatchTraffic(subject, from.email)) { result.skipped++; continue }
       const body = extractText(msg)
       const atts = listAttachments(msg).filter(a => KEEP_MIME.test(a.mimeType) || KEEP_EXT.test(a.filename)).filter(a => a.size <= MAX_ATTACHMENT_BYTES).slice(0, MAX_ATTACHMENTS)
       if (!atts.length) { result.skipped++; continue }   // signature images only — not paperwork
