@@ -14,7 +14,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
 
   let query = admin
     .from('con_quotes')
-    .select('id, quote_number, proposal_date, status, final_total, store_label, con_customers(name)')
+    .select('id, quote_number, proposal_date, status, final_total, store_label, department, con_customers(name)')
     .eq('company_id', company_id)
     .order('proposal_date', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -33,7 +33,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
           <p className="text-sm text-gray-500 mt-0.5">{quotes?.length ?? 0} quote{quotes?.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/construction" className="text-sm text-gray-500 hover:text-gray-700">← Construction</Link>
+          <Link href="/billing" className="text-sm text-gray-500 hover:text-gray-700">← Billing</Link>
           {canWrite && <Link href="/construction/quotes/new"><Button className="gap-2"><Plus className="w-4 h-4" />New Quote</Button></Link>}
         </div>
       </div>
@@ -60,6 +60,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Quote #</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Customer</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden md:table-cell">Store</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Dept</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Date</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Total</th>
@@ -72,6 +73,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
                     <td className="px-4 py-3 font-mono text-xs text-gray-700">{q.quote_number}</td>
                     <td className="px-4 py-3 text-gray-700 hidden sm:table-cell">{(q as any).con_customers?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{q.store_label ?? '—'}</td>
+                    <td className="px-4 py-3 hidden sm:table-cell"><span className="text-xs capitalize rounded-full px-2 py-0.5 bg-gray-100 text-gray-600">{q.department ?? 'construction'}</span></td>
                     <td className="px-4 py-3"><QuoteStatusBadge status={q.status} /></td>
                     <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">{fmtDate(q.proposal_date)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">{money(q.final_total)}</td>

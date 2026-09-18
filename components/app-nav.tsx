@@ -18,6 +18,7 @@ import {
   CalendarDays,
   Fuel,
   Package,
+  ReceiptText,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -37,6 +38,9 @@ const navItems: NavItem[] = [
   { href: '/construction', label: 'Construction', icon: HardHat, construction: true },
   // 7-Eleven / Wawa / Sunoco service calls, synced from rpdispatcher + rpinvoicing.
   { href: '/service', label: 'Service Dispatch', icon: Fuel },
+  // Billing is its own top-level home for Quotes + Invoices across BOTH
+  // departments (it's not construction-only), gated to the same allowlist for now.
+  { href: '/billing', label: 'Billing', icon: ReceiptText, match: ['/billing', '/construction/quotes', '/construction/invoices'], construction: true },
   { href: '/inventory', label: 'Inventory', icon: Package },
   // Company-wide calendar that overlays Maintenance and Construction items.
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
