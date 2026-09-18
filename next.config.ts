@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
       { source: '/construction/invoices', destination: '/billing/invoices', permanent: true },
       { source: '/construction/invoices/:path*', destination: '/billing/invoices/:path*', permanent: true },
       { source: '/api/construction/invoices/:id/pdf', destination: '/api/billing/invoices/:id/pdf', permanent: true },
+      { source: '/api/construction/quotes/:id/pdf', destination: '/api/billing/quotes/:id/pdf', permanent: true },
     ]
   },
 };

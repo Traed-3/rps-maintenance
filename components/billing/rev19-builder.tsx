@@ -390,7 +390,8 @@ function CategoryTable({ kind, rows, upd, del, ext, inputs, dept }: TableProps) 
 export function rowsFromLines(items: Record<string, unknown>[]): Rev19Row[] {
   const S = (v: unknown) => (v == null ? '' : String(v))
   return items.map((it, i) => {
-    const cat = Number(it.category) || 4
+    const legacyLabor = Number(it.labor_hours) > 0 && it.unit_cost == null && it.men == null
+    const cat = legacyLabor ? 7 : Number(it.category) || 4
     const base = newRow(it.section === 'additional' ? 'additional' : 'basic', cat, it.crew === 'service' ? 'service' : 'construction')
     return {
       ...base, key: `s${i}`, description: S(it.description), part_number: S(it.part_number), part_id: (it.part_id as string | null) ?? null, subcategory: S(it.subcategory),
@@ -400,7 +401,7 @@ export function rowsFromLines(items: Record<string, unknown>[]): Rev19Row[] {
       men: S(it.men), hrs_each: S(it.hrs_each), labor_rate: it.category === 7 && it.men == null && it.labor_rate != null ? S(it.labor_rate) : '', travel_days: S(it.travel_days), techs: S(it.techs),
       day_label: S(it.day_label), source_note: S(it.source_note), price_flag: S(it.price_flag) || 'ok', is_stock: !!it.is_stock, item_type: S(it.item_type) || base.item_type,
       // legacy lines (no men/hrs) keep their hours via quantity fallback
-      ...(cat === 7 && it.men == null && it.labor_hours != null ? { men: '1', hrs_each: S(it.labor_hours) } : {}),
+      ...(cat === 7 && it.men == null && it.labor_hours != null ? { men: '1', hrs_each: S(it.labor_hours), labor_rate: S(it.labor_rate) } : {}),
       ...(cat === 8 && it.travel_days == null && it.quantity != null ? { travel_days: S(it.quantity), techs: '1' } : {}),
     }
   })

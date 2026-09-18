@@ -26,6 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const view = (request.nextUrl.searchParams.get('view') as 'face' | 'breakdown' | 'both' | null) ?? 'both'
   const { doc, items } = docFromRow(kind === 'quotes' ? 'quote' : 'invoice', row as Record<string, unknown>, (row as { con_customers: { name: string; billing_address: string | null } | null }).con_customers, (lines ?? []) as Record<string, unknown>[])
-  const pdf = await renderBillingPdf(doc, items, ['face', 'breakdown', 'both'].includes(view) ? view : 'both')
+  const detailParam = request.nextUrl.searchParams.get('detail')   // detail=1 lists every line on the face; detail=0 rolls up by category
+  const pdf = await renderBillingPdf(doc, items, ['face', 'breakdown', 'both'].includes(view) ? view : 'both', detailParam == null ? {} : { detail: detailParam === '1' })
   return new NextResponse(new Uint8Array(pdf), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${doc.number}${view === 'breakdown' ? '-breakdown' : ''}.pdf"` } })
 }

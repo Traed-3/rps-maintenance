@@ -89,6 +89,8 @@ export type Rev19LineInput = {
   price_flag?: PriceFlag | string | null
   is_stock?: boolean | null
   item_type?: string | null
+  /** Legacy documents (imported before categories): print the stored numbers, never re-price. */
+  fixed?: { sell_unit: number; material_total: number; labor_hours: number; labor_rate: number | null; total_labor: number } | null
 }
 
 export type Rev19Line = Rev19LineInput & {
@@ -159,6 +161,10 @@ export function sellUnit(l: Rev19LineInput, inp: Rev19Inputs): number {
 }
 
 export function computeRev19Line(l: Rev19LineInput, inp: Rev19Inputs): Rev19Line {
+  if (l.fixed) {
+    const f = l.fixed
+    return { ...l, sell_unit: f.sell_unit, quantity_effective: n(l.quantity), material_total: r2(f.material_total), labor_hours: r2(f.labor_hours), total_labor: r2(f.total_labor), total_material_labor: r2(f.material_total + f.total_labor) }
+  }
   const kind = categoryMeta(l.category).kind
   const sell = sellUnit(l, inp)
   if (kind === 'labor') {
