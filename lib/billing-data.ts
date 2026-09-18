@@ -3,13 +3,16 @@ import { createAdminClient } from '@/lib/supabase/admin'
 type Admin = ReturnType<typeof createAdminClient>
 
 /** Pick-lists every builder page needs: customers (with brand/rate card), jobs, rate cards. */
+export type TeamMember = { id: string; full_name: string; job_title: string | null; role: string }
+
 export async function loadBuilderLists(admin: Admin, company_id: string) {
-  const [{ data: customers }, { data: jobs }, { data: rateCards }] = await Promise.all([
+  const [{ data: customers }, { data: jobs }, { data: rateCards }, { data: team }] = await Promise.all([
     admin.from('con_customers').select('id, name, brand, rate_card_id').eq('company_id', company_id).order('name'),
     admin.from('con_jobs').select('id, site_number, work_order_number').eq('company_id', company_id).order('created_at', { ascending: false }).limit(300),
     admin.from('billing_rate_cards').select('id, name, labor_rate, sales_tax_pct').eq('company_id', company_id).order('name'),
+    admin.from('profiles').select('id, full_name, job_title, role').eq('company_id', company_id).eq('is_active', true).order('full_name'),
   ])
-  return { customers: customers ?? [], jobs: jobs ?? [], rateCards: (rateCards ?? []).map(r => ({ ...r, labor_rate: Number(r.labor_rate), sales_tax_pct: r.sales_tax_pct != null ? Number(r.sales_tax_pct) : null })) }
+  return { team: (team ?? []) as TeamMember[], customers: customers ?? [], jobs: jobs ?? [], rateCards: (rateCards ?? []).map(r => ({ ...r, labor_rate: Number(r.labor_rate), sales_tax_pct: r.sales_tax_pct != null ? Number(r.sales_tax_pct) : null })) }
 }
 
 /** One quote or invoice with its lines and customer, scoped to the company. */

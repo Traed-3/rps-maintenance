@@ -101,3 +101,16 @@ ALTER TABLE con_quotes ADD COLUMN IF NOT EXISTS po_number text;
 ALTER TABLE con_invoices ADD COLUMN IF NOT EXISTS customer_email text;
 ALTER TABLE con_invoices ADD COLUMN IF NOT EXISTS valid_until date;
 ALTER TABLE con_invoices ADD COLUMN IF NOT EXISTS nte_amount numeric;
+
+-- ── Signer is chosen per document (2026-09-18) ─────────────────
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS job_title text;
+ALTER TABLE con_quotes   ALTER COLUMN prepared_by DROP DEFAULT;
+ALTER TABLE con_invoices ALTER COLUMN prepared_by DROP DEFAULT;
+ALTER TABLE con_quotes   ALTER COLUMN construction_manager DROP DEFAULT;
+ALTER TABLE con_invoices ALTER COLUMN construction_manager DROP DEFAULT;
+ALTER TABLE con_quotes   ALTER COLUMN foreman DROP DEFAULT;
+ALTER TABLE con_invoices ALTER COLUMN foreman DROP DEFAULT;
+ALTER TABLE con_quotes   ALTER COLUMN compiled_by DROP DEFAULT;
+ALTER TABLE con_invoices ALTER COLUMN compiled_by DROP DEFAULT;
+ALTER TABLE con_quotes   ADD COLUMN IF NOT EXISTS signer_id uuid REFERENCES profiles ON DELETE SET NULL;
+ALTER TABLE con_invoices ADD COLUMN IF NOT EXISTS signer_id uuid REFERENCES profiles ON DELETE SET NULL;

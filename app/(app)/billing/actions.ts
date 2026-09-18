@@ -64,8 +64,8 @@ function headerFields(fd: FormData, inp: Rev19Inputs) {
     attn: str(fd.get('attn')), store_label: str(fd.get('store_label')), site_number: str(fd.get('site_number')),
     facility_address: str(fd.get('facility_address')), city_state_zip: str(fd.get('city_state_zip')), project_description: str(fd.get('project_description')),
     csr_number: str(fd.get('csr_number')), po_number: str(fd.get('po_number')), portal_wo_number: str(fd.get('portal_wo_number')), work_order_number: str(fd.get('work_order_number')),
-    project_manager: str(fd.get('project_manager')), construction_manager: str(fd.get('construction_manager')) ?? 'Starsky Dodson', foreman: str(fd.get('foreman')) ?? 'Ernie Lewis', compiled_by: str(fd.get('compiled_by')) ?? 'Trae Dodson',
-    prepared_by: str(fd.get('prepared_by')) ?? 'Starsky Dodson, Construction Manager', rate_card_id: str(fd.get('rate_card_id')),
+    project_manager: str(fd.get('project_manager')), construction_manager: str(fd.get('construction_manager')), foreman: str(fd.get('foreman')), compiled_by: str(fd.get('compiled_by')),
+    signer_id: str(fd.get('signer_id')), prepared_by: [str(fd.get('signer_name')), str(fd.get('signer_title'))].filter(Boolean).join(', ') || null, rate_card_id: str(fd.get('rate_card_id')),
     material_markup_pct: inp.material_markup_pct, material_tax_pct: inp.material_tax_pct, sub_markup_pct: inp.sub_markup_pct, labor_rate: inp.labor_rate,
     contingency_pct: inp.contingency_pct, contingency_flat: inp.contingency_flat, profit_overhead_percent: inp.profit_overhead_pct, sales_tax_percent: inp.sales_tax_pct,
     scope_rows: parseScopeRows(fd), exclusions: str(fd.get('exclusions')), warranty_line: str(fd.get('warranty_line')),
@@ -165,7 +165,7 @@ export async function convertQuoteToInvoice(quoteId: string): Promise<void> {
   if (!q) return
   const { data: items } = await admin.from('con_quote_line_items').select('*').eq('quote_id', quoteId).order('sort_order').order('line_no')
   const copy = ['job_id', 'customer_id', 'attn', 'store_label', 'site_number', 'facility_address', 'city_state_zip', 'project_description', 'department', 'portal_wo_number', 'work_order_number', 'csr_number',
-    'project_manager', 'construction_manager', 'foreman', 'compiled_by', 'prepared_by', 'rate_card_id', 'material_markup_pct', 'material_tax_pct', 'sub_markup_pct', 'labor_rate',
+    'project_manager', 'construction_manager', 'foreman', 'compiled_by', 'prepared_by', 'signer_id', 'rate_card_id', 'material_markup_pct', 'material_tax_pct', 'sub_markup_pct', 'labor_rate',
     'contingency_pct', 'contingency_flat', 'contingency_amount', 'profit_overhead_percent', 'sales_tax_percent', 'scope_rows', 'exclusions', 'warranty_line', 'category_totals',
     'taxable_material_total', 'concrete_equipment_total', 'labor_mobilization_total', 'basic_subtotal_material', 'basic_subtotal_labor', 'basic_total',
     'additional_subtotal_material', 'additional_subtotal_labor', 'additional_total', 'grand_total', 'profit_overhead_amount', 'tax_amount'] as const

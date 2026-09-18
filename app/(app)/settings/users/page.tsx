@@ -21,7 +21,7 @@ export default async function UsersSettingsPage() {
 
   const { data: users } = await admin
     .from('profiles')
-    .select('id, full_name, email, phone, role, is_active, created_at, default_landing_page')
+    .select('id, full_name, email, phone, role, is_active, created_at, default_landing_page, job_title')
     .eq('company_id', profile!.company_id)
     .order('full_name')
 
@@ -79,9 +79,9 @@ export default async function UsersSettingsPage() {
                 <tr key={u.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">{u.full_name}</span>
+                      <span className="font-medium text-gray-900">{u.full_name}</span>{(u as any).job_title && <span className="ml-2 text-xs text-gray-400">{(u as any).job_title}</span>}
                       {isSelf && <span className="text-xs text-gray-400">(you)</span>}
-                      <EditUserButton user={{ id: u.id, full_name: u.full_name, email: u.email, phone: (u as any).phone ?? null }} />
+                      <EditUserButton user={{ id: u.id, full_name: u.full_name, email: u.email, phone: (u as any).phone ?? null, job_title: (u as any).job_title ?? null }} />
                     </div>
                     {(u as any).phone && <p className="text-xs text-gray-400 mt-0.5">{(u as any).phone}</p>}
                   </td>

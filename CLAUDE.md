@@ -269,6 +269,12 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
   TEMPLATE face + landscape MATERIAL AND LABOR BREAKDOWN with pink/green/orange fills). Verified against the
   SU-8001 REV19 workbook to the penny ($70,221.44); that quote exists as Q-2026-0002 as a worked example.
   Catalog gained sku REV19_RATE_CARD rows (lodging, per diem, mobilization, disposables, permits).
+  PDFs carry the company letterhead (public/rps-letterhead-logo.png, from Proton Drive Documents/Logos) and mirror
+  the RP QUOTE TEMPLATE sheet (peach headers, gray bands, black grid, boxed title, signature line). Quotes print
+  one row per category, invoices every line (?detail=0|1). Legacy imported invoices print as stored (`fixed`).
+  SIGNER IS PER DOCUMENT: builder "Signed by" picks any active profile (profiles.job_title prints under the
+  name, editable in Settings → Users); defaults to the logged-in user. No hardcoded Starsky/Ernie/Trae anywhere
+  in Billing — prepared_by = "Name, Title" text + signer_id.
   Reference docs: iCloud Project Folders/Previous Project Files and Closeouts for Claude Reference/00 - RPS Quote
   Types and Historical Examples (pre 04-30-2022).md + the rps-quote-builder skill.
 - Next: connect econstruction + constructionreceipts tokens (Trae mints them), RESEND key for email-out, truck

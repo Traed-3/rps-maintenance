@@ -28,7 +28,7 @@ export type Rev19Header = {
   csr_number?: string | null; po_number?: string | null; portal_wo_number?: string | null; work_order_number?: string | null
   proposal_date?: string | null; bid_due?: string | null; valid_until?: string | null; nte_amount?: number | null
   invoice_date?: string | null; due_date?: string | null
-  project_manager?: string | null; construction_manager?: string | null; foreman?: string | null; compiled_by?: string | null; prepared_by?: string | null
+  project_manager?: string | null; construction_manager?: string | null; foreman?: string | null; compiled_by?: string | null; prepared_by?: string | null; signer_id?: string | null
   rate_card_id?: string | null
   material_markup_pct?: number | null; material_tax_pct?: number | null; sub_markup_pct?: number | null; labor_rate?: number | null
   contingency_pct?: number | null; contingency_flat?: number | null; profit_overhead_percent?: number | null; sales_tax_percent?: number | null
@@ -37,6 +37,7 @@ export type Rev19Header = {
 type Customer = { id: string; name: string; brand?: string | null; rate_card_id?: string | null }
 type Job = { id: string; site_number: string | null; work_order_number: string | null }
 type RateCard = { id: string; name: string; labor_rate: number; sales_tax_pct: number | null }
+type TeamMember = { id: string; full_name: string; job_title: string | null; role: string }
 
 let _k = 0
 export function newRow(section: 'basic' | 'additional', category: number, crew: 'construction' | 'service' = 'construction'): Rev19Row {
@@ -57,12 +58,23 @@ const toInput = (r: Rev19Row): Rev19LineInput => ({
 })
 const pctStr = (v: number | null | undefined, dflt: number) => String(Math.round(((v ?? dflt) * 100 + Number.EPSILON) * 100) / 100)
 
-export function Rev19Builder({ action, header, initialLines, customers, jobs, rateCards }: {
+export function Rev19Builder({ action, header, initialLines, customers, jobs, rateCards, team, currentUser }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
-  header: Rev19Header; initialLines?: Rev19Row[]; customers: Customer[]; jobs: Job[]; rateCards: RateCard[]
+  header: Rev19Header; initialLines?: Rev19Row[]; customers: Customer[]; jobs: Job[]; rateCards: RateCard[]; team: TeamMember[]; currentUser: TeamMember | null
 }) {
   const [state, formAction, pending] = useActionState(action, null)
   const isQuote = header.kind === 'quote'
+  // Who signs: saved signer, else whoever is building the document. Name and title stay editable.
+  const savedName = header.prepared_by?.split(',')[0]?.trim() ?? ''
+  const savedTitle = header.prepared_by?.split(',').slice(1).join(',').trim() ?? ''
+  const [signerId, setSignerId] = useState(header.signer_id ?? (header.prepared_by ? '' : currentUser?.id ?? ''))
+  const [signerName, setSignerName] = useState(savedName || currentUser?.full_name || '')
+  const [signerTitle, setSignerTitle] = useState(savedTitle || currentUser?.job_title || '')
+  function pickSigner(id: string) {
+    setSignerId(id)
+    const m = team.find(t => t.id === id)
+    if (m) { setSignerName(m.full_name); setSignerTitle(m.job_title ?? '') }
+  }
   const [dept, setDept] = useState<'construction' | 'service'>(header.department === 'service' ? 'service' : 'construction')
   const [inputs, setInputs] = useState({
     material_markup_pct: pctStr(header.material_markup_pct, REV19_DEFAULTS.material_markup_pct),
@@ -147,11 +159,18 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
             <div><label className={lbl} htmlFor="b-idate">Invoice date</label><input id="b-idate" name="invoice_date" type="date" defaultValue={header.invoice_date ?? new Date().toISOString().slice(0, 10)} className={inp} /></div>
             <div><label className={lbl} htmlFor="b-due">Due date</label><input id="b-due" name="due_date" type="date" defaultValue={header.due_date ?? ''} className={inp} /></div>
           </>)}
-          <div><label className={lbl} htmlFor="b-pm">Project manager</label><input id="b-pm" name="project_manager" defaultValue={header.project_manager ?? 'Starsky Dodson'} className={inp} /></div>
-          <div><label className={lbl} htmlFor="b-cm">Construction manager</label><input id="b-cm" name="construction_manager" defaultValue={header.construction_manager ?? 'Starsky Dodson'} className={inp} /></div>
-          <div><label className={lbl} htmlFor="b-fm">Foreman / lead</label><input id="b-fm" name="foreman" defaultValue={header.foreman ?? 'Ernie Lewis'} className={inp} /></div>
-          <div><label className={lbl} htmlFor="b-cb">Work order compiled by</label><input id="b-cb" name="compiled_by" defaultValue={header.compiled_by ?? 'Trae Dodson'} className={inp} /></div>
-          <input type="hidden" name="prepared_by" value={header.prepared_by ?? 'Starsky Dodson, Construction Manager'} />
+          <div><label className={lbl} htmlFor="b-pm">Project manager</label><input id="b-pm" name="project_manager" list="team-names" defaultValue={header.project_manager ?? currentUser?.full_name ?? ''} className={inp} /></div>
+          <div><label className={lbl} htmlFor="b-cm">Construction manager</label><input id="b-cm" name="construction_manager" list="team-names" defaultValue={header.construction_manager ?? ''} className={inp} /></div>
+          <div><label className={lbl} htmlFor="b-fm">Foreman / lead</label><input id="b-fm" name="foreman" list="team-names" defaultValue={header.foreman ?? ''} className={inp} /></div>
+          <div><label className={lbl} htmlFor="b-cb">Work order compiled by</label><input id="b-cb" name="compiled_by" list="team-names" defaultValue={header.compiled_by ?? currentUser?.full_name ?? ''} className={inp} /></div>
+          <datalist id="team-names">{team.map(t => <option key={t.id} value={t.full_name} />)}</datalist>
+          <div className="col-span-2 md:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div><label className={lbl} htmlFor="b-signer">Signed by</label>
+              <select id="b-signer" value={signerId} onChange={e => pickSigner(e.target.value)} className={inp}><option value="">— type a name —</option>{team.map(t => <option key={t.id} value={t.id}>{t.full_name}{t.job_title ? ` · ${t.job_title}` : ''}</option>)}</select>
+              <input type="hidden" name="signer_id" value={signerId} /></div>
+            <div><label className={lbl} htmlFor="b-signer-name">Name on the signature line</label><input id="b-signer-name" name="signer_name" value={signerName} onChange={e => setSignerName(e.target.value)} className={inp} required /></div>
+            <div className="col-span-2"><label className={lbl} htmlFor="b-signer-title">Title under the name</label><input id="b-signer-title" name="signer_title" value={signerTitle} onChange={e => setSignerTitle(e.target.value)} className={inp} placeholder="Construction Manager" /></div>
+          </div>
           <div className="col-span-2 md:col-span-4"><label className={lbl} htmlFor="b-desc">Project description</label><input id="b-desc" name="project_description" defaultValue={header.project_description ?? ''} className={inp} placeholder="PRODUCT LINE REPLACEMENT — SU-8001, GLEN BURNIE MD" /></div>
           <div><label className={lbl} htmlFor="b-status">Status</label>
             <select id="b-status" name="status" defaultValue={header.status ?? 'draft'} className={inp}>

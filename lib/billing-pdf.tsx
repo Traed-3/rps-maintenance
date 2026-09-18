@@ -222,13 +222,13 @@ function FaceTotals({ doc, t }: { doc: BillingDoc; t: Rev19Totals }) {
 }
 
 function SignatureBlock({ doc }: { doc: BillingDoc }) {
-  const name = (doc.preparedBy ?? 'Starsky Dodson, Construction Manager').split(',')[0].trim()
-  const title = (doc.preparedBy ?? '').split(',')[1]?.trim() || 'Construction Manager'
+  const name = (doc.preparedBy ?? '').split(',')[0].trim()
+  const title = (doc.preparedBy ?? '').split(',').slice(1).join(',').trim()
   return (
     <View style={[s.row, { marginTop: 26, gap: 60 }]} wrap={false}>
       <View style={{ width: 210 }}>
-        <Text style={[s.sigName, { borderBottomWidth: 0.8, borderColor: BLACK, paddingBottom: 2, textAlign: 'center' }]}>{name}</Text>
-        <Text style={[s.bold, s.center, { fontSize: 7.5, marginTop: 2 }]}>{title}</Text>
+        <Text style={[s.sigName, { borderBottomWidth: 0.8, borderColor: BLACK, paddingBottom: 2, textAlign: 'center' }]}>{name || ' '}</Text>
+        <Text style={[s.bold, s.center, { fontSize: 7.5, marginTop: 2 }]}>{title || 'AUTHORIZED SIGNATURE'}</Text>
       </View>
       <View style={{ width: 120 }}>
         <Text style={[{ fontSize: 10, borderBottomWidth: 0.8, borderColor: BLACK, paddingBottom: 2, textAlign: 'center', fontFamily: 'Times-Italic' }]}>{doc.kind === 'Invoice' ? doc.date ?? ' ' : ' '}</Text>
@@ -268,9 +268,9 @@ function Breakdown({ doc, lines, t }: { doc: BillingDoc; lines: Rev19Line[]; t: 
         <View style={{ borderWidth: 0.6, borderColor: BLACK, padding: 5, width: 200 }}>
           <Text style={[s.tiny, { color: MUTED }]}>TEAM</Text>
           <Text>Project manager: {doc.projectManager ?? '—'}</Text>
-          <Text>Construction manager: {doc.constructionManager ?? 'Starsky Dodson'}</Text>
-          <Text>Foreman / lead: {doc.foreman ?? 'Ernie Lewis'}</Text>
-          <Text>Work order compiled by: {doc.compiledBy ?? 'Trae Dodson'}</Text>
+          <Text>Construction manager: {doc.constructionManager ?? '—'}</Text>
+          <Text>Foreman / lead: {doc.foreman ?? '—'}</Text>
+          <Text>Work order compiled by: {doc.compiledBy ?? '—'}</Text>
         </View>
       </View>
       {(['basic', 'additional'] as const).map(section => REV19_CATEGORIES.map(c => {
