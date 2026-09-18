@@ -177,21 +177,27 @@ export async function convertTicketToInvoice(id: string): Promise<void> {
   const { totals, lines: computed } = computeDocumentTotals(lines, 0, taxPct)
   const { final_total, ...rest } = totals
   const { data: customer } = t.brand ? await admin.from('con_customers').select('id').eq('company_id', p.company_id).ilike('name', `%${t.brand}%`).limit(1).maybeSingle() : { data: null }
+  const { data: signer } = await admin.from('profiles').select('full_name, job_title').eq('id', p.id).single()
 
   const { data: inv, error } = await admin.from('con_invoices').insert({
     company_id: p.company_id, department: 'service', service_ticket_id: t.id, customer_id: customer?.id ?? null,
     invoice_date: new Date().toISOString().slice(0, 10), csr_number: t.csr_number, po_number: t.po_number, portal_wo_number: t.portal_wo_number,
     store_label: t.store_number, facility_address: t.site_address, city_state_zip: t.city_state_zip,
     project_description: t.work_performed, profit_overhead_percent: 0, sales_tax_percent: taxPct,
-    ...rest, invoice_grand_total: final_total, prepared_by: 'Starsky Dodson, Construction Manager', status: 'draft',
+    ...rest, invoice_grand_total: final_total, status: 'draft', signer_id: p.id, prepared_by: signer ? [signer.full_name, signer.job_title].filter(Boolean).join(', ') : null,
+    labor_rate: Number(rate.labor_rate), material_markup_pct: 0, material_tax_pct: 0, sub_markup_pct: 0, project_manager: signer?.full_name ?? null,
   }).select('id').single()
   if (error || !inv) return
   if (computed.length) await admin.from('con_invoice_line_items').insert(computed.map((l, i) => ({
     invoice_id: inv.id, section: l.section, line_no: l.line_no ?? i + 1, description: l.description, quantity: l.quantity, unit_cost: l.unit_cost,
     material_total: l.material_total, labor_hours: l.labor_hours, labor_rate: l.labor_rate, total_labor: l.total_labor, total_material_labor: l.total_material_labor,
     item_type: l.item_type, is_stock: l.is_stock ?? false, part_id: l.part_id ?? null,
+    // REV19 category + the pieces the new builder/PDF read; sell prices are already final so markup/tax stay 0 on these lines.
+    category: l.item_type === 'labor' ? 7 : l.item_type === 'trip' ? 8 : l.item_type === 'disposables' ? 10 : 4, sort_order: i + 1,
+    men: l.item_type === 'labor' ? 1 : null, hrs_each: l.item_type === 'labor' ? l.labor_hours ?? null : null, crew: 'service',
+    sales_tax_pct: 0, markup_pct: 0, sell_unit: l.item_type === 'labor' ? l.labor_rate ?? null : l.unit_cost ?? null, price_flag: 'ok',
   })))
   await admin.from('service_tickets').update({ status: 'invoiced' }).eq('id', id)
-  paths(id); revalidatePath('/construction/invoices')
-  redirect(`/construction/invoices/${inv.id}`)
+  paths(id); revalidatePath('/billing/invoices')
+  redirect(`/billing/invoices/${inv.id}`)
 }

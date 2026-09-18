@@ -57,8 +57,8 @@ export default async function ConstructionDashboard() {
   const tiles = [
     { href: '/construction/jobs', label: 'Jobs', icon: HardHat, value: allJobs.length },
     { href: '/construction/permits', label: 'Permits', icon: FileCheck2, value: permitGraph.enriched.filter(p => p.requirement_status === 'Required').length, sub: 'tracked' },
-    { href: '/construction/quotes', label: 'Quotes', icon: FileText },
-    { href: '/construction/invoices', label: 'Invoices', icon: Receipt, value: money(invoicedThisYear), sub: `invoiced ${thisYear}` },
+    { href: '/billing/quotes', label: 'Quotes', icon: FileText },
+    { href: '/billing/invoices', label: 'Invoices', icon: Receipt, value: money(invoicedThisYear), sub: `invoiced ${thisYear}` },
     { href: '/construction/materials', label: 'Materials', icon: Package, value: neededMaterials?.length ?? 0, sub: 'to order/receive' },
     { href: '/construction/vendors', label: 'Vendors', icon: Truck },
     { href: '/construction/subcontractors', label: 'Subcontractors', icon: Hammer },
@@ -169,7 +169,7 @@ export default async function ConstructionDashboard() {
         </Panel>
 
         {/* Invoiced — revenue, not receivables */}
-        <Panel title="Invoiced" count={invoiced.length} href="/construction/invoices">
+        <Panel title="Invoiced" count={invoiced.length} href="/billing/invoices">
           <div className="px-4 py-3 border-b border-gray-50">
             <p className="text-xs text-gray-500">{thisYear} to date</p>
             <p className="text-xl font-semibold text-gray-900">{money(invoicedThisYear)}</p>
@@ -181,7 +181,7 @@ export default async function ConstructionDashboard() {
             </p>
           )}
           {invoiced.slice(0, 5).map(r => (
-            <Link key={r.id} href={`/construction/invoices/${r.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-gray-50">
+            <Link key={r.id} href={`/billing/invoices/${r.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-gray-50">
               <span className="font-mono text-xs text-gray-700">{r.invoice_number}</span>
               <span className="text-sm font-semibold text-gray-900 w-24 text-right">{money(r.invoice_grand_total)}</span>
             </Link>
