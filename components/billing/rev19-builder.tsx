@@ -176,7 +176,7 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
             <select id="b-status" name="status" defaultValue={header.status ?? 'draft'} className={inp}>
               {(isQuote ? [['draft', 'Draft'], ['sent', 'Sent'], ['approved', 'Approved'], ['rejected', 'Rejected']] : [['draft', 'Draft'], ['sent', 'Invoiced'], ['void', 'Void']]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select></div>
-          {isQuote && <div className="col-span-2 flex items-end pb-1"><label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_starting_quote" value="true" defaultChecked={header.is_starting_quote !== false} />Starting quote (Starsky finalizes and signs)</label></div>}
+          {isQuote && <div className="col-span-2 flex items-end pb-1"><label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_starting_quote" value="true" defaultChecked={header.is_starting_quote !== false} />Starting quote (not final until the signer reviews it)</label></div>}
         </div>
       </section>
 
