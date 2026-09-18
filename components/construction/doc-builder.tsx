@@ -6,6 +6,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { computeDocumentTotals, money, type LineItemInput } from '@/lib/construction'
 import { BILLING_DEPARTMENTS } from '@/lib/billing'
 import { PartPicker, type PickedPart } from '@/components/construction/part-picker'
+import { SitePicker, type PickedSite } from '@/components/construction/site-picker'
 import type { ActionState } from '@/app/(app)/construction/actions'
 
 const inp = 'w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -105,6 +106,17 @@ export function DocBuilder({
   const [poPct, setPoPct] = useState<string>(String(header?.profit_overhead_percent ?? 0))
   const [taxPct, setTaxPct] = useState<string>(String(header?.sales_tax_percent ?? 0))
   const [markupPct, setMarkupPct] = useState<string>('20')
+  const [siteLabel, setSiteLabel] = useState<string>(header?.store_label ?? '')
+  const [facilityAddress, setFacilityAddress] = useState<string>(header?.facility_address ?? '')
+  const [cityStateZip, setCityStateZip] = useState<string>(header?.city_state_zip ?? '')
+
+  /** Picking a known site fills the address lines; typing a brand-new number just stays. */
+  function pickSite(s: PickedSite) {
+    setSiteLabel(s.site_number ?? siteLabel)
+    if (s.address) setFacilityAddress(s.address)
+    const csz = [s.city, s.state].filter(Boolean).join(', ') + (s.zip ? ` ${s.zip}` : '')
+    if (csz.trim()) setCityStateZip(csz.trim())
+  }
 
   function update(key: string, patch: Partial<LineRowState>) {
     setLines(prev => prev.map(l => (l.key === key ? { ...l, ...patch } : l)))
@@ -267,16 +279,17 @@ export function DocBuilder({
           </div>
         )}
         <div>
-          <label className={lbl}>Store Label</label>
-          <input name="store_label" className={inp} defaultValue={header?.store_label ?? ''} />
+          <label className={lbl}>Site <span className="font-normal text-gray-400">(type a number to search, or enter a new one)</span></label>
+          <input type="hidden" name="store_label" value={siteLabel} />
+          <SitePicker value={siteLabel} onChange={setSiteLabel} onPick={pickSite} className={inp} />
         </div>
         <div>
           <label className={lbl}>Facility Address</label>
-          <input name="facility_address" className={inp} defaultValue={header?.facility_address ?? ''} />
+          <input name="facility_address" className={inp} value={facilityAddress} onChange={e => setFacilityAddress(e.target.value)} />
         </div>
         <div>
           <label className={lbl}>City / State / ZIP</label>
-          <input name="city_state_zip" className={inp} defaultValue={header?.city_state_zip ?? ''} />
+          <input name="city_state_zip" className={inp} value={cityStateZip} onChange={e => setCityStateZip(e.target.value)} />
         </div>
         <div>
           <label className={lbl}>{mode === 'quote' ? 'Proposal Date' : 'Invoice Date'}</label>
