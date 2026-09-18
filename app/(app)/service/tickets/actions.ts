@@ -192,6 +192,6 @@ export async function convertTicketToInvoice(id: string): Promise<void> {
     item_type: l.item_type, is_stock: l.is_stock ?? false, part_id: l.part_id ?? null,
   })))
   await admin.from('service_tickets').update({ status: 'invoiced' }).eq('id', id)
-  paths(id); revalidatePath('/construction/invoices')
-  redirect(`/construction/invoices/${inv.id}`)
+  paths(id); revalidatePath('/billing/invoices')
+  redirect(`/billing/invoices/${inv.id}`)
 }

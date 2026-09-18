@@ -17,6 +17,10 @@ export type PickedPart = {
   cost_date: string | null
   price_status: string | null
   suggested_price: number | null
+  category?: number | null
+  taxable?: boolean | null
+  cost_invoice_ref?: string | null
+  markup_pct?: number | null
 }
 
 /**

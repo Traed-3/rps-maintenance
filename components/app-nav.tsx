@@ -13,6 +13,7 @@ import {
   Settings,
   LogOut,
   Receipt,
+  FileText,
   Home,
   HardHat,
   CalendarDays,
@@ -24,8 +25,9 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { CON_ALLOWED_USER_IDS } from '@/lib/construction'
+import { BILLING_READ_ROLES } from '@/lib/billing'
 
-type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean }
+type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean; billing?: boolean }
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,6 +39,7 @@ const navItems: NavItem[] = [
   { href: '/construction', label: 'Construction', icon: HardHat, construction: true },
   // 7-Eleven / Wawa / Sunoco service calls, synced from rpdispatcher + rpinvoicing.
   { href: '/service', label: 'Service Dispatch', icon: Fuel },
+  { href: '/billing', label: 'Billing', icon: FileText, billing: true },
   { href: '/inventory', label: 'Inventory', icon: Package },
   // Company-wide calendar that overlays Maintenance and Construction items.
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
@@ -52,7 +55,8 @@ export default function AppNav({ email, role, userId }: { email: string; role?: 
   const canSeeConstruction = CON_ALLOWED_USER_IDS.includes(userId ?? '')
 
   // Hide the Construction link from anyone not on the allowlist.
-  const visibleNavItems = navItems.filter(i => canSeeConstruction || !('construction' in i))
+  const canSeeBilling = canSeeConstruction || (BILLING_READ_ROLES as readonly string[]).includes(role ?? '')
+  const visibleNavItems = navItems.filter(i => (canSeeConstruction || !('construction' in i)) && (canSeeBilling || !('billing' in i)))
 
   // Mobile bottom-bar items — owners/managers get Settings so they can reach
   // user management, company info, alerts, etc. from a phone or the iPad app.

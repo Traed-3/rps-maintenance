@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   const like = `%${q.replace(/[%_,]/g, ' ')}%`
   const { data, error } = await admin
     .from('parts')
-    .select('id, part_number, description, category, subcategory, item_type, uom, taxable, unit_cost, cost_source, cost_vendor, cost_date, price_status, freight_per_unit, markup_pct, sell_price, sku')
+    .select('id, part_number, description, category, subcategory, item_type, uom, taxable, unit_cost, cost_source, cost_vendor, cost_invoice_ref, cost_date, price_status, freight_per_unit, markup_pct, sell_price, sku')
     .eq('company_id', profile.company_id)
     .eq('active', true)
     .or(`part_number.ilike.${like},description.ilike.${like},subcategory.ilike.${like}`)

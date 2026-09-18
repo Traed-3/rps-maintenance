@@ -248,5 +248,29 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
   GIL-/VDR-/GRD-… stripped for matching, unmatched parts created with sku SMARTSHEET_2025 + price_needed).
   Applied 2026-09-16: 946 lines / 6,018 units / 839 new parts. Truck sheets were NOT visible to Trae's Smartsheet
   login (only the Construction Department workspace is shared) — import them the same way once shared.
+- BILLING MODULE re-home (2026-09-18): quotes and invoices moved OUT of Construction to top-level `/billing`
+  (shared by Construction + Service; `department` column). Old URLs /construction/quotes|invoices redirect
+  (next.config.ts). Tables keep their con_* names. Migration `supabase/migrations/billing_rev19_module.sql`
+  (APPLIED): line items carry `category` 1–12 + REV19 inputs (sales_tax_pct, markup_pct, freight_per_unit,
+  markup_applies, men/hrs_each, travel_days/techs, day_label, crew, source_note, price_flag, sort_order);
+  headers carry the INPUTS block (material_markup_pct, material_tax_pct, sub_markup_pct, labor_rate, rate_card_id,
+  contingency_pct/flat/amount, profit_overhead_percent, sales_tax_percent=0), header block (site_number, bid_due,
+  project_manager, construction_manager, foreman, compiled_by), scope_rows jsonb, exclusions, warranty_line,
+  category_totals jsonb, the three roll-ups, is_starting_quote, work_order_number, csr/po on quotes.
+  Engine: lib/rev19.ts (REV19_CATEGORIES, computeRev19: cats 1–4 (cost+tax)×(1+markup)+freight; 5/9/10/12 cost
+  with MARKUP? Y/N; 11 cost + 15% on the category; 6 rate×tech-nights; 7 men×hrs each×rate by day; 8 travel
+  days×techs×$100; roll-up taxable → 5+9+10+11+12 → 6+7+8 → contingency → P&O → quote-level tax 0 → total).
+  Guard: lib/billing-guard.ts (Construction allowlist OR BILLING_READ/WRITE_ROLES in lib/billing.ts).
+  Actions: app/(app)/billing/actions.ts (saveQuote/saveInvoice, status, delete, duplicateQuote,
+  convertQuoteToInvoice). UI: /billing hub, /billing/quotes[/new|/[id]|/[id]/edit], /billing/invoices[…],
+  components/billing/rev19-builder.tsx (header + INPUTS + scope rows + Basic/Additional sections × 12 category
+  panels with per-kind columns, PartPicker on every line, price flags, live face), doc-face.tsx, doc-detail.tsx.
+  PDF: lib/billing-pdf.tsx → GET /api/billing/quotes|invoices/[id]/pdf?view=face|breakdown|both (RP QUOTE
+  TEMPLATE face + landscape MATERIAL AND LABOR BREAKDOWN with pink/green/orange fills). Verified against the
+  SU-8001 REV19 workbook to the penny ($70,221.44); that quote exists as Q-2026-0002 as a worked example.
+  Catalog gained sku REV19_RATE_CARD rows (lodging, per diem, mobilization, disposables, permits).
+  Reference docs: iCloud Project Folders/Previous Project Files and Closeouts for Claude Reference/00 - RPS Quote
+  Types and Historical Examples (pre 04-30-2022).md + the rps-quote-builder skill.
 - Next: connect econstruction + constructionreceipts tokens (Trae mints them), RESEND key for email-out, truck
-  inventory sheets from Smartsheet, Phase 6 (warranty claims, compliance SKUs, historical pull before Mar 2026).
+  inventory sheets from Smartsheet, quote → Excel (REV19 workbook) export, Phase 6 (warranty claims, compliance
+  SKUs, historical pull before Mar 2026).

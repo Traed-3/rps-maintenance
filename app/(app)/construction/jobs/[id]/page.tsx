@@ -188,11 +188,11 @@ export default async function JobDetailPage({
       {tab === 'quote' && (
         <DocList
           title="Quotes"
-          newHref={`/construction/quotes/new?job=${id}`}
+          newHref={`/billing/quotes/new?job=${id}`}
           canWrite={canWrite}
           empty="No quotes for this job yet."
           rows={(quotes ?? []).map(q => ({
-            id: q.id, href: `/construction/quotes/${q.id}`,
+            id: q.id, href: `/billing/quotes/${q.id}`,
             left: q.quote_number ?? 'Draft', sub: fmtDate(q.proposal_date),
             badge: <QuoteStatusBadge status={q.status} />, amount: money(q.final_total),
           }))}
@@ -203,11 +203,11 @@ export default async function JobDetailPage({
       {tab === 'invoice' && (
         <DocList
           title="Invoices"
-          newHref={`/construction/invoices/new?job=${id}`}
+          newHref={`/billing/invoices/new?job=${id}`}
           canWrite={canWrite}
           empty="No invoices for this job yet."
           rows={(invoices ?? []).map(inv => ({
-            id: inv.id, href: `/construction/invoices/${inv.id}`,
+            id: inv.id, href: `/billing/invoices/${inv.id}`,
             left: inv.invoice_number ?? 'Draft', sub: fmtDate(inv.invoice_date),
             badge: <InvoiceStatusBadge status={inv.status} />, amount: money(inv.invoice_grand_total),
           }))}
