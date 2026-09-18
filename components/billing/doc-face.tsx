@@ -8,7 +8,7 @@ export function DocFace({ kind, items, inputs, starting }: { kind: 'quote' | 'in
   const th = 'px-3 py-2 text-[11px] font-medium text-gray-500 uppercase tracking-wide'
   return (
     <div className="space-y-4">
-      {starting && <div className="rounded-lg bg-pink-50 border border-pink-200 px-4 py-2 text-xs text-pink-900 font-medium">STARTING QUOTE — not a final quote. Starsky finalizes and signs.</div>}
+      {starting && <div className="rounded-lg bg-pink-50 border border-pink-200 px-4 py-2 text-xs text-pink-900 font-medium">STARTING QUOTE — not a final quote until the signer reviews and finalizes it.</div>}
       {(['basic', 'additional'] as const).map(s => totals[s].rows.length > 0 && (
         <div key={s} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <h3 className="px-4 py-2.5 bg-[#16243d] text-white text-sm font-semibold">{s === 'basic' ? 'BASIC INSTALLATION' : 'ADDITIONAL SCOPE OF WORK'}</h3>
