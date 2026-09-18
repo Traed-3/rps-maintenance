@@ -36,7 +36,9 @@ export default async function ServiceDispatchPage({
   const priorityRank = priority ? parseInt(priority, 10) : null
   const rtnOnly = rtn === '1'
   const staleOnly = view === 'stale'
+  const oldOnly = view === 'old'
   const showArchived = view === 'archived'
+  const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -71,14 +73,19 @@ export default async function ServiceDispatchPage({
   if (showArchived) {
     query = query.eq('archived', true).order('archived_at', { ascending: false })
   } else {
-    query = query.eq('archived', false).order('last_update_at', { ascending: true })
+    query = query.eq('archived', false)
     if (staleOnly) {
       query = query.in('status', OPEN_STATUSES).lt('last_update_at', new Date(sevenDaysAgo).toISOString())
+    } else if (oldOnly) {
+      // Any status — the point is to surface everything old enough to be
+      // clutter (including long-stuck "new" rows) so it can be bulk-archived.
+      query = query.lt('dispatched_at', new Date(sixtyDaysAgo).toISOString())
     } else if (status) {
       query = query.eq('status', status)
     } else {
       query = query.in('status', OPEN_STATUSES)
     }
+    query = query.order(oldOnly ? 'dispatched_at' : 'last_update_at', { ascending: true })
     // Quick filters — combine on top of whatever status view is active.
     if (priorityRank) query = query.eq('priority_rank', priorityRank)
     if (rtnOnly) query = query.eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)')
@@ -89,11 +96,11 @@ export default async function ServiceDispatchPage({
 
   // Every quick/status/client pill below is built from the same current selection,
   // so clicking one preserves whatever else is already active (e.g. P1 + Wawa + RTN).
-  // `view` is single-select: '' | 'stale' | 'archived'.
+  // `view` is single-select: '' | 'stale' | 'old' | 'archived'.
   function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; view?: string }) {
     const next = {
       status, client, priority: priorityRank ? String(priorityRank) : '',
-      rtn: rtnOnly, view: showArchived ? 'archived' : staleOnly ? 'stale' : '',
+      rtn: rtnOnly, view: showArchived ? 'archived' : staleOnly ? 'stale' : oldOnly ? 'old' : '',
       ...overrides,
     }
     const params = new URLSearchParams()
@@ -114,6 +121,9 @@ export default async function ServiceDispatchPage({
   }
   function staleFilterHref() {
     return buildHref({ view: staleOnly ? '' : 'stale' })
+  }
+  function oldFilterHref() {
+    return buildHref({ view: oldOnly ? '' : 'old', status: '' })
   }
   function archivedFilterHref() {
     return buildHref({ view: showArchived ? '' : 'archived', status: '', rtn: false, priority: null })
@@ -176,6 +186,16 @@ export default async function ServiceDispatchPage({
           >
             ⏰ Updates Needed (7+ Days)
           </Link>
+          <Link
+            href={oldFilterHref()}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+              oldOnly
+                ? 'bg-slate-700 text-white border-slate-700'
+                : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
+            }`}
+          >
+            📦 60+ Days Old
+          </Link>
         </div>
       )}
 
@@ -207,7 +227,7 @@ export default async function ServiceDispatchPage({
               key={f.value}
               href={statusFilterHref(f.value)}
               className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                status === f.value && !staleOnly
+                status === f.value && !staleOnly && !oldOnly
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
               }`}
@@ -250,6 +270,12 @@ export default async function ServiceDispatchPage({
       {showArchived && (
         <p className="text-xs text-gray-500 mb-3">
           Archived work orders — hidden from the active dashboard. Click ↩ to bring one back.
+        </p>
+      )}
+
+      {oldOnly && (
+        <p className="text-xs text-gray-500 mb-3">
+          Dispatched more than 60 days ago, any status — check the box next to &quot;WO #&quot; to select all, then Archive Selected.
         </p>
       )}
 
