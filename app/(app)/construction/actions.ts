@@ -10,6 +10,7 @@ import {
   CON_DOC_CATEGORY_VALUES,
   type LineItemInput,
 } from '@/lib/construction'
+import { classifySite } from '@/lib/site-number'
 
 export type ActionState = { error: string } | null
 
@@ -1126,4 +1127,69 @@ export async function emailInvoice(id: string, _state: EmailState, formData: For
   revalidatePath('/construction/invoices')
   revalidatePath(`/construction/invoices/${id}`)
   return { ok: true, sentTo: to.join(', ') }
+}
+
+// ── Dispatch → Construction job ─────────────────────────────
+/**
+ * Turn a dispatched work order (svc_work_orders, already parsed with site number
+ * + address) into a construction job: cleans the site number, finds or creates the
+ * matching con_sites row, and opens a con_jobs record pre-filled with the site,
+ * address, WO number and scope. The job_number trigger numbers it automatically.
+ * Idempotent per WO — if a job already carries this WO number it just opens it.
+ */
+export async function createJobFromWorkOrder(workOrderId: string) {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+
+  const { data: wo } = await admin
+    .from('svc_work_orders')
+    .select('portal_wo_number, site_number, site_name, site_address, site_city, site_state, subject_raw, description, priority_raw, dispatched_at, client_name')
+    .eq('id', workOrderId).eq('company_id', profile.company_id).single()
+  if (!wo) return
+
+  // Don't create a second job for the same work order.
+  if (wo.portal_wo_number) {
+    const { data: existing } = await admin.from('con_jobs')
+      .select('id').eq('company_id', profile.company_id).eq('work_order_number', wo.portal_wo_number).limit(1).maybeSingle()
+    if (existing) redirect(`/construction/jobs/${existing.id}`)
+  }
+
+  const { siteNumber, brand } = classifySite(wo.site_number)
+  const cityStateZip = [wo.site_city, wo.site_state].filter(Boolean).join(', ')
+
+  // Find or create the site.
+  let siteId: string | null = null
+  if (siteNumber) {
+    const { data: site } = await admin.from('con_sites')
+      .select('id').eq('company_id', profile.company_id).eq('site_number', siteNumber).limit(1).maybeSingle()
+    if (site) siteId = site.id
+    else {
+      const { data: created } = await admin.from('con_sites').insert({
+        company_id: profile.company_id, site_number: siteNumber, store_brand: brand,
+        address: wo.site_address, city: wo.site_city, state: wo.site_state,
+      }).select('id').single()
+      siteId = created?.id ?? null
+    }
+  }
+
+  const dispatchedDate = wo.dispatched_at ? new Date(wo.dispatched_at).toISOString().slice(0, 10) : null
+  const { data: job, error } = await admin.from('con_jobs').insert({
+    company_id: profile.company_id,
+    site_id: siteId,
+    site_number: siteNumber || wo.site_number,
+    work_order_number: wo.portal_wo_number,
+    scope_of_work: wo.subject_raw || wo.description || null,
+    facility_address: wo.site_address,
+    gas_brand: brand,
+    date_received: dispatchedDate,
+    stage: 'survey',
+    notes: [wo.client_name && `Client: ${wo.client_name}`, cityStateZip, wo.priority_raw && `Priority: ${wo.priority_raw}`]
+      .filter(Boolean).join(' · ') || null,
+  }).select('id').single()
+  if (error || !job) return
+
+  revalidatePath('/construction/jobs')
+  revalidatePath('/service')
+  redirect(`/construction/jobs/${job.id}`)
 }
