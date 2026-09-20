@@ -200,10 +200,17 @@ function techNote(body: string): string {
   return body.slice(0, cut).trim()
 }
 
+// Mobile mail clients often run the message straight into the signature line
+// with no space/newline ("CompleteSent from my iPhone"), which breaks the
+// \b word-boundary matching below — insert one back before classifying.
+function insertSignatureBoundary(text: string): string {
+  return text.replace(/(\S)(sent from my (?:iphone|ipad|ipod|android|galaxy|mobile))/gi, '$1 $2')
+}
+
 export function parseCompletionEmail(subject: string, body: string): ParsedCompletion {
   const woNumber = extractWorkOrderNumber(subject) ?? extractWorkOrderNumber(body)
   const note = techNote(body)
-  const noteLower = note.toLowerCase()
+  const noteLower = insertSignatureBoundary(note).toLowerCase()
 
   let status: CompletionStatus = 'unknown'
   if (/\brtn\b|re-?trip|return trip|return call|return needed|needs? (a )?return|return visit/i.test(noteLower)) {

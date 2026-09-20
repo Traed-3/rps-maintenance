@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { WorkOrderStatusBadge, PriorityBadge, clientLabel } from '@/components/svc/work-order-badges'
 import { createServiceTicket } from '@/app/(app)/service/tickets/actions'
+import { createJobFromWorkOrder } from '@/app/(app)/construction/actions'
+import { CON_ALLOWED_USER_IDS } from '@/lib/construction'
 
 function fmt(d: string | null): string {
   if (!d) return '—'
@@ -35,6 +37,12 @@ export default async function WorkOrderDetailPage({
   if (!w) notFound()
   const { data: existingTicket } = await admin.from('service_tickets').select('id, ticket_number, status').eq('work_order_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()
 
+  // Construction users can spin this dispatched WO up as a construction job (site + address auto-filled).
+  const canConstruction = CON_ALLOWED_USER_IDS.includes(user?.id ?? '')
+  const { data: existingJob } = canConstruction && (w as any).portal_wo_number
+    ? await admin.from('con_jobs').select('id, job_number').eq('company_id', profile!.company_id).eq('work_order_number', (w as any).portal_wo_number).limit(1).maybeSingle()
+    : { data: null }
+
   const tech = (w as any).svc_technicians as { full_name: string; personal_email: string | null } | null
 
   return (
@@ -62,6 +70,14 @@ export default async function WorkOrderDetailPage({
       ) : (
         <form action={createServiceTicket} className="mb-5"><input type="hidden" name="work_order_id" value={w.id} /><button type="submit" className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700">Start field ticket</button></form>
       ) })()}
+
+      {canConstruction && (
+        existingJob ? (
+          <Link href={`/construction/jobs/${existingJob.id}`} className="inline-block bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-5 text-sm text-amber-900">Construction job <b className="font-mono">{existingJob.job_number ?? ''}</b> →</Link>
+        ) : (
+          <form action={createJobFromWorkOrder.bind(null, w.id)} className="mb-5"><button type="submit" className="rounded-lg border border-gray-300 bg-white text-gray-800 text-sm font-medium px-4 py-2 hover:bg-gray-50">Create construction job →</button></form>
+        )
+      )}
 
       {w.return_trip_needed && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">

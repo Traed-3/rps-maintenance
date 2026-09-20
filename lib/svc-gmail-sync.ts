@@ -80,11 +80,12 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
       if (!parsed.woNumber) {
         importStatus = 'no_match'
       } else if (parsed.isInvoiceRejection) {
-        const { data: wo } = await admin
+        const { data: woRows } = await admin
           .from('svc_work_orders')
           .select('id')
           .eq('portal_wo_number', parsed.woNumber)
-          .maybeSingle()
+          .order('dispatched_at', { ascending: false })
+        const wo = woRows?.[0] ?? null
         if (wo) {
           await admin.from('svc_work_orders').update({
             invoice_rejected: true,
@@ -100,12 +101,20 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
       } else if (parsed.isAssignmentOnly) {
         importStatus = 'ignored'
       } else {
-        const { data: existing } = await admin
+        // WO# alone is the identity of a call — NOT source_portal too. A later
+        // message about the same job (a priority-change notice, a reply, a
+        // forward with an unrecognized sender) can get detected as a different
+        // source_portal than the original dispatch, and matching on both used
+        // to silently spawn a second, detail-blank row for the same real job.
+        // That's exactly how completion/RTN notes ended up "attached" to an
+        // invisible duplicate instead of the call, ordered so the process below
+        // safely tolerates leftover duplicates from before this fix.
+        const { data: existingRows } = await admin
           .from('svc_work_orders')
           .select('id')
-          .eq('source_portal', parsed.sourcePortal)
           .eq('portal_wo_number', parsed.woNumber)
-          .maybeSingle()
+          .order('dispatched_at', { ascending: false })
+        const existing = existingRows?.[0] ?? null
 
         if (existing) {
           matchedWorkOrderId = existing.id

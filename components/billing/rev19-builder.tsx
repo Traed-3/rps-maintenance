@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PartPicker, type PickedPart } from '@/components/construction/part-picker'
+import { SitePicker, type PickedSite } from '@/components/construction/site-picker'
 import { money } from '@/lib/billing'
 import { REV19_CATEGORIES, REV19_DEFAULTS, LABOR_RATES, TAX_PRESETS, PRICE_FLAG_LABEL, categoryMeta, computeRev19, defaultLineFor, type Rev19Inputs, type Rev19LineInput } from '@/lib/rev19'
 import type { ActionState } from '@/app/(app)/billing/actions'
@@ -86,6 +87,16 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
   })
   const [rateCardId, setRateCardId] = useState(header.rate_card_id ?? '')
   const [customerId, setCustomerId] = useState(header.customer_id ?? '')
+  // Site box: type a site number to search con_sites and autofill the address, or type a brand-new one.
+  const [siteNumber, setSiteNumber] = useState(header.site_number ?? header.store_label ?? '')
+  const [facilityAddress, setFacilityAddress] = useState(header.facility_address ?? '')
+  const [cityStateZip, setCityStateZip] = useState(header.city_state_zip ?? '')
+  function pickSite(sIte: PickedSite) {
+    if (sIte.site_number) setSiteNumber(sIte.site_number)
+    if (sIte.address) setFacilityAddress(sIte.address)
+    const csz = [sIte.city, sIte.state].filter(Boolean).join(', ') + (sIte.zip ? ` ${sIte.zip}` : '')
+    if (csz.trim()) setCityStateZip(csz.trim())
+  }
   const [scope, setScope] = useState<{ scope: string; description: string }[]>(header.scope_rows?.length ? header.scope_rows : [{ scope: '', description: '' }])
   const [lines, setLines] = useState<Rev19Row[]>(initialLines?.length ? initialLines : [])
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -139,10 +150,12 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="col-span-2"><label className={lbl} htmlFor="b-cust">Customer</label>
             <select id="b-cust" value={customerId} onChange={e => pickCustomer(e.target.value)} className={inp}><option value="">— choose —</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-          <div><label className={lbl} htmlFor="b-site">Site / store #</label><input id="b-site" name="site_number" defaultValue={header.site_number ?? ''} className={inp} placeholder="SU-8001" /></div>
-          <div><label className={lbl} htmlFor="b-store">Store label</label><input id="b-store" name="store_label" defaultValue={header.store_label ?? ''} className={inp} placeholder="Store 40312" /></div>
-          <div className="col-span-2"><label className={lbl} htmlFor="b-addr">Address</label><input id="b-addr" name="facility_address" defaultValue={header.facility_address ?? ''} className={inp} /></div>
-          <div className="col-span-2"><label className={lbl} htmlFor="b-csz">City, State, Zip</label><input id="b-csz" name="city_state_zip" defaultValue={header.city_state_zip ?? ''} className={inp} /></div>
+          <div><label className={lbl} htmlFor="b-site">Site / store # <span className="normal-case font-normal text-gray-400">(type to search)</span></label>
+            <SitePicker value={siteNumber} onChange={setSiteNumber} onPick={pickSite} className={inp} placeholder="40107, SU-8001…" />
+            <input type="hidden" name="site_number" value={siteNumber} /></div>
+          <div><label className={lbl} htmlFor="b-store">Store label</label><input id="b-store" name="store_label" defaultValue={header.store_label ?? ''} className={inp} placeholder="7-Eleven #40312" /></div>
+          <div className="col-span-2"><label className={lbl} htmlFor="b-addr">Address</label><input id="b-addr" name="facility_address" value={facilityAddress} onChange={e => setFacilityAddress(e.target.value)} className={inp} /></div>
+          <div className="col-span-2"><label className={lbl} htmlFor="b-csz">City, State, Zip</label><input id="b-csz" name="city_state_zip" value={cityStateZip} onChange={e => setCityStateZip(e.target.value)} className={inp} /></div>
           <div><label className={lbl} htmlFor="b-attn">Attn</label><input id="b-attn" name="attn" defaultValue={header.attn ?? ''} className={inp} /></div>
           <div><label className={lbl} htmlFor="b-email">Customer email</label><input id="b-email" name="customer_email" defaultValue={header.customer_email ?? ''} className={inp} /></div>
           <div><label className={lbl} htmlFor="b-csr">SR# / CSR#</label><input id="b-csr" name="csr_number" defaultValue={header.csr_number ?? ''} className={inp} placeholder="WOT0057768" /></div>
