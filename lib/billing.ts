@@ -154,3 +154,8 @@ export const BILLING_DEPARTMENTS = [
 ] as const
 
 export type BillingDepartment = (typeof BILLING_DEPARTMENTS)[number]['value']
+
+// ── Who can see / edit quotes and invoices (shared by Construction and Service) ──
+// The Construction allowlist (lib/construction.ts) is OR'ed in by lib/billing-guard.ts.
+export const BILLING_READ_ROLES  = ['owner', 'manager', 'construction_manager', 'estimator', 'office', 'accounting', 'viewer'] as const
+export const BILLING_WRITE_ROLES = ['owner', 'manager', 'construction_manager', 'estimator', 'office', 'accounting'] as const

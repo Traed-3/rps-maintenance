@@ -18,7 +18,7 @@ async function getProfile() {
 
 export async function editUser(
   userId: string,
-  data: { full_name: string; email: string; phone?: string }
+  data: { full_name: string; email: string; phone?: string; job_title?: string }
 ): Promise<{ error?: string }> {
   const profile = await getProfile()
   if (!profile || !['owner', 'manager'].includes(profile.role)) {
@@ -35,6 +35,7 @@ export async function editUser(
     full_name: data.full_name.trim(),
     email:     data.email.trim().toLowerCase(),
     phone:     data.phone?.trim() || null,
+    job_title: data.job_title?.trim() || null,
   }).eq('id', userId).eq('company_id', profile.company_id)
   if (profileError) return { error: profileError.message }
   revalidatePath('/settings/users')

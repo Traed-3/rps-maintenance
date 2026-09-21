@@ -9,6 +9,7 @@ type User = {
   full_name: string
   email: string
   phone: string | null
+  job_title?: string | null
 }
 
 const inp = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -19,6 +20,7 @@ export function EditUserButton({ user }: { user: User }) {
   const [name, setName]   = useState(user.full_name)
   const [email, setEmail] = useState(user.email)
   const [phone, setPhone] = useState(user.phone ?? '')
+  const [title, setTitle] = useState(user.job_title ?? '')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
@@ -28,6 +30,7 @@ export function EditUserButton({ user }: { user: User }) {
     setName(user.full_name)
     setEmail(user.email)
     setPhone(user.phone ?? '')
+    setTitle(user.job_title ?? '')
     setError(null)
     setOpen(true)
   }
@@ -37,7 +40,7 @@ export function EditUserButton({ user }: { user: User }) {
     if (!email.trim()) { setError('Email is required.'); return }
     setError(null)
     startTransition(async () => {
-      const result = await editUser(user.id, { full_name: name, email, phone })
+      const result = await editUser(user.id, { full_name: name, email, phone, job_title: title })
       if (result.error) {
         setError(result.error)
       } else {
@@ -94,6 +97,10 @@ export function EditUserButton({ user }: { user: User }) {
                   <p className="text-xs text-amber-600 mt-1">
                     ⚠️ Changing email also updates their login address.
                   </p>
+                </div>
+                <div>
+                  <label className={lbl}>Job title (prints under their name when they sign a quote or invoice)</label>
+                  <input className={inp} value={title} onChange={e => setTitle(e.target.value)} placeholder="Construction Manager" />
                 </div>
                 <div>
                   <label className={lbl}>Phone (optional)</label>

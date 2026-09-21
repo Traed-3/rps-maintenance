@@ -32,7 +32,7 @@ export default async function ServiceTicketDetailPage({ params }: { params: Prom
               <Link href={`/service/${(t as { work_order_id?: string | null }).work_order_id}`}><Button variant="outline" className="gap-2"><FileText className="w-3.5 h-3.5" />Work order</Button></Link>
             )}
             {data.invoice ? (
-              <Link href={`/construction/invoices/${data.invoice.id}`}><Button variant="outline" className="gap-2"><Receipt className="w-3.5 h-3.5" />Invoice {data.invoice.invoice_number ?? ''}</Button></Link>
+              <Link href={`/billing/invoices/${data.invoice.id}`}><Button variant="outline" className="gap-2"><Receipt className="w-3.5 h-3.5" />Invoice {data.invoice.invoice_number ?? ''}</Button></Link>
             ) : readyToInvoice ? (
               <form action={convertTicketToInvoice.bind(null, id)}><Button type="submit" className="gap-2"><Receipt className="w-3.5 h-3.5" />Create invoice →</Button></form>
             ) : null}
