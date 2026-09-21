@@ -17,7 +17,7 @@ import * as rev19mod from '../lib/rev19'
 import type { Rev19Inputs, Rev19LineInput } from '../lib/rev19'
 
 // tsx sometimes lands the module's exports on .default — take whichever has the function.
-const { computeRev19 } = ((rev19mod as { computeRev19?: unknown }).computeRev19 ? rev19mod : (rev19mod as { default: typeof rev19mod }).default) as typeof rev19mod
+const { computeRev19 } = ((rev19mod as { computeRev19?: unknown }).computeRev19 ? rev19mod : (rev19mod as unknown as { default: typeof rev19mod }).default) as typeof rev19mod
 
 const env = Object.fromEntries(readFileSync(resolve(__dirname, '..', '.env.local'), 'utf-8').split('\n').map(l => l.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)).filter(Boolean).map(m => [m![1], m![2]]))
 const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)

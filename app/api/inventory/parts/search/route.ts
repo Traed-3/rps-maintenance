@@ -21,17 +21,19 @@ export async function GET(request: NextRequest) {
 
   const q = (request.nextUrl.searchParams.get('q') ?? '').trim()
   const limit = Math.min(30, Math.max(1, parseInt(request.nextUrl.searchParams.get('limit') ?? '15', 10) || 15))
+  // Optional REV19 category (1–12): the builder's per-category pickers only want parts filed there.
+  const category = parseInt(request.nextUrl.searchParams.get('category') ?? '', 10)
   if (q.length < 2) return NextResponse.json({ parts: [] })
 
   const like = `%${q.replace(/[%_,]/g, ' ')}%`
-  const { data, error } = await admin
+  let query = admin
     .from('parts')
     .select('id, part_number, description, category, subcategory, item_type, uom, taxable, unit_cost, cost_source, cost_vendor, cost_invoice_ref, cost_date, price_status, freight_per_unit, markup_pct, sell_price, sku')
     .eq('company_id', profile.company_id)
     .eq('active', true)
     .or(`part_number.ilike.${like},description.ilike.${like},subcategory.ilike.${like}`)
-    .order('description')
-    .limit(limit * 3)
+  if (category >= 1 && category <= 12) query = query.eq('category', category)
+  const { data, error } = await query.order('description').limit(limit * 3)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Rank by how trustworthy the price is (RPS rule: receipt beats vendor quote beats book beats web),

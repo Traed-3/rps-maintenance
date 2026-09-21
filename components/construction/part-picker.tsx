@@ -34,12 +34,17 @@ export function PartPicker({
   onPick,
   placeholder = 'Description — or type a part number to search the catalog',
   className,
+  category,
+  autoFocus,
 }: {
   value: string
   onChange: (text: string) => void
   onPick: (part: PickedPart) => void
   placeholder?: string
   className?: string
+  /** Limit results to one REV19 category (the builder's per-category search boxes). */
+  category?: number
+  autoFocus?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [results, setResults] = useState<PickedPart[]>([])
@@ -59,7 +64,7 @@ export function PartPicker({
     timer.current = setTimeout(async () => {
       setLoading(true)
       try {
-        const r = await fetch(`/api/inventory/parts/search?q=${encodeURIComponent(text)}&limit=12`, { cache: 'no-store' })
+        const r = await fetch(`/api/inventory/parts/search?q=${encodeURIComponent(text)}&limit=12${category ? `&category=${category}` : ''}`, { cache: 'no-store' })
         const j = await r.json()
         setResults(j.parts ?? []); setOpen(true)
       } catch { setResults([]) } finally { setLoading(false) }
@@ -72,6 +77,7 @@ export function PartPicker({
         value={value}
         onChange={e => { onChange(e.target.value); search(e.target.value) }}
         onFocus={() => { if (results.length) setOpen(true) }}
+        autoFocus={autoFocus}
         className={className}
         placeholder={placeholder}
         autoComplete="off"
