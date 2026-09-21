@@ -1,25 +1,21 @@
 'use client'
 
 import { useActionState, useMemo, useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PartPicker, type PickedPart } from '@/components/construction/part-picker'
 import { SitePicker, type PickedSite } from '@/components/construction/site-picker'
 import { money } from '@/lib/billing'
-import { REV19_CATEGORIES, REV19_DEFAULTS, LABOR_RATES, TAX_PRESETS, PRICE_FLAG_LABEL, categoryMeta, computeRev19, defaultLineFor, type Rev19Inputs, type Rev19LineInput } from '@/lib/rev19'
+import { REV19_CATEGORIES, REV19_DEFAULTS, LABOR_RATES, TAX_PRESETS, PRICE_FLAG_LABEL, TAXABLE_CATS, CONCRETE_EQUIP_CATS, categoryMeta, computeRev19, type Rev19Inputs, type Rev19LineInput } from '@/lib/rev19'
+import type { QuickPick } from '@/lib/billing-data'
+import { newRow, type Rev19Row } from '@/lib/rev19-rows'
 import type { ActionState } from '@/app/(app)/billing/actions'
 
 const inp = 'w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50'
-const numInp = `${inp} text-right tabular-nums`
+// Number cells carry their own width (w-16/w-20/w-24) — no w-full, or the table squeezes them to nothing.
+const numInp = `${inp.replace('w-full ', '')} text-right tabular-nums`
 const lbl = 'block text-[11px] font-medium text-gray-600 mb-0.5 uppercase tracking-wide'
 
-export type Rev19Row = {
-  key: string; section: 'basic' | 'additional'; category: number
-  description: string; part_number: string; part_id: string | null; subcategory: string
-  quantity: string; unit_cost: string; sales_tax_pct: string; markup_pct: string; freight_per_unit: string; markup_applies: boolean
-  men: string; hrs_each: string; labor_rate: string; travel_days: string; techs: string; day_label: string; crew: 'construction' | 'service'
-  source_note: string; price_flag: string; is_stock: boolean; item_type: string
-}
 export type Rev19Header = {
   id?: string; kind: 'quote' | 'invoice'
   job_id?: string | null; customer_id?: string | null; quote_id?: string | null; service_ticket_id?: string | null
@@ -40,16 +36,6 @@ type Job = { id: string; site_number: string | null; work_order_number: string |
 type RateCard = { id: string; name: string; labor_rate: number; sales_tax_pct: number | null }
 type TeamMember = { id: string; full_name: string; job_title: string | null; role: string }
 
-let _k = 0
-export function newRow(section: 'basic' | 'additional', category: number, crew: 'construction' | 'service' = 'construction'): Rev19Row {
-  const d = defaultLineFor(category, crew)
-  return {
-    key: `r${_k++}_${Date.now()}`, section, category, description: '', part_number: '', part_id: null, subcategory: '',
-    quantity: d.quantity != null ? String(d.quantity) : '', unit_cost: d.unit_cost != null ? String(d.unit_cost) : '', sales_tax_pct: '', markup_pct: '', freight_per_unit: '', markup_applies: !!d.markup_applies,
-    men: d.men != null ? String(d.men) : '', hrs_each: d.hrs_each != null ? String(d.hrs_each) : '', labor_rate: '', travel_days: d.travel_days != null ? String(d.travel_days) : '', techs: d.techs != null ? String(d.techs) : '',
-    day_label: '', crew, source_note: '', price_flag: 'ok', is_stock: false, item_type: categoryMeta(category).kind === 'labor' ? 'labor' : categoryMeta(category).kind === 'trip' ? 'trip' : 'material',
-  }
-}
 const N = (s: string) => (s === '' ? null : isFinite(Number(s)) ? Number(s) : null)
 const toInput = (r: Rev19Row): Rev19LineInput => ({
   section: r.section, category: r.category, description: r.description || null, part_number: r.part_number || null, part_id: r.part_id, subcategory: r.subcategory || null,
@@ -59,9 +45,27 @@ const toInput = (r: Rev19Row): Rev19LineInput => ({
 })
 const pctStr = (v: number | null | undefined, dflt: number) => String(Math.round(((v ?? dflt) * 100 + Number.EPSILON) * 100) / 100)
 
-export function Rev19Builder({ action, header, initialLines, customers, jobs, rateCards, team, currentUser }: {
+/** What a catalog pick writes onto a builder row (shared by the row picker and the quick-add chips). */
+function pickPatch(r: Rev19Row, p: PickedPart, kind: string): Partial<Rev19Row> {
+  const isMaterial = kind === 'material'
+  return {
+    description: p.description, part_number: p.part_number ?? '', part_id: p.id, unit_cost: p.unit_cost != null ? String(p.unit_cost) : '', freight_per_unit: p.freight_per_unit ? String(p.freight_per_unit) : '',
+    sales_tax_pct: isMaterial && p.taxable === false ? '0' : r.sales_tax_pct, item_type: p.item_type ?? r.item_type,
+    source_note: [p.cost_source?.toUpperCase(), p.cost_vendor, p.cost_invoice_ref, p.cost_date ? p.cost_date.slice(0, 10) : null].filter(Boolean).join(' · '),
+    price_flag: p.unit_cost == null ? 'price_needed' : p.price_status === 'held_high' ? 'held_high' : p.price_status === 'price_needed' ? 'price_needed' : p.price_status === 'verify' || (p.cost_date && Date.now() - new Date(p.cost_date).getTime() > 183 * 86_400_000) ? 'verify' : 'ok',
+  }
+}
+
+// The builder lays the twelve categories out the way the face rolls them up.
+const CATEGORY_GROUPS: { title: string; hint: string; cats: readonly number[] }[] = [
+  { title: 'Taxable materials', hint: 'Categories 1–4 · (cost + tax) × (1 + markup) + freight, × qty. Search the catalog — receipts beat quotes beat book prices.', cats: TAXABLE_CATS },
+  { title: 'Concrete · equipment · disposables · subcontractors · permits', hint: 'Categories 5, 9, 10, 11, 12 · rate-card items are one click; markup only where the chip says so. Subs get 15% on the category.', cats: CONCRETE_EQUIP_CATS },
+  { title: 'Labor · mobilization · lodging', hint: 'Categories 7, 8, 6 · labor is one row per day (men × hours × the customer rate); mobilization is $100 per tech per travel day.', cats: [7, 8, 6] },
+]
+
+export function Rev19Builder({ action, header, initialLines, customers, jobs, rateCards, team, currentUser, quickPicks = [] }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
-  header: Rev19Header; initialLines?: Rev19Row[]; customers: Customer[]; jobs: Job[]; rateCards: RateCard[]; team: TeamMember[]; currentUser: TeamMember | null
+  header: Rev19Header; initialLines?: Rev19Row[]; customers: Customer[]; jobs: Job[]; rateCards: RateCard[]; team: TeamMember[]; currentUser: TeamMember | null; quickPicks?: QuickPick[]
 }) {
   const [state, formAction, pending] = useActionState(action, null)
   const isQuote = header.kind === 'quote'
@@ -105,6 +109,31 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
   const upd = (key: string, patch: Partial<Rev19Row>) => setLines(ls => ls.map(l => (l.key === key ? { ...l, ...patch } : l)))
   const del = (key: string) => setLines(ls => ls.filter(l => l.key !== key))
   const add = (section: 'basic' | 'additional', category: number) => { setLines(ls => [...ls, newRow(section, category, dept)]); setOpen(o => ({ ...o, [`${section}-${category}`]: true })) }
+  // Crew size and days off the labor rows drive the per-tech defaults (disposables, lodging, mobilization).
+  const laborDays = lines.filter(l => l.category === 7 && l.section === 'basic')
+  const techDays = laborDays.reduce((a, l) => a + (N(l.men) ?? 0), 0)
+  const crewSize = Math.max(0, ...laborDays.map(l => N(l.men) ?? 0))
+  /** Add a catalog / rate-card item as a new row in its category, with a sensible quantity. */
+  const addPicked = (section: 'basic' | 'additional', category: number, p: PickedPart) => {
+    const base = newRow(section, category, dept)
+    const perTech = /PER TECH|PER MAN/i.test(p.description)
+    const qty = category === 8 ? '' : perTech && techDays ? String(techDays) : base.quantity || '1'
+    // Concrete, rebar and backfill carry the 20% markup; disposal / tipping / hauling fees pass through at cost.
+    const markup = category === 5 && !/DISPOSAL|TIPPING|HAUL|FEE/i.test(p.description)
+    const row: Rev19Row = { ...base, ...pickPatch(base, p, categoryMeta(category).kind), quantity: qty, markup_applies: category === 5 ? markup : false, ...(category === 8 ? { techs: crewSize ? String(crewSize) : base.techs, travel_days: base.travel_days || '2' } : {}) }
+    setLines(ls => [...ls, row]); setOpen(o => ({ ...o, [`${section}-${category}`]: true }))
+  }
+  const addLaborDay = (section: 'basic' | 'additional', crew: 'construction' | 'service') => {
+    const n = lines.filter(l => l.section === section && l.category === 7 && l.crew === crew).length + 1
+    const last = [...lines].reverse().find(l => l.section === section && l.category === 7 && l.crew === crew)
+    const row = { ...newRow(section, 7, crew), day_label: crew === 'service' ? 'SERVICE TECH' : `DAY ${n}`, men: last?.men ?? (crew === 'service' ? '1' : ''), hrs_each: last?.hrs_each ?? '8' }
+    setLines(ls => [...ls, row])
+  }
+  const addTrip = (section: 'basic' | 'additional', crew: 'construction' | 'service') => {
+    const n = lines.filter(l => l.section === section && l.category === 8 && l.crew === crew).length + 1
+    const row = { ...newRow(section, 8, crew), unit_cost: String(REV19_DEFAULTS.mobilization_rate), day_label: crew === 'service' ? 'SERVICE TECH' : `WEEK ${n}`, description: crew === 'service' ? 'OUT AND BACK' : n === 1 ? 'OUT MONDAY, HOME FRIDAY' : '', travel_days: crew === 'service' ? '1' : '2', techs: crew === 'service' ? '1' : crewSize ? String(crewSize) : '' }
+    setLines(ls => [...ls, row])
+  }
 
   function pickCustomer(id: string) {
     setCustomerId(id)
@@ -232,43 +261,78 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
       {/* ── SECTIONS × CATEGORIES ────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
         <div className="xl:col-span-2 space-y-5">
-          {(['basic', 'additional'] as const).map(section => (
-            <section key={section} className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-              <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-semibold text-gray-900">{section === 'basic' ? 'Basic installation' : 'Additional scope of work (change order)'}</h2>
-                <AddMenu onAdd={c => add(section, c)} />
-              </div>
-              <div className="divide-y divide-gray-100">
-                {REV19_CATEGORIES.map(c => {
-                  const rows = lines.filter(l => l.section === section && l.category === c.n)
-                  const k = `${section}-${c.n}`
-                  const isOpen = open[k] ?? rows.length > 0
-                  const faceRow = totals[section].rows.find(r => r.n === c.n)
-                  if (!rows.length && !open[k]) return null
+          {/* Basic installation: every category is on the page, grouped the way the face rolls up. */}
+          <section className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+            <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold text-gray-900">Basic installation</h2>
+              <span className="text-sm tabular-nums text-gray-700">{money(totals.basic.total)}</span>
+            </div>
+            {CATEGORY_GROUPS.map(g => (
+              <div key={g.title} className="border-b border-gray-100 last:border-b-0">
+                <div className="px-5 pt-3 pb-1"><div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{g.title}</div><div className="text-[11px] text-gray-400">{g.hint}</div></div>
+                {g.cats.map(n => {
+                  const c = categoryMeta(n)
+                  const rows = lines.filter(l => l.section === 'basic' && l.category === n)
+                  const k = `basic-${n}`
+                  const isOpen = open[k] ?? true
+                  const faceRow = totals.basic.rows.find(r => r.n === n)
                   return (
-                    <div key={k}>
-                      <button type="button" onClick={() => setOpen(o => ({ ...o, [k]: !isOpen }))} className="w-full px-5 py-2.5 flex items-center gap-2 text-left hover:bg-gray-50">
+                    <div key={k} className="mx-3 mb-2 rounded-xl border border-gray-200 overflow-hidden">
+                      <button type="button" onClick={() => setOpen(o => ({ ...o, [k]: !isOpen }))} className={`w-full px-3 py-2 flex items-center gap-2 text-left ${rows.length ? 'bg-[#FBE5D6]' : 'bg-gray-50'} hover:brightness-95`}>
                         {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                        <span className="text-xs font-mono text-gray-400 w-6">{c.n}</span>
+                        <span className="text-xs font-mono text-gray-500 w-5">{n}</span>
                         <span className="font-medium text-gray-900 text-sm">{c.name}</span>
-                        <span className="ml-auto text-sm tabular-nums text-gray-700">{faceRow ? money(faceRow.total) : '—'}</span>
+                        <span className="text-xs text-gray-400">{rows.length ? `${rows.length} line${rows.length === 1 ? '' : 's'}` : 'empty'}</span>
+                        <span className="ml-auto text-sm tabular-nums text-gray-800">{faceRow ? money(faceRow.total) : '—'}</span>
                       </button>
                       {isOpen && (
-                        <div className="px-3 pb-3">
-                          <CategoryTable kind={c.kind} rows={rows} upd={upd} del={del} ext={ext} inputs={rev19Inputs} dept={dept} />
-                          <div className="flex items-center justify-between mt-2 px-2">
-                            <button type="button" onClick={() => add(section, c.n)} className="text-xs text-blue-600 inline-flex items-center gap-1"><Plus className="w-3 h-3" />Add line</button>
-                            {c.n === 11 && rows.length > 0 && <span className="text-xs text-gray-500">+ {inputs.sub_markup_pct}% subcontractor markup on this category = {money((faceRow?.material ?? 0))}</span>}
-                          </div>
+                        <div className="p-2 space-y-2">
+                          {rows.length > 0 && <CategoryTable kind={c.kind} category={n} rows={rows} upd={upd} del={del} ext={ext} inputs={rev19Inputs} dept={dept} />}
+                          <AddBar category={n} kind={c.kind} picks={quickPicks.filter(q => q.category === n)} techDays={techDays} crewSize={crewSize}
+                            onPick={p => addPicked('basic', n, p)} onBlank={() => add('basic', n)} onLaborDay={crew => addLaborDay('basic', crew)} onTrip={crew => addTrip('basic', crew)} />
                         </div>
                       )}
                     </div>
                   )
                 })}
-                {!lines.some(l => l.section === section) && <p className="px-5 py-6 text-sm text-gray-400">{section === 'basic' ? 'No lines yet. Use "Add to category" to start with material, labor by day, mobilization, equipment…' : 'No change-order lines.'}</p>}
               </div>
-            </section>
-          ))}
+            ))}
+          </section>
+
+          {/* Additional scope (change order): opt-in, only the categories you add. */}
+          <section className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+            <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold text-gray-900">Additional scope of work <span className="text-sm font-normal text-gray-400">(change order — leave empty on a normal quote)</span></h2>
+              <AddMenu onAdd={c => add('additional', c)} />
+            </div>
+            <div className="divide-y divide-gray-100">
+              {REV19_CATEGORIES.map(c => {
+                const rows = lines.filter(l => l.section === 'additional' && l.category === c.n)
+                const k = `additional-${c.n}`
+                const isOpen = open[k] ?? rows.length > 0
+                const faceRow = totals.additional.rows.find(r => r.n === c.n)
+                if (!rows.length && !open[k]) return null
+                return (
+                  <div key={k}>
+                    <button type="button" onClick={() => setOpen(o => ({ ...o, [k]: !isOpen }))} className="w-full px-5 py-2.5 flex items-center gap-2 text-left hover:bg-gray-50">
+                      {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                      <span className="text-xs font-mono text-gray-400 w-6">{c.n}</span>
+                      <span className="font-medium text-gray-900 text-sm">{c.name}</span>
+                      <span className="ml-auto text-sm tabular-nums text-gray-700">{faceRow ? money(faceRow.total) : '—'}</span>
+                    </button>
+                    {isOpen && (
+                      <div className="px-3 pb-3 space-y-2">
+                        {rows.length > 0 && <CategoryTable kind={c.kind} category={c.n} rows={rows} upd={upd} del={del} ext={ext} inputs={rev19Inputs} dept={dept} />}
+                        <AddBar category={c.n} kind={c.kind} picks={quickPicks.filter(q => q.category === c.n)} techDays={techDays} crewSize={crewSize}
+                          onPick={p => addPicked('additional', c.n, p)} onBlank={() => add('additional', c.n)} onLaborDay={crew => addLaborDay('additional', crew)} onTrip={crew => addTrip('additional', crew)} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              {!lines.some(l => l.section === 'additional') && !Object.keys(open).some(k => k.startsWith('additional-') && open[k]) && <p className="px-5 py-4 text-sm text-gray-400">No change-order lines.</p>}
+            </div>
+          </section>
 
           <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
             <div><label className={lbl} htmlFor="b-excl">Exclusions and clarifications</label><textarea id="b-excl" name="exclusions" rows={4} defaultValue={header.exclusions ?? ''} className={inp} placeholder="Price does not include… Dewatering priced per day… Third-party testing by others…" /></div>
@@ -323,22 +387,64 @@ function AddMenu({ onAdd }: { onAdd: (category: number) => void }) {
   )
 }
 
-type TableProps = { kind: string; rows: Rev19Row[]; upd: (k: string, p: Partial<Rev19Row>) => void; del: (k: string) => void; ext: (k: string) => ReturnType<typeof computeRev19>['lines'][number] | undefined; inputs: Rev19Inputs; dept: 'construction' | 'service' }
+/** The add controls under each category: catalog search scoped to the category, rate-card chips, blank line, labor day / trip buttons. */
+function AddBar({ category, kind, picks, techDays, crewSize, onPick, onBlank, onLaborDay, onTrip }: {
+  category: number; kind: string; picks: QuickPick[]; techDays: number; crewSize: number
+  onPick: (p: PickedPart) => void; onBlank: () => void; onLaborDay: (crew: 'construction' | 'service') => void; onTrip: (crew: 'construction' | 'service') => void
+}) {
+  const [q, setQ] = useState('')
+  const chip = 'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs hover:bg-blue-50 hover:border-blue-300'
+  const btn = 'inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50'
+  if (kind === 'labor') return (
+    <div className="flex flex-wrap items-center gap-2 px-1">
+      <button type="button" onClick={() => onLaborDay('construction')} className={btn}><Plus className="w-3 h-3" />Construction day</button>
+      <button type="button" onClick={() => onLaborDay('service')} className={btn}><Plus className="w-3 h-3" />Service tech day</button>
+      <span className="text-[11px] text-gray-400">One row per day on site. Men × hours each × the customer rate.{techDays ? ` Crew so far: ${crewSize} men, ${techDays} tech-days.` : ''}</span>
+    </div>
+  )
+  if (kind === 'trip') return (
+    <div className="flex flex-wrap items-center gap-2 px-1">
+      <button type="button" onClick={() => onTrip('construction')} className={btn}><Plus className="w-3 h-3" />Construction team week</button>
+      <button type="button" onClick={() => onTrip('service')} className={btn}><Plus className="w-3 h-3" />Service tech out and back</button>
+      <span className="text-[11px] text-gray-400">$100 per tech per travel day — first and last day of each week on site.{crewSize ? ` Techs defaults to ${crewSize} from the labor rows.` : ''}</span>
+    </div>
+  )
+  // Group rate-card chips by their library heading so the concrete, equipment and disposables lists read like the workbook.
+  const groups = picks.reduce<Record<string, QuickPick[]>>((a, p) => { const g = p.subcategory ?? ''; (a[g] ??= []).push(p); return a }, {})
+  return (
+    <div className="space-y-1.5 px-1">
+      {Object.entries(groups).map(([g, ps]) => (
+        <div key={g} className="flex flex-wrap items-center gap-1.5">
+          {g && <span className="text-[10px] uppercase tracking-wide text-gray-400 w-full sm:w-auto sm:min-w-[120px]">{g.replace(/\s+-\s+.*$/, '')}</span>}
+          {ps.map(p => (
+            <button key={p.id} type="button" onClick={() => onPick({ ...p, suggested_price: null })} title={p.description}
+              className={`${chip} ${p.unit_cost == null ? 'border-pink-300 bg-pink-50 text-pink-800' : p.cost_source === 'receipt' || p.cost_source === 'vendor_quote' ? 'border-green-300 bg-green-50 text-green-900' : 'border-gray-300 bg-white text-gray-800'}`}>
+              <span className="font-medium">{p.part_number && !/^\d{5,}$/.test(p.part_number) ? p.part_number : p.description.slice(0, 40)}</span>
+              <span className="text-gray-500">{p.unit_cost != null ? money(p.unit_cost) : 'PRICE NEEDED'}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="relative flex-1 min-w-[260px]">
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-2" />
+          <PartPicker value={q} onChange={setQ} category={category} onPick={p => { onPick(p); setQ('') }} className={`${inp} pl-7`} placeholder={`Search the catalog for a category ${category} item — part number or description…`} />
+        </div>
+        <button type="button" onClick={onBlank} className={btn}><Plus className="w-3 h-3" />Blank line</button>
+        {category === 10 && techDays > 0 && <span className="text-[11px] text-gray-400">Per-tech items default to {techDays} tech-days from the labor rows.</span>}
+      </div>
+    </div>
+  )
+}
 
-function CategoryTable({ kind, rows, upd, del, ext, inputs, dept }: TableProps) {
+type TableProps = { kind: string; category: number; rows: Rev19Row[]; upd: (k: string, p: Partial<Rev19Row>) => void; del: (k: string) => void; ext: (k: string) => ReturnType<typeof computeRev19>['lines'][number] | undefined; inputs: Rev19Inputs; dept: 'construction' | 'service' }
+
+function CategoryTable({ kind, category, rows, upd, del, ext, inputs }: TableProps) {
   const th = 'text-left px-2 py-1.5 font-medium text-gray-500 text-[11px] uppercase tracking-wide'
   const thr = `${th} text-right`
-  const pick = (r: Rev19Row, p: PickedPart) => {
-    const isMaterial = kind === 'material'
-    upd(r.key, {
-      description: p.description, part_number: p.part_number ?? '', part_id: p.id, unit_cost: p.unit_cost != null ? String(p.unit_cost) : '', freight_per_unit: p.freight_per_unit ? String(p.freight_per_unit) : '',
-      sales_tax_pct: isMaterial && p.taxable === false ? '0' : r.sales_tax_pct, item_type: p.item_type ?? r.item_type,
-      source_note: [p.cost_source?.toUpperCase(), p.cost_vendor, p.cost_invoice_ref, p.cost_date ? p.cost_date.slice(0, 10) : null].filter(Boolean).join(' · '),
-      price_flag: p.unit_cost == null ? 'price_needed' : p.price_status === 'held_high' ? 'held_high' : p.price_status === 'verify' || (p.cost_date && Date.now() - new Date(p.cost_date).getTime() > 183 * 86_400_000) ? 'verify' : 'ok',
-    })
-  }
+  const pick = (r: Rev19Row, p: PickedPart) => upd(r.key, pickPatch(r, p, kind))
   const Desc = ({ r, placeholder }: { r: Rev19Row; placeholder: string }) => (
-    <PartPicker value={r.description} onChange={t => upd(r.key, { description: t, part_id: null })} onPick={p => pick(r, p)} className={inp} placeholder={placeholder} />
+    <PartPicker value={r.description} onChange={t => upd(r.key, { description: t, part_id: null })} onPick={p => pick(r, p)} category={category} className={inp} placeholder={placeholder} />
   )
   const Flag = ({ r }: { r: Rev19Row }) => (
     <select value={r.price_flag} onChange={e => upd(r.key, { price_flag: e.target.value })} className={`${inp} w-24 text-[11px] ${r.price_flag !== 'ok' ? 'bg-pink-50 border-pink-300 text-pink-800' : ''}`} aria-label="Price flag">
@@ -349,7 +455,7 @@ function CategoryTable({ kind, rows, upd, del, ext, inputs, dept }: TableProps) 
   const Del = ({ r }: { r: Rev19Row }) => <button type="button" onClick={() => del(r.key)} className="text-gray-300 hover:text-red-600" aria-label="Remove line"><Trash2 className="w-4 h-4" /></button>
 
   if (kind === 'material') return (
-    <div className="overflow-x-auto"><table className="w-full text-sm">
+    <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-sm">
       <thead><tr><th className={`${th} min-w-[260px]`}>Part # / description</th><th className={thr}>Cost</th><th className={thr}>Tax %</th><th className={thr}>Markup %</th><th className={thr}>Freight</th><th className={thr}>Sell</th><th className={thr}>Qty</th><th className={thr}>Extended</th><th className={th}>Source</th><th /><th /></tr></thead>
       <tbody>{rows.map(r => { const c = ext(r.key); return (
         <tr key={r.key} className="align-top">
@@ -366,7 +472,7 @@ function CategoryTable({ kind, rows, upd, del, ext, inputs, dept }: TableProps) 
     </table></div>
   )
   if (kind === 'labor') return (
-    <div className="overflow-x-auto"><table className="w-full text-sm">
+    <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-sm">
       <thead><tr><th className={th}>Day</th><th className={`${th} min-w-[260px]`}>Scope of work for that day</th><th className={th}>Crew</th><th className={thr}>Rate</th><th className={thr}>Men</th><th className={thr}>Hrs each</th><th className={thr}>Hours</th><th className={thr}>Extended</th><th className={th}>Note</th><th /><th /></tr></thead>
       <tbody>{rows.map((r, i) => { const c = ext(r.key); return (
         <tr key={r.key} className="align-top">
@@ -383,7 +489,7 @@ function CategoryTable({ kind, rows, upd, del, ext, inputs, dept }: TableProps) 
     </table></div>
   )
   if (kind === 'trip') return (
-    <div className="overflow-x-auto"><table className="w-full text-sm">
+    <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-sm">
       <thead><tr><th className={th}>Trip</th><th className={`${th} min-w-[220px]`}>Description</th><th className={th}>Crew</th><th className={thr}>Rate</th><th className={thr}>Travel days</th><th className={thr}>Techs</th><th className={thr}>Tech-travel-days</th><th className={thr}>Extended</th><th /></tr></thead>
       <tbody>{rows.map((r, i) => { const c = ext(r.key); return (
         <tr key={r.key} className="align-top">
@@ -402,7 +508,7 @@ function CategoryTable({ kind, rows, upd, del, ext, inputs, dept }: TableProps) 
   // costplus (5, 9, 10, 12), sub (11), lodging (6)
   const isSub = kind === 'sub', isLodging = kind === 'lodging'
   return (
-    <div className="overflow-x-auto"><table className="w-full text-sm">
+    <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-sm">
       <thead><tr><th className={`${th} min-w-[260px]`}>Item / description</th><th className={thr}>{isLodging ? 'Rate' : 'Cost'}</th>{!isSub && !isLodging && <th className={th}>Markup?</th>}<th className={thr}>Sell</th><th className={thr}>{isLodging ? 'Tech-nights' : 'Qty'}</th><th className={thr}>Extended</th><th className={th}>Source</th><th /><th /></tr></thead>
       <tbody>{rows.map(r => { const c = ext(r.key); return (
         <tr key={r.key} className="align-top">
@@ -418,23 +524,3 @@ function CategoryTable({ kind, rows, upd, del, ext, inputs, dept }: TableProps) 
   )
 }
 
-/** Turn saved line rows back into builder state. */
-export function rowsFromLines(items: Record<string, unknown>[]): Rev19Row[] {
-  const S = (v: unknown) => (v == null ? '' : String(v))
-  return items.map((it, i) => {
-    const legacyLabor = Number(it.labor_hours) > 0 && it.unit_cost == null && it.men == null
-    const cat = legacyLabor ? 7 : Number(it.category) || 4
-    const base = newRow(it.section === 'additional' ? 'additional' : 'basic', cat, it.crew === 'service' ? 'service' : 'construction')
-    return {
-      ...base, key: `s${i}`, description: S(it.description), part_number: S(it.part_number), part_id: (it.part_id as string | null) ?? null, subcategory: S(it.subcategory),
-      quantity: categoryMeta(cat).kind === 'labor' || categoryMeta(cat).kind === 'trip' ? '' : S(it.quantity), unit_cost: S(it.unit_cost),
-      sales_tax_pct: it.sales_tax_pct != null ? String(Number(it.sales_tax_pct) * 100) : '', markup_pct: it.markup_pct != null ? String(Number(it.markup_pct) * 100) : '',
-      freight_per_unit: it.freight_per_unit ? S(it.freight_per_unit) : '', markup_applies: !!it.markup_applies,
-      men: S(it.men), hrs_each: S(it.hrs_each), labor_rate: it.category === 7 && it.men == null && it.labor_rate != null ? S(it.labor_rate) : '', travel_days: S(it.travel_days), techs: S(it.techs),
-      day_label: S(it.day_label), source_note: S(it.source_note), price_flag: S(it.price_flag) || 'ok', is_stock: !!it.is_stock, item_type: S(it.item_type) || base.item_type,
-      // legacy lines (no men/hrs) keep their hours via quantity fallback
-      ...(cat === 7 && it.men == null && it.labor_hours != null ? { men: '1', hrs_each: S(it.labor_hours), labor_rate: S(it.labor_rate) } : {}),
-      ...(cat === 8 && it.travel_days == null && it.quantity != null ? { travel_days: S(it.quantity), techs: '1' } : {}),
-    }
-  })
-}
