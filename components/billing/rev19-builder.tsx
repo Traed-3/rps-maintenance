@@ -197,7 +197,7 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
             <div><label className={lbl} htmlFor="b-date">Quote date</label><input id="b-date" name="proposal_date" type="date" defaultValue={header.proposal_date ?? new Date().toISOString().slice(0, 10)} className={inp} /></div>
             <div><label className={lbl} htmlFor="b-bid">Bid due</label><input id="b-bid" name="bid_due" type="date" defaultValue={header.bid_due ?? ''} className={inp} /></div>
             <div><label className={lbl} htmlFor="b-valid">Valid until</label><input id="b-valid" name="valid_until" type="date" defaultValue={header.valid_until ?? ''} className={inp} /></div>
-            <div><label className={lbl} htmlFor="b-nte">NTE $</label><input id="b-nte" name="nte_amount" type="number" step="any" defaultValue={header.nte_amount ?? ''} className={numInp} /></div>
+            <div><label className={lbl} htmlFor="b-nte">NTE $</label><input id="b-nte" name="nte_amount" type="number" step="any" defaultValue={header.nte_amount ?? ''} className={`${numInp} w-full`} /></div>
           </>) : (<>
             <div><label className={lbl} htmlFor="b-idate">Invoice date</label><input id="b-idate" name="invoice_date" type="date" defaultValue={header.invoice_date ?? new Date().toISOString().slice(0, 10)} className={inp} /></div>
             <div><label className={lbl} htmlFor="b-due">Due date</label><input id="b-due" name="due_date" type="date" defaultValue={header.due_date ?? ''} className={inp} /></div>
@@ -231,16 +231,16 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
           <div><label className={lbl} htmlFor="i-rc">Rate card</label>
             <select id="i-rc" value={rateCardId} onChange={e => applyRateCard(e.target.value)} className={inp}><option value="">— pick —</option>{rateCards.map(r => <option key={r.id} value={r.id}>{r.name} ${Number(r.labor_rate).toFixed(2)}</option>)}</select></div>
           <div><label className={lbl} htmlFor="i-rate">Labor $/hr</label>
-            <input id="i-rate" list="rates" value={inputs.labor_rate} onChange={e => setInp('labor_rate', e.target.value)} type="number" step="0.5" className={numInp} required />
+            <input id="i-rate" list="rates" value={inputs.labor_rate} onChange={e => setInp('labor_rate', e.target.value)} type="number" step="0.5" className={`${numInp} w-full`} required />
             <datalist id="rates">{LABOR_RATES.map(r => <option key={r.brand} value={r.rate}>{r.brand}</option>)}</datalist></div>
-          <div><label className={lbl} htmlFor="i-mk">Material markup %</label><input id="i-mk" value={inputs.material_markup_pct} onChange={e => setInp('material_markup_pct', e.target.value)} type="number" step="0.5" className={numInp} /></div>
+          <div><label className={lbl} htmlFor="i-mk">Material markup %</label><input id="i-mk" value={inputs.material_markup_pct} onChange={e => setInp('material_markup_pct', e.target.value)} type="number" step="0.5" className={`${numInp} w-full`} /></div>
           <div><label className={lbl} htmlFor="i-tax">Tax on material %</label>
-            <input id="i-tax" list="taxes" value={inputs.material_tax_pct} onChange={e => setInp('material_tax_pct', e.target.value)} type="number" step="0.1" className={numInp} />
+            <input id="i-tax" list="taxes" value={inputs.material_tax_pct} onChange={e => setInp('material_tax_pct', e.target.value)} type="number" step="0.1" className={`${numInp} w-full`} />
             <datalist id="taxes">{TAX_PRESETS.map(t => <option key={t.label} value={t.value * 100}>{t.label}</option>)}</datalist></div>
-          <div><label className={lbl} htmlFor="i-sub">Sub markup %</label><input id="i-sub" value={inputs.sub_markup_pct} onChange={e => setInp('sub_markup_pct', e.target.value)} type="number" step="0.5" className={numInp} /></div>
-          <div><label className={lbl} htmlFor="i-cont">Contingency %</label><input id="i-cont" value={inputs.contingency_pct} onChange={e => setInp('contingency_pct', e.target.value)} type="number" step="0.5" className={numInp} /></div>
-          <div><label className={lbl} htmlFor="i-contf">Contingency $</label><input id="i-contf" value={inputs.contingency_flat} onChange={e => setInp('contingency_flat', e.target.value)} type="number" step="any" className={numInp} /></div>
-          <div><label className={lbl} htmlFor="i-po">Profit &amp; overhead %</label><input id="i-po" value={inputs.profit_overhead_percent} onChange={e => setInp('profit_overhead_percent', e.target.value)} type="number" step="0.5" className={numInp} /></div>
+          <div><label className={lbl} htmlFor="i-sub">Sub markup %</label><input id="i-sub" value={inputs.sub_markup_pct} onChange={e => setInp('sub_markup_pct', e.target.value)} type="number" step="0.5" className={`${numInp} w-full`} /></div>
+          <div><label className={lbl} htmlFor="i-cont">Contingency %</label><input id="i-cont" value={inputs.contingency_pct} onChange={e => setInp('contingency_pct', e.target.value)} type="number" step="0.5" className={`${numInp} w-full`} /></div>
+          <div><label className={lbl} htmlFor="i-contf">Contingency $</label><input id="i-contf" value={inputs.contingency_flat} onChange={e => setInp('contingency_flat', e.target.value)} type="number" step="any" className={`${numInp} w-full`} /></div>
+          <div><label className={lbl} htmlFor="i-po">Profit &amp; overhead %</label><input id="i-po" value={inputs.profit_overhead_percent} onChange={e => setInp('profit_overhead_percent', e.target.value)} type="number" step="0.5" className={`${numInp} w-full`} /></div>
         </div>
         <p className="text-[11px] text-gray-400 mt-2">Project management fee: none, ever. Quote-level sales tax: {inputs.sales_tax_percent}% (leave at 0).</p>
       </section>

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } from '@react-pdf/renderer'
 import { money, fmtDate } from '@/lib/billing'
-import { REV19_CATEGORIES, categoryMeta, computeRev19, type Rev19Inputs, type Rev19LineInput, type Rev19Totals, type Rev19Line } from '@/lib/rev19'
+import { REV19_CATEGORIES, categoryMeta, computeRev19, faceLineRows, type Rev19Inputs, type Rev19LineInput, type Rev19Totals, type Rev19Line } from '@/lib/rev19'
 
 // ============================================================
 // RPS quote / invoice PDF — mirrors the RP QUOTE TEMPLATE sheet that every
@@ -163,7 +163,7 @@ function ProjectDescription({ doc }: { doc: BillingDoc }) {
   )
 }
 
-type FaceRow = { no: string; desc: string; qty: number | null; unit: number | null; material: number; hours: number; rate: number | null; labor: number; total: number }
+type FaceRow = { no: string; desc: string; header?: boolean; qty: number | null; unit: number | null; material: number; hours: number | null; rate: number | null; labor: number; total: number }
 
 function SectionTable({ title, rows, subtotalMaterial, subtotalLabor, total, totalLabel }: { title: string; rows: FaceRow[]; subtotalMaterial: number; subtotalLabor: number; total: number; totalLabel: string }) {
   const H = ({ t, w, first }: { t: string; w: number; first?: boolean }) => <Text style={[s.cell, s.band, s.bold, s.center, { width: w, fontSize: 6.5, borderLeftWidth: first ? 0.6 : 0 }]}>{t}</Text>
@@ -180,11 +180,11 @@ function SectionTable({ title, rows, subtotalMaterial, subtotalLabor, total, tot
           <Text style={[s.cell, s.bold, { width: C.desc, fontSize: 7.5, borderLeftWidth: 0, borderTopWidth: 0 }]}>{r.desc}</Text>
           <D t={r.qty ? String(r.qty) : ''} w={C.qty} al="center" />
           <D t={r.unit != null ? money(r.unit) : ''} w={C.unit} />
-          <D t={acct(r.material)} w={C.mat} />
-          <D t={r.hours ? String(r.hours) : '0'} w={C.hrs} al="center" />
-          <D t={r.rate != null ? money(r.rate) : '$ -'} w={C.rate} />
-          <D t={acct(r.labor)} w={C.lab} />
-          <D t={acct(r.total)} w={C.tot} b />
+          <D t={r.header ? '' : acct(r.material)} w={C.mat} />
+          <D t={r.header ? '' : r.hours ? String(r.hours) : '0'} w={C.hrs} al="center" />
+          <D t={r.header ? '' : r.rate != null ? money(r.rate) : '$ -'} w={C.rate} />
+          <D t={r.header ? '' : acct(r.labor)} w={C.lab} />
+          <D t={r.header ? '' : acct(r.total)} w={C.tot} b />
         </View>
       ))}
       <View style={s.row} wrap={false}>
@@ -239,18 +239,11 @@ function SignatureBlock({ doc }: { doc: BillingDoc }) {
 }
 
 /** Face rows. Quotes: one row per REV19 category (the template). Invoices: every line, the way service invoices read. */
-function faceRows(kind: 'Proposal' | 'Invoice', section: 'basic' | 'additional', lines: Rev19Line[], face: Rev19Totals['basic'], inp: Rev19Inputs, detail: boolean): FaceRow[] {
+function faceRows(section: 'basic' | 'additional', lines: Rev19Line[], face: Rev19Totals['basic'], inp: Rev19Inputs, detail: boolean): FaceRow[] {
   if (!detail) {
-    return face.rows.map(r => ({ no: String(r.n), desc: r.name, qty: r.n === 7 ? null : r.quantity || null, unit: r.unit_cost, material: r.material, hours: r.labor_hours, rate: r.n === 7 ? (r.labor_rate ?? inp.labor_rate) : null, labor: r.total_labor, total: r.total }))
+    return face.rows.map(r => ({ no: String(r.n), desc: r.name, qty: r.n === 7 ? null : r.quantity || null, unit: r.unit_cost, material: r.material, hours: r.labor_hours, rate: r.n === 7 ? (r.labor_rate ?? inp.labor_rate) : r.labor_rate, labor: r.total_labor, total: r.total }))
   }
-  const ls = lines.filter(l => l.section === section)
-  return ls.map((l, i) => {
-    const kind7 = l.category === 7, kind8 = l.category === 8
-    const desc = kind7 ? `Labor${l.day_label ? ` ${l.day_label}` : ''}${l.description ? ` — ${l.description}` : ''}` : kind8 ? `Trip${l.day_label ? ` ${l.day_label}` : ''}${l.description ? ` — ${l.description}` : ''}` : [l.description, l.part_number ? `(${l.part_number})` : ''].filter(Boolean).join(' ')
-    const catMk = l.category === 11 ? 1 + inp.sub_markup_pct : 1
-    if (l.fixed) return { no: String(i + 1), desc: [l.description, l.part_number ? `(${l.part_number})` : ''].filter(Boolean).join(' '), qty: l.quantity_effective || null, unit: l.unit_cost != null ? l.fixed.sell_unit : null, material: l.fixed.material_total, hours: l.fixed.labor_hours, rate: l.fixed.labor_hours ? l.fixed.labor_rate : null, labor: l.fixed.total_labor, total: l.total_material_labor }
-    return { no: String(i + 1), desc, qty: kind7 ? null : l.quantity_effective || null, unit: kind7 ? null : l.sell_unit * catMk, material: l.material_total * catMk, hours: l.labor_hours, rate: kind7 ? l.sell_unit : null, labor: l.total_labor, total: l.total_material_labor * catMk }
-  })
+  return faceLineRows(lines, section, inp)
 }
 
 function Breakdown({ doc, lines, t }: { doc: BillingDoc; lines: Rev19Line[]; t: Rev19Totals }) {
@@ -318,10 +311,11 @@ export type PdfView = 'face' | 'breakdown' | 'both'
 
 export async function renderBillingPdf(doc: BillingDoc, items: Rev19LineInput[], view: PdfView = 'both', opts: { detail?: boolean } = {}): Promise<Buffer> {
   const { lines, totals } = computeRev19(items, doc.inputs)
-  const detail = opts.detail ?? doc.kind === 'Invoice'
+  // The face is itemised (every line, grouped under its category) unless ?detail=0 asks for the category roll-up.
+  const detail = opts.detail ?? true
   const title = doc.kind === 'Proposal' ? 'Bid Proposal' : 'Invoice'
-  const basicRows = faceRows(doc.kind, 'basic', lines, totals.basic, doc.inputs, detail)
-  const addRows = faceRows(doc.kind, 'additional', lines, totals.additional, doc.inputs, detail)
+  const basicRows = faceRows('basic', lines, totals.basic, doc.inputs, detail)
+  const addRows = faceRows('additional', lines, totals.additional, doc.inputs, detail)
   const pdf = (
     <Document title={`${title} ${doc.number}`} author="Rappahannock Petroleum Services">
       {view !== 'breakdown' && (
