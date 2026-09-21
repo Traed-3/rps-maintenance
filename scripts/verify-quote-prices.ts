@@ -19,12 +19,13 @@ const COMPANY_ID = env.RPS_COMPANY_ID ?? 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 
 type Rule = { match: string; part_number?: string; unit_cost?: number; labor_rate?: number; flag: string; source: string }
+type CatalogOnly = { part_number: string; description: string; unit_cost: number; source: string; category: number }
 
 async function main() {
   const args = process.argv.slice(2)
   const apply = args.includes('--apply')
   const [rulesFile, ...numbers] = args.filter(a => a !== '--apply')
-  const { rules } = JSON.parse(readFileSync(rulesFile, 'utf-8')) as { rules: Rule[] }
+  const { rules, catalog_only = [] } = JSON.parse(readFileSync(rulesFile, 'utf-8')) as { rules: Rule[]; catalog_only?: CatalogOnly[] }
   const dateOf = (s: string) => { const m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})\b/); return m ? `20${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}` : null }
   const kindOf = (s: string) => /^RECEIPT/i.test(s) ? 'receipt' : /^QUOTE/i.test(s) ? 'vendor_quote' : /rate card/i.test(s) ? 'rate_card' : 'book'
 
@@ -81,6 +82,14 @@ async function main() {
       const fields = { unit_cost: r.unit_cost, cost_source: kindOf(r.source), cost_date: dateOf(r.source), cost_vendor: (r.source.match(/(Noland|WCW|Capital Electric|Source NA|Spatco|Petroleum Management Inc|Home Depot|RPS REV19 rate card)/i)?.[1]) ?? null, price_status: r.flag === 'ok' ? 'ok' : r.flag === 'held_high' ? 'held_high' : 'verify', notes: r.source }
       if (hit?.[0]) await sb.from('parts').update(fields).eq('id', hit[0].id)
       else await sb.from('parts').insert({ company_id: COMPANY_ID, sku: 'VERIFIED_2026-09', part_number: r.part_number, description: r.source.split('·')[1]?.trim() || r.part_number, category: 4, taxable: true, ...fields })
+      n++
+    }
+    // Prices seen on receipts that no quote line uses yet — still worth having in the catalog.
+    for (const c of catalog_only) {
+      const { data: hit } = await sb.from('parts').select('id').eq('company_id', COMPANY_ID).ilike('part_number', c.part_number).limit(1)
+      const fields = { unit_cost: c.unit_cost, cost_source: kindOf(c.source), cost_date: dateOf(c.source), cost_vendor: (c.source.match(/(Noland|WCW|Capital Electric|Source NA|Spatco|Petroleum Management Inc|Home Depot)/i)?.[1]) ?? null, price_status: 'ok', notes: c.source }
+      if (hit?.[0]) await sb.from('parts').update(fields).eq('id', hit[0].id)
+      else await sb.from('parts').insert({ company_id: COMPANY_ID, sku: 'VERIFIED_2026-09', part_number: c.part_number, description: c.description, category: c.category, taxable: true, ...fields })
       n++
     }
     console.log(`\ncatalog: ${n} parts carry the verified price.`)
