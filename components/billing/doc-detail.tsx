@@ -34,7 +34,7 @@ export function DocDetail({ kind, row, lines, canWrite, emails, resendConfigured
         <div className="flex flex-wrap items-start justify-between gap-3 mt-2">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 font-mono">{number ?? 'DRAFT'}<span className="ml-3 text-base font-sans font-normal text-gray-500 capitalize">{String(row.department ?? 'construction')}</span></h1>
-            <p className="text-sm text-gray-600 mt-0.5">{row.con_customers?.name ?? 'No customer'}{row.store_label ? ` · ${row.store_label}` : ''}{row.site_number ? ` · ${row.site_number}` : ''}{row.csr_number ? ` · CSR ${row.csr_number}` : ''}</p>
+            <p className="text-sm text-gray-600 mt-0.5">{row.con_customers?.name ?? 'No customer'}{row.store_label ? ` · ${row.store_label}` : ''}{row.site_number && row.site_number !== row.store_label ? ` · ${row.site_number}` : ''}{row.csr_number ? ` · CSR ${row.csr_number}` : ''}</p>
             <p className="text-xs text-gray-400">{isQ ? `Quote date ${fmtDate(row.proposal_date as string)}${row.bid_due ? ` · bid due ${fmtDate(row.bid_due as string)}` : ''}` : `Invoice date ${fmtDate(row.invoice_date as string)}${row.due_date ? ` · due ${fmtDate(row.due_date as string)}` : ''}`} · labor {money(doc.inputs.labor_rate)}/hr{doc.laborRateLabel ? ` (${doc.laborRateLabel})` : ''} · markup {(doc.inputs.material_markup_pct * 100).toFixed(0)}%</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

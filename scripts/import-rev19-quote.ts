@@ -6,6 +6,10 @@
  *   npx tsx scripts/import-rev19-quote.ts /tmp/quote.json            # dry run: prints the face + checks the workbook total
  *   npx tsx scripts/import-rev19-quote.ts /tmp/quote.json --apply    # writes con_quotes + con_quote_line_items
  *
+ * Flags:  --reprice  swap each material line's cost for the catalog's current cost where the
+ *                    part is known (receipt / vendor quote / book), flag the rest VERIFY
+ *         --force    write even when the total no longer matches the workbook (expected after --reprice)
+ *
  * Customer, rate card (by labor rate), signer (by name) and catalog parts (by
  * part number) are matched by lookup; anything that does not match is left
  * null and reported so it can be fixed in the app.
@@ -39,9 +43,9 @@ const title = (s: string | null) => s ? s.toLowerCase().replace(/\b\w/g, c => c.
 const isoDate = (s: string | null) => { if (!s) return null; const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}` : s }
 
 async function main() {
-  const [file, flag] = process.argv.slice(2)
-  if (!file) { console.error('usage: npx tsx scripts/import-rev19-quote.ts <quote.json> [--apply]'); process.exit(1) }
-  const apply = flag === '--apply'
+  const [file, ...flags] = process.argv.slice(2)
+  if (!file) { console.error('usage: npx tsx scripts/import-rev19-quote.ts <quote.json> [--apply] [--reprice] [--force]'); process.exit(1) }
+  const apply = flags.includes('--apply'), reprice = flags.includes('--reprice'), force = flags.includes('--force')
   const q: Parsed = JSON.parse(readFileSync(file, 'utf-8'))
 
   // ── lookups ────────────────────────────────────────────────────────────────
@@ -63,6 +67,36 @@ async function main() {
   const partById = new Map((parts ?? []).map(p => [p.part_number, p.id]))
 
   const lines: Rev19LineInput[] = q.lines.map((l, i) => ({ ...l, line_no: i + 1, part_id: l.part_number ? partById.get(l.part_number) ?? null : null, price_flag: l.price_flag ?? 'ok' }))
+
+  // ── --reprice: the workbook's numbers are old; take the catalog's cost where we know the part ──
+  const repriced: string[] = []
+  if (reprice) {
+    const FRESH = 183 * 86_400_000
+    for (const l of lines) {
+      if (![1, 2, 3, 4, 5, 10].includes(l.category) || l.category === 5 && !l.markup_applies) continue
+      let hit: { id: string; part_number: string | null; description: string; unit_cost: number | null; cost_source: string | null; cost_vendor: string | null; cost_date: string | null; price_status: string | null } | null = null
+      if (l.part_number) {
+        const { data } = await sb.from('parts').select('id, part_number, description, unit_cost, cost_source, cost_vendor, cost_date, price_status').eq('company_id', COMPANY_ID).ilike('part_number', l.part_number).limit(1)
+        hit = data?.[0] ?? null
+      }
+      // No part number: only trust a description match when the whole phrase (3+ real words) is found.
+      if (!hit && !l.part_number && l.description) {
+        const words = l.description.replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 2)
+        if (words.length >= 3) {
+          const { data } = await sb.from('parts').select('id, part_number, description, unit_cost, cost_source, cost_vendor, cost_date, price_status').eq('company_id', COMPANY_ID).not('unit_cost', 'is', null).ilike('description', `%${words.join('%')}%`).limit(1)
+          hit = data?.[0] ?? null
+        }
+      }
+      if (hit && hit.unit_cost != null) {
+        const fresh = hit.cost_date ? Date.now() - new Date(hit.cost_date).getTime() < FRESH : false
+        const old = l.unit_cost
+        l.part_id = hit.id; l.part_number = hit.part_number ?? l.part_number; l.unit_cost = Number(hit.unit_cost)
+        l.source_note = [hit.cost_source?.toUpperCase(), hit.cost_vendor, hit.cost_date?.slice(0, 10)].filter(Boolean).join(' · ')
+        l.price_flag = hit.price_status && hit.price_status !== 'ok' ? hit.price_status : fresh ? 'ok' : 'verify'
+        repriced.push(`${(l.part_number ?? l.description ?? '').slice(0, 34).padEnd(34)} ${money(old ?? 0).padStart(11)} → ${money(l.unit_cost).padStart(11)}  ${l.source_note}${l.price_flag !== 'ok' ? `  [${l.price_flag}]` : ''}`)
+      }
+    }
+  }
   const unmatched = lines.filter(l => l.category <= 4 && l.part_number && !l.part_id).map(l => l.part_number)
   if (unmatched.length) notes.push(`catalog parts not matched (line still prices from the workbook cost): ${unmatched.join(', ')}`)
 
@@ -74,8 +108,11 @@ async function main() {
   if (q.workbook_total != null) {
     const diff = Math.abs(totals.final_total - q.workbook_total)
     console.log(diff < 0.01 ? `  ✓ matches the workbook (${money(q.workbook_total)})` : `  ✗ WORKBOOK SAYS ${money(q.workbook_total)} — off by ${money(diff)}`)
-    if (diff >= 0.01 && apply) { console.error('Refusing to write a quote that does not match its workbook.'); process.exit(2) }
+    if (diff >= 0.01 && apply && !force) { console.error('Refusing to write a quote that does not match its workbook (add --force if the prices were meant to change).'); process.exit(2) }
   }
+  if (repriced.length) { console.log(`\n  Repriced from the catalog (${repriced.length}):`); for (const r of repriced) console.log('   ', r) }
+  const stillOld = lines.filter(l => l.price_flag === 'verify').length
+  if (stillOld) console.log(`  ${stillOld} line${stillOld === 1 ? '' : 's'} still carry the workbook price and are flagged VERIFY.`)
   for (const n of notes) console.log(`  ! ${n}`)
   if (!apply) { console.log('\nDry run. Add --apply to write it.'); return }
 

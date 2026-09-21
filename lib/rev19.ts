@@ -182,25 +182,79 @@ export function computeRev19Line(l: Rev19LineInput, inp: Rev19Inputs): Rev19Line
   return { ...l, sell_unit: sell, quantity_effective: qty, material_total: ext, labor_hours: 0, total_labor: 0, total_material_labor: ext }
 }
 
+/**
+ * Which face column a line prints in. Materials (things RPS buys and pays tax on) go in
+ * MATERIAL; services (labor, subs, equipment, lodging, mobilization, permits, disposal
+ * fees) go in LABOR HOURS × LABOR RATE — the way the RP quote face has always read, and
+ * the reason "SALES TAX (MATERIAL ONLY)" only touches the material column.
+ * Category 5 is the one mixed bag: concrete / rebar / backfill carry markup and are
+ * material; a disposal or tipping fee (no markup) is a service.
+ */
+export function isServiceLine(l: Rev19LineInput): boolean {
+  const kind = categoryMeta(l.category).kind
+  if (kind === 'material') return false
+  if (l.category === 5) return !l.markup_applies
+  if (l.category === 10) return false
+  return true
+}
+
+/** Extended amount of one line as it prints on the face (category 11 carries the sub markup). */
+const faceAmount = (l: Rev19Line, inp: Rev19Inputs) => r2(l.total_material_labor * (l.category === 11 ? 1 + inp.sub_markup_pct : 1))
+
 function face(lines: Rev19Line[], section: 'basic' | 'additional', inp: Rev19Inputs): SectionFace {
   const rows: SectionFace['rows'] = []
   let subtotal_material = 0, subtotal_labor = 0
   for (const c of REV19_CATEGORIES) {
     const ls = lines.filter(l => l.section === section && l.category === c.n)
     if (!ls.length) continue
-    let material = r2(ls.reduce((a, l) => a + l.material_total, 0))
-    if (c.n === 11) material = r2(material * (1 + inp.sub_markup_pct))
-    const labor_hours = r2(ls.reduce((a, l) => a + l.labor_hours, 0))
-    const total_labor = r2(ls.reduce((a, l) => a + l.total_labor, 0))
+    const mat = ls.filter(l => !isServiceLine(l)), svc = ls.filter(l => isServiceLine(l))
+    const material = r2(mat.reduce((a, l) => a + faceAmount(l, inp), 0))
+    const total_labor = r2(svc.reduce((a, l) => a + faceAmount(l, inp), 0))
+    const labor_hours = r2(svc.reduce((a, l) => a + (l.category === 7 ? l.labor_hours : l.quantity_effective), 0))
     // The face shows a quantity only where it means one thing: tech-nights, tech-travel-days, or a single-line category.
     const quantity = c.kind === 'lodging' || c.kind === 'trip' || ls.length === 1 ? r2(ls.reduce((a, l) => a + l.quantity_effective, 0)) : 0
     const unit_cost = c.kind === 'labor' ? null : ls.length === 1 ? ls[0].sell_unit : null
-    const labor_rate = c.kind === 'labor' ? (labor_hours > 0 ? r2(total_labor / labor_hours) : inp.labor_rate) : null
+    const labor_rate = c.kind === 'labor' ? (labor_hours > 0 ? r2(total_labor / labor_hours) : inp.labor_rate) : svc.length === 1 && labor_hours > 0 ? r2(total_labor / labor_hours) : null
     rows.push({ n: c.n, name: c.name, quantity, unit_cost, material, labor_hours, labor_rate, total_labor, total: r2(material + total_labor) })
     subtotal_material = r2(subtotal_material + material)
     subtotal_labor = r2(subtotal_labor + total_labor)
   }
   return { rows, subtotal_material, subtotal_labor, total: r2(subtotal_material + subtotal_labor) }
+}
+
+export type FaceLineRow = {
+  no: string; desc: string; header?: boolean; flag?: string | null
+  qty: number | null; unit: number | null; material: number; hours: number | null; rate: number | null; labor: number; total: number
+}
+
+/**
+ * The itemised face — one row per line, in the columns the RP quote template uses, with a
+ * bold header row in front of each category (the workbook's "NOV Fiberglass material",
+ * "Electrical material" rows). Rows are numbered straight through, headers included.
+ */
+export function faceLineRows(lines: Rev19Line[], section: 'basic' | 'additional', inp: Rev19Inputs): FaceLineRow[] {
+  const out: FaceLineRow[] = []
+  const cats = REV19_CATEGORIES.filter(c => lines.some(l => l.section === section && l.category === c.n))
+  let no = 0
+  for (const c of cats) {
+    const ls = lines.filter(l => l.section === section && l.category === c.n)
+    if (cats.length > 1 || ls.length > 1) out.push({ no: String(++no), desc: c.name, header: true, qty: null, unit: null, material: 0, hours: null, rate: null, labor: 0, total: 0 })
+    for (const l of ls) {
+      const amount = faceAmount(l, inp)
+      const catMk = l.category === 11 ? 1 + inp.sub_markup_pct : 1
+      const label = l.category === 7 ? [l.day_label, l.crew === 'service' ? 'SERVICE TECH' : null, l.description].filter(Boolean).join(' — ') || 'LABOR'
+        : l.category === 8 ? ['MOBILIZATION', l.day_label, l.description].filter(Boolean).join(' — ')
+        : [l.part_number && !(l.description ?? '').toUpperCase().startsWith(l.part_number.toUpperCase()) ? l.part_number : null, l.description].filter(Boolean).join(' - ')
+      if (l.fixed) { out.push({ no: String(++no), desc: label, flag: l.price_flag, qty: l.quantity_effective || null, unit: l.unit_cost != null ? l.fixed.sell_unit : null, material: l.fixed.material_total, hours: l.fixed.labor_hours || null, rate: l.fixed.labor_rate, labor: l.fixed.total_labor, total: r2(l.fixed.material_total + l.fixed.total_labor) }); continue }
+      if (isServiceLine(l)) {
+        const hours = l.category === 7 ? l.labor_hours : l.quantity_effective
+        out.push({ no: String(++no), desc: label, flag: l.price_flag, qty: null, unit: null, material: 0, hours: hours || null, rate: hours ? r2(amount / hours) : r4(l.sell_unit * catMk), labor: amount, total: amount })
+      } else {
+        out.push({ no: String(++no), desc: label, flag: l.price_flag, qty: l.quantity_effective || null, unit: r4(l.sell_unit * catMk), material: amount, hours: null, rate: null, labor: 0, total: amount })
+      }
+    }
+  }
+  return out
 }
 
 export function computeRev19(items: Rev19LineInput[], inp: Rev19Inputs): { lines: Rev19Line[]; totals: Rev19Totals } {
