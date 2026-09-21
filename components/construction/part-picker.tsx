@@ -51,6 +51,20 @@ export function PartPicker({
   const [loading, setLoading] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const box = useRef<HTMLDivElement>(null)
+  // The list is position:fixed so it escapes the scrolling table cells the builder puts pickers in
+  // (an absolute list inside an overflow-x-auto wrapper gets clipped and looks like "search did nothing").
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  function place() {
+    const r = box.current?.getBoundingClientRect()
+    if (r) setPos({ top: r.bottom + 4, left: r.left, width: r.width })
+  }
+  useEffect(() => {
+    if (!open) return
+    place()
+    const onMove = () => place()
+    window.addEventListener('scroll', onMove, true); window.addEventListener('resize', onMove)
+    return () => { window.removeEventListener('scroll', onMove, true); window.removeEventListener('resize', onMove) }
+  }, [open])
 
   useEffect(() => {
     function onDoc(e: MouseEvent) { if (box.current && !box.current.contains(e.target as Node)) setOpen(false) }
@@ -83,8 +97,8 @@ export function PartPicker({
         autoComplete="off"
       />
       {loading && <Search className="w-3.5 h-3.5 text-gray-300 absolute right-2 top-2.5 animate-pulse" />}
-      {open && results.length > 0 && (
-        <ul className="absolute z-30 mt-1 w-[34rem] max-w-[90vw] max-h-72 overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg text-sm" role="listbox">
+      {open && results.length > 0 && pos && (
+        <ul className="fixed z-50 max-h-72 overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg text-sm" style={{ top: pos.top, left: pos.left, width: Math.max(pos.width, Math.min(544, window.innerWidth - pos.left - 16)) }} role="listbox">
           {results.map(p => (
             <li key={p.id} role="option" aria-selected={false}>
               <button

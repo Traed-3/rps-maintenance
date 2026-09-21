@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useMemo, useState } from 'react'
+import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PartPicker, type PickedPart } from '@/components/construction/part-picker'
@@ -59,7 +59,7 @@ function pickPatch(r: Rev19Row, p: PickedPart, kind: string): Partial<Rev19Row> 
 // The builder lays the twelve categories out the way the face rolls them up.
 const CATEGORY_GROUPS: { title: string; hint: string; cats: readonly number[] }[] = [
   { title: 'Taxable materials', hint: 'Categories 1–4 · (cost + tax) × (1 + markup) + freight, × qty. Search the catalog — receipts beat quotes beat book prices.', cats: TAXABLE_CATS },
-  { title: 'Concrete · equipment · disposables · subcontractors · permits', hint: 'Categories 5, 9, 10, 11, 12 · rate-card items are one click; markup only where the chip says so. Subs get 15% on the category.', cats: CONCRETE_EQUIP_CATS },
+  { title: 'Concrete · equipment · disposables · subcontractors · permits', hint: 'Categories 5, 9, 10, 11, 12 · open the Add list under each category for the rate-card items (concrete, disposal, equipment, disposables, subs, permits). Subs get 15% on the category.', cats: CONCRETE_EQUIP_CATS },
   { title: 'Labor · mobilization · lodging', hint: 'Categories 7, 8, 6 · labor is one row per day (men × hours × the customer rate); mobilization is $100 per tech per travel day.', cats: [7, 8, 6] },
 ]
 
@@ -104,6 +104,7 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
   const [scope, setScope] = useState<{ scope: string; description: string }[]>(header.scope_rows?.length ? header.scope_rows : [{ scope: '', description: '' }])
   const [lines, setLines] = useState<Rev19Row[]>(initialLines?.length ? initialLines : [])
   const [open, setOpen] = useState<Record<string, boolean>>({})
+  const [anyPart, setAnyPart] = useState('')
 
   const setInp = (k: keyof typeof inputs, v: string) => setInputs(s => ({ ...s, [k]: v }))
   const upd = (key: string, patch: Partial<Rev19Row>) => setLines(ls => ls.map(l => (l.key === key ? { ...l, ...patch } : l)))
@@ -263,9 +264,14 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
         <div className="xl:col-span-2 space-y-5">
           {/* Basic installation: every category is on the page, grouped the way the face rolls up. */}
           <section className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-            <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+            <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
               <h2 className="font-semibold text-gray-900">Basic installation</h2>
-              <span className="text-sm tabular-nums text-gray-700">{money(totals.basic.total)}</span>
+              {/* One search across the whole catalog: the part lands in whichever category it is filed under. */}
+              <div className="relative flex-1 min-w-[280px]">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-2" />
+                <PartPicker value={anyPart} onChange={setAnyPart} onPick={p => { addPicked('basic', p.category && p.category >= 1 && p.category <= 12 ? p.category : 4, p); setAnyPart('') }} className={`${inp} pl-7`} placeholder="Search all parts and supplies — part number or description — and it goes into its category…" />
+              </div>
+              <span className="ml-auto text-sm tabular-nums text-gray-700">{money(totals.basic.total)}</span>
             </div>
             {CATEGORY_GROUPS.map(g => (
               <div key={g.title} className="border-b border-gray-100 last:border-b-0">
@@ -277,8 +283,8 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
                   const isOpen = open[k] ?? true
                   const faceRow = totals.basic.rows.find(r => r.n === n)
                   return (
-                    <div key={k} className="mx-3 mb-2 rounded-xl border border-gray-200 overflow-hidden">
-                      <button type="button" onClick={() => setOpen(o => ({ ...o, [k]: !isOpen }))} className={`w-full px-3 py-2 flex items-center gap-2 text-left ${rows.length ? 'bg-[#FBE5D6]' : 'bg-gray-50'} hover:brightness-95`}>
+                    <div key={k} className="mx-3 mb-2 rounded-xl border border-gray-200">
+                      <button type="button" onClick={() => setOpen(o => ({ ...o, [k]: !isOpen }))} className={`w-full px-3 py-2 flex items-center gap-2 text-left rounded-t-xl ${isOpen ? '' : 'rounded-b-xl'} ${rows.length ? 'bg-[#FBE5D6]' : 'bg-gray-50'} hover:brightness-95`}>
                         {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                         <span className="text-xs font-mono text-gray-500 w-5">{n}</span>
                         <span className="font-medium text-gray-900 text-sm">{c.name}</span>
@@ -393,7 +399,6 @@ function AddBar({ category, kind, picks, techDays, crewSize, onPick, onBlank, on
   onPick: (p: PickedPart) => void; onBlank: () => void; onLaborDay: (crew: 'construction' | 'service') => void; onTrip: (crew: 'construction' | 'service') => void
 }) {
   const [q, setQ] = useState('')
-  const chip = 'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs hover:bg-blue-50 hover:border-blue-300'
   const btn = 'inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50'
   if (kind === 'labor') return (
     <div className="flex flex-wrap items-center gap-2 px-1">
@@ -409,30 +414,64 @@ function AddBar({ category, kind, picks, techDays, crewSize, onPick, onBlank, on
       <span className="text-[11px] text-gray-400">$100 per tech per travel day — first and last day of each week on site.{crewSize ? ` Techs defaults to ${crewSize} from the labor rows.` : ''}</span>
     </div>
   )
-  // Group rate-card chips by their library heading so the concrete, equipment and disposables lists read like the workbook.
-  const groups = picks.reduce<Record<string, QuickPick[]>>((a, p) => { const g = p.subcategory ?? ''; (a[g] ??= []).push(p); return a }, {})
+  // Categories 1–4 are searched (thousands of parts); everything else is a short rate-card list behind one button.
+  const isParts = kind === 'material'
   return (
-    <div className="space-y-1.5 px-1">
-      {Object.entries(groups).map(([g, ps]) => (
-        <div key={g} className="flex flex-wrap items-center gap-1.5">
-          {g && <span className="text-[10px] uppercase tracking-wide text-gray-400 w-full sm:w-auto sm:min-w-[120px]">{g.replace(/\s+-\s+.*$/, '')}</span>}
-          {ps.map(p => (
-            <button key={p.id} type="button" onClick={() => onPick({ ...p, suggested_price: null })} title={p.description}
-              className={`${chip} ${p.unit_cost == null ? 'border-pink-300 bg-pink-50 text-pink-800' : p.cost_source === 'receipt' || p.cost_source === 'vendor_quote' ? 'border-green-300 bg-green-50 text-green-900' : 'border-gray-300 bg-white text-gray-800'}`}>
-              <span className="font-medium">{p.part_number && !/^\d{5,}$/.test(p.part_number) ? p.part_number : p.description.slice(0, 40)}</span>
-              <span className="text-gray-500">{p.unit_cost != null ? money(p.unit_cost) : 'PRICE NEEDED'}</span>
-            </button>
-          ))}
-        </div>
-      ))}
-      <div className="flex flex-wrap items-center gap-2 pt-1">
+    <div className="flex flex-wrap items-center gap-2 px-1">
+      {isParts ? (
         <div className="relative flex-1 min-w-[260px]">
           <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-2" />
-          <PartPicker value={q} onChange={setQ} category={category} onPick={p => { onPick(p); setQ('') }} className={`${inp} pl-7`} placeholder={`Search the catalog for a category ${category} item — part number or description…`} />
+          <PartPicker value={q} onChange={setQ} category={category} onPick={p => { onPick(p); setQ('') }} className={`${inp} pl-7`} placeholder={`Search category ${category} parts — part number or description…`} />
         </div>
-        <button type="button" onClick={onBlank} className={btn}><Plus className="w-3 h-3" />Blank line</button>
-        {category === 10 && techDays > 0 && <span className="text-[11px] text-gray-400">Per-tech items default to {techDays} tech-days from the labor rows.</span>}
-      </div>
+      ) : (
+        <PickList picks={picks} label={`Add ${categoryMeta(category).short.toLowerCase()} item`} onPick={p => onPick({ ...p, suggested_price: null })} />
+      )}
+      <button type="button" onClick={onBlank} className={btn}><Plus className="w-3 h-3" />Blank line</button>
+      {category === 10 && techDays > 0 && <span className="text-[11px] text-gray-400">Per-tech items default to {techDays} tech-days from the labor rows.</span>}
+    </div>
+  )
+}
+
+/** A dropdown of rate-card items for one category: click the button, get the grouped list (with prices and the pink / green / orange price keys), pick one. */
+function PickList({ picks, label, onPick }: { picks: QuickPick[]; label: string; onPick: (p: QuickPick) => void }) {
+  const [open, setOpen] = useState(false)
+  const [filter, setFilter] = useState('')
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+  const f = filter.trim().toLowerCase()
+  const shown = f ? picks.filter(p => `${p.part_number ?? ''} ${p.description} ${p.subcategory ?? ''}`.toLowerCase().includes(f)) : picks
+  const groups = shown.reduce<Record<string, QuickPick[]>>((a, p) => { const g = p.subcategory ?? ''; (a[g] ??= []).push(p); return a }, {})
+  const tone = (p: QuickPick) => p.unit_cost == null ? 'text-pink-800 bg-pink-50' : p.cost_source === 'receipt' || p.cost_source === 'vendor_quote' ? 'text-green-900 bg-green-50' : ''
+  return (
+    <div ref={box} className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)} disabled={!picks.length} className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs text-blue-700 hover:bg-blue-100 disabled:opacity-40" aria-expanded={open}>
+        <Plus className="w-3 h-3" />{label}<ChevronDown className="w-3 h-3" /><span className="text-blue-400">({picks.length})</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-[440px] max-w-[90vw] rounded-lg border border-gray-200 bg-white shadow-lg">
+          <div className="p-2 border-b border-gray-100"><input value={filter} onChange={e => setFilter(e.target.value)} autoFocus className={inp} placeholder="Filter this list…" aria-label="Filter" /></div>
+          <div className="max-h-80 overflow-y-auto py-1">
+            {Object.entries(groups).map(([g, ps]) => (
+              <div key={g}>
+                {g && <div className="px-3 pt-2 pb-0.5 text-[10px] uppercase tracking-wide text-gray-400">{g}</div>}
+                {ps.map(p => (
+                  <button key={p.id} type="button" onClick={() => { onPick(p); setOpen(false); setFilter('') }} className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-blue-50 ${tone(p)}`}>
+                    <span className="flex-1 min-w-0">{(() => { const pn = p.part_number && !/^\d{5,}$/.test(p.part_number) ? p.part_number : null; const dup = !pn || p.description.toUpperCase().startsWith(pn.toUpperCase()); return dup ? <span className="font-medium">{p.description}</span> : <><span className="font-medium">{pn}</span><span className="text-gray-500"> — {p.description}</span></> })()}</span>
+                    <span className="tabular-nums whitespace-nowrap">{p.unit_cost != null ? money(p.unit_cost) : 'PRICE NEEDED'}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+            {!shown.length && <div className="px-3 py-3 text-xs text-gray-400">Nothing matches.</div>}
+          </div>
+          <div className="px-3 py-1.5 border-t border-gray-100 text-[10px] text-gray-400"><span className="bg-green-50 px-1">green</span> receipt or vendor quote · <span className="bg-pink-50 px-1">pink</span> price needed · white = RPS rate card</div>
+        </div>
+      )}
     </div>
   )
 }
@@ -442,24 +481,26 @@ type TableProps = { kind: string; category: number; rows: Rev19Row[]; upd: (k: s
 function CategoryTable({ kind, category, rows, upd, del, ext, inputs }: TableProps) {
   const th = 'text-left px-2 py-1.5 font-medium text-gray-500 text-[11px] uppercase tracking-wide'
   const thr = `${th} text-right`
+  // Plain render helpers, NOT components: a component defined inside render is a new type every render, so React
+  // remounted the picker on every keystroke — focus and search results vanished, which read as "search does nothing".
   const pick = (r: Rev19Row, p: PickedPart) => upd(r.key, pickPatch(r, p, kind))
-  const Desc = ({ r, placeholder }: { r: Rev19Row; placeholder: string }) => (
+  const desc = (r: Rev19Row, placeholder: string) => (
     <PartPicker value={r.description} onChange={t => upd(r.key, { description: t, part_id: null })} onPick={p => pick(r, p)} category={category} className={inp} placeholder={placeholder} />
   )
-  const Flag = ({ r }: { r: Rev19Row }) => (
+  const flag = (r: Rev19Row) => (
     <select value={r.price_flag} onChange={e => upd(r.key, { price_flag: e.target.value })} className={`${inp} w-24 text-[11px] ${r.price_flag !== 'ok' ? 'bg-pink-50 border-pink-300 text-pink-800' : ''}`} aria-label="Price flag">
       <option value="ok">ok</option><option value="estimate">estimate</option><option value="price_needed">PRICE NEEDED</option><option value="held_high">HELD HIGH</option><option value="verify">verify</option>{kind === 'labor' && <option value="hours_needed">HOURS NEEDED</option>}
     </select>
   )
-  const Note = ({ r }: { r: Rev19Row }) => <input value={r.source_note} onChange={e => upd(r.key, { source_note: e.target.value })} className={`${inp} min-w-[160px] text-xs`} placeholder="RECEIPT SNA 2628199 6/26/26" aria-label="Where the price came from" />
-  const Del = ({ r }: { r: Rev19Row }) => <button type="button" onClick={() => del(r.key)} className="text-gray-300 hover:text-red-600" aria-label="Remove line"><Trash2 className="w-4 h-4" /></button>
+  const note = (r: Rev19Row) => <input value={r.source_note} onChange={e => upd(r.key, { source_note: e.target.value })} className={`${inp} min-w-[160px] text-xs`} placeholder="RECEIPT SNA 2628199 6/26/26" aria-label="Where the price came from" />
+  const remove = (r: Rev19Row) => <button type="button" onClick={() => del(r.key)} className="text-gray-300 hover:text-red-600" aria-label="Remove line"><Trash2 className="w-4 h-4" /></button>
 
   if (kind === 'material') return (
     <div className="overflow-x-auto"><table className="w-full min-w-[880px] text-sm">
       <thead><tr><th className={`${th} min-w-[260px]`}>Part # / description</th><th className={thr}>Cost</th><th className={thr}>Tax %</th><th className={thr}>Markup %</th><th className={thr}>Freight</th><th className={thr}>Sell</th><th className={thr}>Qty</th><th className={thr}>Extended</th><th className={th}>Source</th><th /><th /></tr></thead>
       <tbody>{rows.map(r => { const c = ext(r.key); return (
         <tr key={r.key} className="align-top">
-          <td className="px-1 py-1"><Desc r={r} placeholder="Type a part number or description…" />{r.part_number && <div className="text-[11px] font-mono text-gray-400 mt-0.5">{r.part_number}</div>}</td>
+          <td className="px-1 py-1">{desc(r, "Type a part number or description…")}{r.part_number && <div className="text-[11px] font-mono text-gray-400 mt-0.5">{r.part_number}</div>}</td>
           <td className="px-1 py-1"><input value={r.unit_cost} onChange={e => upd(r.key, { unit_cost: e.target.value })} type="number" step="any" className={`${numInp} w-24`} aria-label="Unit cost" /></td>
           <td className="px-1 py-1"><input value={r.sales_tax_pct} onChange={e => upd(r.key, { sales_tax_pct: e.target.value })} type="number" step="0.1" className={`${numInp} w-16`} placeholder={String(inputs.material_tax_pct * 100)} aria-label="Tax percent" /></td>
           <td className="px-1 py-1"><input value={r.markup_pct} onChange={e => upd(r.key, { markup_pct: e.target.value })} type="number" step="0.5" className={`${numInp} w-16`} placeholder={String(inputs.material_markup_pct * 100)} aria-label="Markup percent" /></td>
@@ -467,7 +508,7 @@ function CategoryTable({ kind, category, rows, upd, del, ext, inputs }: TablePro
           <td className="px-1 py-1 text-right tabular-nums text-gray-700 pt-2 whitespace-nowrap">{c ? money(c.sell_unit) : '—'}</td>
           <td className="px-1 py-1"><input value={r.quantity} onChange={e => upd(r.key, { quantity: e.target.value })} type="number" step="any" className={`${numInp} w-20`} aria-label="Quantity" /></td>
           <td className="px-1 py-1 text-right tabular-nums font-medium pt-2 whitespace-nowrap">{c ? money(c.material_total) : '—'}</td>
-          <td className="px-1 py-1"><Note r={r} /></td><td className="px-1 py-1"><Flag r={r} /></td><td className="px-1 py-1 pt-2"><Del r={r} /></td>
+          <td className="px-1 py-1">{note(r)}</td><td className="px-1 py-1">{flag(r)}</td><td className="px-1 py-1 pt-2">{remove(r)}</td>
         </tr>) })}</tbody>
     </table></div>
   )
@@ -484,7 +525,7 @@ function CategoryTable({ kind, category, rows, upd, del, ext, inputs }: TablePro
           <td className="px-1 py-1"><input value={r.hrs_each} onChange={e => upd(r.key, { hrs_each: e.target.value })} type="number" step="0.25" className={`${numInp} w-20`} aria-label="Hours each" /></td>
           <td className="px-1 py-1 text-right tabular-nums pt-2">{c?.labor_hours ?? 0}</td>
           <td className="px-1 py-1 text-right tabular-nums font-medium pt-2 whitespace-nowrap">{c ? money(c.total_labor) : '—'}</td>
-          <td className="px-1 py-1"><Note r={r} /></td><td className="px-1 py-1"><Flag r={r} /></td><td className="px-1 py-1 pt-2"><Del r={r} /></td>
+          <td className="px-1 py-1">{note(r)}</td><td className="px-1 py-1">{flag(r)}</td><td className="px-1 py-1 pt-2">{remove(r)}</td>
         </tr>) })}</tbody>
     </table></div>
   )
@@ -501,7 +542,7 @@ function CategoryTable({ kind, category, rows, upd, del, ext, inputs }: TablePro
           <td className="px-1 py-1"><input value={r.techs} onChange={e => upd(r.key, { techs: e.target.value })} type="number" step="1" className={`${numInp} w-16`} aria-label="Techs" /></td>
           <td className="px-1 py-1 text-right tabular-nums pt-2">{c?.quantity_effective ?? 0}</td>
           <td className="px-1 py-1 text-right tabular-nums font-medium pt-2 whitespace-nowrap">{c ? money(c.material_total) : '—'}</td>
-          <td className="px-1 py-1 pt-2"><Del r={r} /></td>
+          <td className="px-1 py-1 pt-2">{remove(r)}</td>
         </tr>) })}</tbody>
     </table></div>
   )
@@ -512,13 +553,13 @@ function CategoryTable({ kind, category, rows, upd, del, ext, inputs }: TablePro
       <thead><tr><th className={`${th} min-w-[260px]`}>Item / description</th><th className={thr}>{isLodging ? 'Rate' : 'Cost'}</th>{!isSub && !isLodging && <th className={th}>Markup?</th>}<th className={thr}>Sell</th><th className={thr}>{isLodging ? 'Tech-nights' : 'Qty'}</th><th className={thr}>Extended</th><th className={th}>Source</th><th /><th /></tr></thead>
       <tbody>{rows.map(r => { const c = ext(r.key); return (
         <tr key={r.key} className="align-top">
-          <td className="px-1 py-1"><Desc r={r} placeholder={isSub ? 'Vendor and what they do (orange = sub)' : isLodging ? 'LODGING / PER DIEM COMBINED — 4 TECHS × 4 NIGHTS' : 'SKID STEER WITH FORKS — PER DAY'} /></td>
+          <td className="px-1 py-1">{desc(r, isSub ? 'Vendor and what they do (orange = sub)' : isLodging ? 'LODGING / PER DIEM COMBINED — 4 TECHS × 4 NIGHTS' : 'SKID STEER WITH FORKS — PER DAY')}</td>
           <td className="px-1 py-1"><input value={r.unit_cost} onChange={e => upd(r.key, { unit_cost: e.target.value })} type="number" step="any" className={`${numInp} w-24`} aria-label="Cost" /></td>
           {!isSub && !isLodging && <td className="px-1 py-1 text-center pt-2"><input type="checkbox" checked={r.markup_applies} onChange={e => upd(r.key, { markup_applies: e.target.checked })} aria-label="Apply markup" /></td>}
           <td className="px-1 py-1 text-right tabular-nums text-gray-700 pt-2 whitespace-nowrap">{c ? money(c.sell_unit) : '—'}</td>
           <td className="px-1 py-1"><input value={r.quantity} onChange={e => upd(r.key, { quantity: e.target.value })} type="number" step="any" className={`${numInp} w-20`} aria-label="Quantity" /></td>
           <td className="px-1 py-1 text-right tabular-nums font-medium pt-2 whitespace-nowrap">{c ? money(c.material_total) : '—'}</td>
-          <td className="px-1 py-1"><Note r={r} /></td><td className="px-1 py-1"><Flag r={r} /></td><td className="px-1 py-1 pt-2"><Del r={r} /></td>
+          <td className="px-1 py-1">{note(r)}</td><td className="px-1 py-1">{flag(r)}</td><td className="px-1 py-1 pt-2">{remove(r)}</td>
         </tr>) })}</tbody>
     </table></div>
   )
