@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils'
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+export const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   new:           { label: 'New',              className: 'bg-gray-100 text-gray-700 border-gray-200' },
   dispatched:    { label: 'Dispatched',        className: 'bg-blue-100 text-blue-800 border-blue-200' },
   accepted:      { label: 'Accepted',          className: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
