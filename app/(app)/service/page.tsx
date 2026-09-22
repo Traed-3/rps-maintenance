@@ -3,7 +3,7 @@ import { LayoutGrid, List } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { WorkOrderArchiveTable } from '@/components/svc/work-order-archive-table'
-import { WorkOrderStatusBadge, PriorityBadge, StaleBadge, clientLabel, STATUS_CONFIG } from '@/components/svc/work-order-badges'
+import { WorkOrderBoard } from '@/components/svc/work-order-board'
 
 const OPEN_STATUSES = ['new', 'dispatched', 'accepted', 'en_route', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
 
@@ -298,41 +298,7 @@ export default async function ServiceDispatchPage({
       )}
 
       {boardView ? (
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-3 min-w-max">
-            {OPEN_STATUSES.map(st => {
-              const col = (workOrders ?? []).filter(w => w.status === st)
-              const cfg = STATUS_CONFIG[st] ?? STATUS_CONFIG.new
-              return (
-                <div key={st} className="w-64 shrink-0">
-                  <div className="flex items-center justify-between mb-2 px-1">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.className}`}>{cfg.label}</span>
-                    <span className="text-xs text-gray-400">{col.length}</span>
-                  </div>
-                  <div className="space-y-2">
-                    {col.map(w => (
-                      <Link key={w.id} href={`/service/${w.id}`} className="block bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:border-blue-300 hover:shadow transition-all">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-sm text-gray-900">{w.site_number ?? '—'}</span>
-                          <PriorityBadge priorityRaw={w.priority_raw} priorityRank={w.priority_rank} />
-                        </div>
-                        <div className="text-xs text-gray-500 mt-0.5 truncate">{clientLabel(w.source_portal, w.client_name)}</div>
-                        {w.portal_wo_number && <div className="text-xs text-gray-400 mt-0.5 font-mono">{w.portal_wo_number}</div>}
-                        <div className="flex items-center justify-between mt-1.5 gap-2">
-                          <span className="text-xs text-gray-500 truncate">{w.svc_technicians?.[0]?.full_name ?? 'Unassigned'}</span>
-                          <StaleBadge lastUpdateAt={w.last_update_at} status={w.status} />
-                        </div>
-                        {w.return_trip_needed && <div className="text-xs text-red-600 font-semibold mt-1">⟲ Return trip needed</div>}
-                        {w.invoice_rejected && <div className="text-xs text-amber-700 font-medium mt-1">Invoice Rejected</div>}
-                      </Link>
-                    ))}
-                    {col.length === 0 && <div className="text-xs text-gray-300 px-1 py-2">—</div>}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <WorkOrderBoard workOrders={workOrders ?? []} statuses={OPEN_STATUSES} />
       ) : (
         <WorkOrderArchiveTable workOrders={workOrders ?? []} showArchived={showArchived} />
       )}
