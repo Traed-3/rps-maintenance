@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { FileDown, FileText, Receipt, Copy, Pencil } from 'lucide-react'
+import { FileDown, FileText, Receipt, Copy, Pencil, Hammer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StatusButtons } from '@/components/construction/status-buttons'
 import { DeleteButton } from '@/components/construction/delete-button'
@@ -8,7 +8,7 @@ import { DocBreakdown } from '@/components/billing/doc-breakdown'
 import { EmailInvoiceForm, type SentEmail } from '@/components/construction/email-invoice-form'
 import { QUOTE_STATUSES, INVOICE_STATUSES, fmtDate, money } from '@/lib/billing'
 import { docFromRow } from '@/lib/billing-pdf'
-import { setQuoteStatus, setInvoiceStatus, deleteQuote, deleteInvoice, convertQuoteToInvoice, duplicateQuote } from '@/app/(app)/billing/actions'
+import { setQuoteStatus, setInvoiceStatus, deleteQuote, deleteInvoice, convertQuoteToInvoice, duplicateQuote, startProjectFromQuote } from '@/app/(app)/billing/actions'
 
 type Row = Record<string, unknown> & { con_customers: { id: string; name: string; billing_address: string | null; email: string | null; billing_contact: string | null } | null }
 
@@ -51,6 +51,8 @@ export function DocDetail({ kind, row, lines, canWrite, emails, resendConfigured
             <StatusButtons id={id} current={String(row.status)} options={isQ ? QUOTE_STATUSES : INVOICE_STATUSES} action={isQ ? setQuoteStatus : setInvoiceStatus} />
             {isQ && (
               <div className="flex gap-2 ml-auto">
+                {/* Approved quote → Construction job (the project pipeline). Shows once, then the Job button above takes over. */}
+                {row.status === 'approved' && !row.job_id && <form action={startProjectFromQuote.bind(null, id)}><Button type="submit" className="gap-2 bg-green-700 hover:bg-green-800"><Hammer className="w-3.5 h-3.5" />Start project</Button></form>}
                 <form action={duplicateQuote.bind(null, id)}><Button type="submit" variant="outline" className="gap-2"><Copy className="w-3.5 h-3.5" />Duplicate</Button></form>
                 <form action={convertQuoteToInvoice.bind(null, id)}><Button type="submit" className="gap-2"><Receipt className="w-3.5 h-3.5" />Create invoice from this quote</Button></form>
               </div>

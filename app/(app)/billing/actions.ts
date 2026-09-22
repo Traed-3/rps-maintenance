@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBillingProfile } from '@/lib/billing-guard'
+import { money } from '@/lib/billing'
 import { computeRev19, categoryFromItemType, REV19_DEFAULTS, type Rev19Inputs, type Rev19LineInput } from '@/lib/rev19'
+import { classifySite } from '@/lib/site-number'
 
 export type ActionState = { error: string } | null
 
@@ -123,6 +125,45 @@ export async function saveQuote(id: string | null, _s: ActionState, fd: FormData
   }
   refresh('quotes', quoteId, row.job_id)
   redirect(`/billing/quotes/${quoteId}`)
+}
+
+/**
+ * An approved quote becomes a project: a Construction job at the "permitting" stage,
+ * carrying the site, customer, scope and CSR/work-order number, linked both ways.
+ * Idempotent — if the quote already has a job it just opens it.
+ */
+export async function startProjectFromQuote(quoteId: string): Promise<void> {
+  const p = await getBillingProfile(); if (!p?.canWrite) return
+  const admin = createAdminClient()
+  const { data: q } = await admin.from('con_quotes').select('*').eq('id', quoteId).eq('company_id', p.company_id).single()
+  if (!q) return
+  if (q.job_id) redirect(`/construction/jobs/${q.job_id}`)
+
+  const { siteNumber, brand } = classifySite(q.site_number ?? q.store_label)
+  let siteId: string | null = null
+  if (siteNumber) {
+    const { data: site } = await admin.from('con_sites').select('id').eq('company_id', p.company_id).eq('site_number', siteNumber).limit(1).maybeSingle()
+    if (site) siteId = site.id
+    else {
+      const csz = (q.city_state_zip ?? '').split(',').map((x: string) => x.trim())
+      const { data: created } = await admin.from('con_sites').insert({
+        company_id: p.company_id, site_number: siteNumber, store_brand: brand, customer_id: q.customer_id ?? null,
+        address: q.facility_address ?? null, city: csz[0] || null, state: csz[1]?.split(' ')[0] || null,
+      }).select('id').single()
+      siteId = created?.id ?? null
+    }
+  }
+  const { data: job, error } = await admin.from('con_jobs').insert({
+    company_id: p.company_id, site_id: siteId, site_number: siteNumber || q.site_number, customer_id: q.customer_id ?? null,
+    work_order_number: q.work_order_number ?? q.csr_number ?? q.portal_wo_number ?? null,
+    stage: 'permitting', scope_of_work: q.project_description ?? null, facility_address: q.facility_address ?? null, gas_brand: brand,
+    date_received: q.proposal_date ?? null, assigned_manager_id: q.signer_id ?? null,
+    notes: `Started from quote ${q.quote_number} (${money(Number(q.final_total ?? 0))} approved).`,
+  }).select('id').single()
+  if (error || !job) return
+  await admin.from('con_quotes').update({ job_id: job.id }).eq('id', quoteId)
+  revalidatePath('/construction'); revalidatePath('/construction/jobs'); revalidatePath(`/billing/quotes/${quoteId}`)
+  redirect(`/construction/jobs/${job.id}`)
 }
 
 export async function setQuoteStatus(id: string, status: string): Promise<void> {
