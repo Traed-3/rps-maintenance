@@ -5,7 +5,6 @@ import { canReadConstruction, money } from '@/lib/construction'
 import { ArrowRight, Wrench, HardHat, Fuel, AlertTriangle, CheckCircle } from 'lucide-react'
 
 const SVC_OPEN_STATUSES = ['new', 'dispatched', 'accepted', 'en_route', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
-const CON_DONE_STAGES = ['closed', 'invoiced', 'complete', 'completed']
 
 type Figure = { label: string; value: string | number; alert?: boolean }
 
@@ -92,7 +91,7 @@ export default async function CompanyDashboardPage() {
     admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('invoice_rejected', true),
     showConstruction
       ? Promise.all([
-          admin.from('con_jobs').select('id, stage').eq('company_id', companyId),
+          admin.from('con_jobs').select('id', { count: 'exact', head: true }).eq('company_id', companyId).neq('stage', 'complete'),
           admin.from('con_documents').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('review_status', 'needs_review'),
           admin.from('con_invoices').select('invoice_grand_total, invoice_date').eq('company_id', companyId).neq('status', 'void').neq('status', 'draft'),
         ])
@@ -105,8 +104,8 @@ export default async function CompanyDashboardPage() {
   let conReviewCount = 0
   let conInvoicedThisYear = 0
   if (conStats) {
-    const [{ data: jobs }, { count: reviewCount }, { data: invoices }] = conStats
-    conJobsActive = (jobs ?? []).filter(j => !CON_DONE_STAGES.includes(j.stage)).length
+    const [{ count: activeJobCount }, { count: reviewCount }, { data: invoices }] = conStats
+    conJobsActive = activeJobCount ?? 0
     conReviewCount = reviewCount ?? 0
     conInvoicedThisYear = (invoices ?? [])
       .filter(i => String(i.invoice_date ?? '').startsWith(thisYear))

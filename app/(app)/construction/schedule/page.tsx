@@ -54,8 +54,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const [{ data: entries }, { data: jobs }] = await Promise.all([
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id)
       .gte('schedule_date', rangeStart).lte('schedule_date', rangeEnd).order('schedule_date'),
+    // Scheduling only ever cares about open work — also keeps this well under
+    // Supabase's default 1000-row cap now that completed jobs have piled up.
     admin.from('con_jobs').select('id, site_number, work_order_number, stage, scope_of_work')
-      .eq('company_id', company_id).order('site_number'),
+      .eq('company_id', company_id).neq('stage', 'complete').order('site_number'),
   ])
 
   const jobById = new Map<string, Job>((jobs ?? []).map(j => [j.id, j as Job]))

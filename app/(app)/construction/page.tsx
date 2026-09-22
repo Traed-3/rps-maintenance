@@ -18,8 +18,13 @@ export default async function ConstructionDashboard() {
   const monday = new Date(today); monday.setDate(today.getDate() + ((today.getDay() === 0 ? -6 : 1) - today.getDay()))
   const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
 
-  const [{ data: jobs }, { data: invoices }, { data: neededMaterials }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
-    admin.from('con_jobs').select('id, site_number, stage, priority, project_start_date, notification_sent_at, notification_waived, program, con_customers(name)').eq('company_id', company_id),
+  // con_jobs has 1000+ rows once completed work piles up, and an unfiltered
+  // select silently caps at Supabase's default 1000-row limit — so this only
+  // ever loads OPEN jobs (everything the dashboard shows is about active work
+  // anyway) and gets the completed count separately, cheaply, via head:true.
+  const [{ data: jobs }, { count: completeCount }, { data: invoices }, { data: neededMaterials }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
+    admin.from('con_jobs').select('id, site_number, stage, priority, project_start_date, notification_sent_at, notification_waived, program, con_customers(name)').eq('company_id', company_id).neq('stage', 'complete'),
+    admin.from('con_jobs').select('*', { count: 'exact', head: true }).eq('company_id', company_id).eq('stage', 'complete'),
     admin.from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, con_customers(name)').eq('company_id', company_id).neq('status', 'void'),
     admin.from('con_job_materials').select('id').eq('company_id', company_id).in('status', ['needed', 'ordered']),
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id).gte('schedule_date', iso(monday)).lte('schedule_date', iso(sunday)).order('schedule_date'),
@@ -35,7 +40,7 @@ export default async function ConstructionDashboard() {
     .map(j => ({ job: j, n: projectNotificationStatus(j) }))
     .filter(x => x.n.isDue)
     .sort((a, b) => (a.n.daysToDeadline ?? 0) - (b.n.daysToDeadline ?? 0))
-  const stageCounts = CON_STAGES.map(s => ({ ...s, count: allJobs.filter(j => j.stage === s.value).length }))
+  const stageCounts = CON_STAGES.map(s => ({ ...s, count: s.value === 'complete' ? (completeCount ?? 0) : allJobs.filter(j => j.stage === s.value).length }))
   const needingInvoice = allJobs.filter(j => j.stage === 'invoicing')
   const waitingMaterial = allJobs.filter(j => j.stage === 'material_ordering')
 

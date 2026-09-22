@@ -36,11 +36,15 @@ export const CATEGORY_META: Record<string, { label: string; className: string; l
 export async function loadConstructionCalendar(
   admin: SupabaseClient, companyId: string, start: string, end: string,
 ): Promise<CalendarEvent[]> {
-  const [{ data: entries }, { data: jobs }] = await Promise.all([
-    admin.from('con_schedule_entries').select('*')
-      .eq('company_id', companyId).gte('schedule_date', start).lte('schedule_date', end),
-    admin.from('con_jobs').select('id, site_number, stage, scope_of_work').eq('company_id', companyId),
-  ])
+  const { data: entries } = await admin.from('con_schedule_entries').select('*')
+    .eq('company_id', companyId).gte('schedule_date', start).lte('schedule_date', end)
+  // Only the jobs these entries actually reference — fetching every job in the
+  // company here silently caps at Supabase's default 1000 rows once completed
+  // work piles up.
+  const jobIds = [...new Set((entries ?? []).map(e => e.job_id).filter((id): id is string => !!id))]
+  const { data: jobs } = jobIds.length
+    ? await admin.from('con_jobs').select('id, site_number, stage, scope_of_work').in('id', jobIds)
+    : { data: [] }
   const jobById = new Map((jobs ?? []).map(j => [j.id, j]))
 
   return (entries ?? []).map((e): CalendarEvent => {
