@@ -15,7 +15,6 @@ import { revalidatePath } from 'next/cache'
 import { RemindersCard } from './reminders-card'
 import { MiscTasksCard } from './misc-tasks-card'
 import { DailySummaryCard } from './daily-summary-card'
-import { AssignControl } from '@/components/tickets/assign-control'
 
 const STATUS_LABELS: Record<string, string> = {
   clocked_out: 'Clocked Out', at_shop: 'At Shop', working_on_ticket: 'Working on Ticket',
@@ -557,48 +556,31 @@ export default async function MaintenancePage({
         </div>
       </section>
 
-      {/* Open Tickets */}
+      {/* Open Tickets — a compact panel, not a full list; /tickets is where you browse */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="flex items-center gap-2 text-base font-bold text-gray-900 before:content-[''] before:w-1.5 before:h-5 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Open Tickets</h2>
-          <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">View all →</Link>
+          <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800 font-medium">{openCount ?? 0} total — view all →</Link>
         </div>
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 w-24">Ticket #</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500">Title</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden md:table-cell">Asset</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500">Status</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden sm:table-cell">Priority</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden lg:table-cell">Assigned To</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-gray-500 hidden lg:table-cell">Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {recentTickets?.map(t => (
-                  <ClickableRow key={t.id} href={`/tickets/${t.id}`}>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-400">{t.ticket_number}</td>
-                    <td className="px-4 py-3"><Link href={`/tickets/${t.id}`} className="font-medium text-gray-900 hover:text-blue-600">{t.title}</Link></td>
-                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{(t as any).assets?.unit_number ?? '—'}</td>
-                    <td className="px-4 py-3"><TicketStatusBadge status={t.status} /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><PriorityBadge priority={t.priority} /></td>
-                    <td className="px-4 py-3 text-gray-600 hidden lg:table-cell text-xs">
-                      {canAssign ? (
-                        <AssignControl ticketId={t.id} currentId={(t as any).assigned_to ?? null} currentName={(t as any).profiles?.full_name ?? null} employees={assignable ?? []} />
-                      ) : (
-                        (t as any).profiles?.full_name ?? <span className="text-gray-400">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">{new Date(t.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
-                  </ClickableRow>
-                ))}
-                {!recentTickets?.length && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-400">No open tickets. 🎉</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          {!recentTickets?.length ? (
+            <p className="px-4 py-6 text-center text-sm text-gray-400">No open tickets. 🎉</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {recentTickets.slice(0, 6).map(t => (
+                <ClickableItem key={t.id} href={`/tickets/${t.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 text-sm truncate">{t.title}</p>
+                    <p className="text-xs text-gray-400">{t.ticket_number} · {(t as any).assets?.unit_number ?? '—'}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <PriorityBadge priority={t.priority} />
+                    <TicketStatusBadge status={t.status} />
+                  </div>
+                </ClickableItem>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
