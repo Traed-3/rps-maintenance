@@ -14,7 +14,7 @@ type SearchParams = {
 
 export default async function JobsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await searchParams
-  const view = sp.view === 'kanban' ? 'kanban' : 'table'
+  const view = sp.view === 'table' ? 'table' : 'kanban'
   const { company_id, canWrite } = await requireConstruction()
   const admin = createAdminClient()
 
@@ -53,7 +53,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={view === 'kanban' ? 'p-6' : 'p-6 max-w-7xl mx-auto'}>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">
