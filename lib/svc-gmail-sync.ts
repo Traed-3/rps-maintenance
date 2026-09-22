@@ -69,7 +69,7 @@ async function captureWorkOrderDocument(
     attachments: stored, primary_path: primary?.path ?? null,
     extract_status: extractable ? 'pending' : 'skipped',
     extract_error: extractable ? null : 'Attachment type not readable automatically — type up the ticket by hand.',
-    status: 'new',
+    status: 'dispatched',
   })
 }
 
@@ -195,7 +195,7 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
             priority_raw:       parsed.priorityRaw,
             priority_rank:      parsed.priorityRank,
             subject_raw:        subject,
-            status:             'new',
+            status:             'dispatched',
             dispatched_at:      receivedAt.toISOString(),
             last_update_at:     receivedAt.toISOString(),
             sla_due_at:         slaDueAt,

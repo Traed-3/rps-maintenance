@@ -2,11 +2,15 @@ import { cn } from '@/lib/utils'
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
+// RPS is under service contract with Sunoco, 7-Eleven and Wawa, so every work
+// order is accepted the moment it is dispatched — there is no New / Accepted /
+// En Route step to track. Those three are kept only as aliases so any historical
+// row still renders; they are not board columns and nothing writes them.
 export const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  new:           { label: 'New',              className: 'bg-gray-100 text-gray-700 border-gray-200' },
   dispatched:    { label: 'Dispatched',        className: 'bg-blue-100 text-blue-800 border-blue-200' },
-  accepted:      { label: 'Accepted',          className: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
-  en_route:      { label: 'En Route',          className: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  new:           { label: 'Dispatched',        className: 'bg-blue-100 text-blue-800 border-blue-200' },
+  accepted:      { label: 'Dispatched',        className: 'bg-blue-100 text-blue-800 border-blue-200' },
+  en_route:      { label: 'On Site',           className: 'bg-blue-100 text-blue-800 border-blue-200' },
   on_site:       { label: 'On Site',           className: 'bg-blue-100 text-blue-800 border-blue-200' },
   in_progress:   { label: 'In Progress',       className: 'bg-green-100 text-green-800 border-green-200' },
   waiting_parts: { label: 'Waiting on Parts',  className: 'bg-orange-100 text-orange-800 border-orange-200' },
@@ -17,7 +21,7 @@ export const STATUS_CONFIG: Record<string, { label: string; className: string }>
 }
 
 export function WorkOrderStatusBadge({ status }: { status: string }) {
-  const c = STATUS_CONFIG[status] ?? STATUS_CONFIG.new
+  const c = STATUS_CONFIG[status] ?? STATUS_CONFIG.dispatched
   return (
     <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border', c.className)}>
       {c.label}

@@ -5,11 +5,14 @@ import { createClient } from '@/lib/supabase/server'
 import { WorkOrderArchiveTable } from '@/components/svc/work-order-archive-table'
 import { WorkOrderBoard } from '@/components/svc/work-order-board'
 
-const OPEN_STATUSES = ['new', 'dispatched', 'accepted', 'en_route', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
+// 'new' / 'accepted' / 'en_route' are retired (everything is auto-accepted under
+// contract); 'new' stays in the query only so a straggler row is still counted.
+const OPEN_STATUSES = ['dispatched', 'new', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
+const BOARD_STATUSES = ['dispatched', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
 
 const STATUS_FILTERS = [
   { value: '',           label: 'All Open' },
-  { value: 'new',        label: 'New' },
+  { value: 'dispatched', label: 'Dispatched' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'completed',  label: 'Completed' },
 ]
@@ -302,7 +305,7 @@ export default async function ServiceDispatchPage({
       )}
 
       {boardView ? (
-        <WorkOrderBoard workOrders={workOrders ?? []} statuses={OPEN_STATUSES} />
+        <WorkOrderBoard workOrders={workOrders ?? []} statuses={BOARD_STATUSES} />
       ) : (
         <WorkOrderArchiveTable workOrders={workOrders ?? []} showArchived={showArchived} />
       )}

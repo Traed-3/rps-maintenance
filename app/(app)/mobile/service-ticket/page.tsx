@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { canWriteServiceTickets, ticketStatusMeta, BRANDS } from '@/lib/service-tickets'
 import { createServiceTicket } from '@/app/(app)/service/tickets/actions'
 
-const OPEN_WO = ['new', 'dispatched', 'accepted', 'en_route', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
+const OPEN_WO = ['dispatched', 'new', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
 
 export default async function MobileServiceTicketsPage() {
   const supabase = await createClient()
