@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import { LayoutGrid, List } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { WorkOrderArchiveTable } from '@/components/svc/work-order-archive-table'
+import { WorkOrderStatusBadge, PriorityBadge, StaleBadge, clientLabel, STATUS_CONFIG } from '@/components/svc/work-order-badges'
 
 const OPEN_STATUSES = ['new', 'dispatched', 'accepted', 'en_route', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
 
@@ -30,14 +32,17 @@ const PRIORITY_FILTERS = [
 export default async function ServiceDispatchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; client?: string; view?: string; priority?: string; rtn?: string }>
+  searchParams: Promise<{ status?: string; client?: string; view?: string; priority?: string; rtn?: string; layout?: string }>
 }) {
-  const { status = '', client = '', view = '', priority = '', rtn = '' } = await searchParams
+  const { status = '', client = '', view = '', priority = '', rtn = '', layout = '' } = await searchParams
   const priorityRank = priority ? parseInt(priority, 10) : null
   const rtnOnly = rtn === '1'
   const staleOnly = view === 'stale'
   const oldOnly = view === 'old'
   const showArchived = view === 'archived'
+  // Tiles by status are the default — bulk-select tools (archive/unarchive) only
+  // make sense in the table, so Old/Archived force it regardless of the toggle.
+  const boardView = layout !== 'list' && !showArchived && !oldOnly
   const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000
 
   const supabase = await createClient()
@@ -80,7 +85,7 @@ export default async function ServiceDispatchPage({
       // Any status — the point is to surface everything old enough to be
       // clutter (including long-stuck "new" rows) so it can be bulk-archived.
       query = query.lt('dispatched_at', new Date(sixtyDaysAgo).toISOString())
-    } else if (status) {
+    } else if (status && !boardView) {
       query = query.eq('status', status)
     } else {
       query = query.in('status', OPEN_STATUSES)
@@ -97,10 +102,11 @@ export default async function ServiceDispatchPage({
   // Every quick/status/client pill below is built from the same current selection,
   // so clicking one preserves whatever else is already active (e.g. P1 + Wawa + RTN).
   // `view` is single-select: '' | 'stale' | 'old' | 'archived'.
-  function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; view?: string }) {
+  function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; view?: string; layout?: string }) {
     const next = {
       status, client, priority: priorityRank ? String(priorityRank) : '',
       rtn: rtnOnly, view: showArchived ? 'archived' : staleOnly ? 'stale' : oldOnly ? 'old' : '',
+      layout,
       ...overrides,
     }
     const params = new URLSearchParams()
@@ -109,8 +115,12 @@ export default async function ServiceDispatchPage({
     if (next.priority) params.set('priority', next.priority)
     if (next.rtn) params.set('rtn', '1')
     if (next.view) params.set('view', next.view)
+    if (next.layout) params.set('layout', next.layout)
     const qs = params.toString()
     return `/service${qs ? `?${qs}` : ''}`
+  }
+  function layoutHref(next: 'board' | 'list') {
+    return buildHref({ layout: next === 'board' ? '' : 'list' })
   }
 
   function priorityFilterHref(rank: number) {
@@ -136,16 +146,24 @@ export default async function ServiceDispatchPage({
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className={boardView ? 'p-6' : 'p-6 max-w-7xl mx-auto'}>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">
-          Service Dispatch
-        </h1>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">
+            Service Dispatch
+          </h1>
           <Link href="/service/tickets" className="ml-3 text-sm text-blue-600 hover:text-blue-800 align-middle">Field tickets →</Link>
-        <p className="text-sm text-gray-500 mt-0.5">
-          7-Eleven, Wawa & Sunoco work orders — synced automatically from rpdispatcher and rpinvoicing every 15 minutes
-        </p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            7-Eleven, Wawa & Sunoco work orders — synced automatically from rpdispatcher and rpinvoicing every 15 minutes
+          </p>
+        </div>
+        {!showArchived && !oldOnly && (
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden shrink-0">
+            <Link href={layoutHref('board')} className={`px-3 py-1.5 text-xs font-medium inline-flex items-center gap-1.5 ${boardView ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}><LayoutGrid className="w-3.5 h-3.5" />Tiles</Link>
+            <Link href={layoutHref('list')} className={`px-3 py-1.5 text-xs font-medium inline-flex items-center gap-1.5 ${!boardView ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}><List className="w-3.5 h-3.5" />List</Link>
+          </div>
+        )}
       </div>
 
       {/* Quick filters — the things a supervisor needs to jump to first thing.
@@ -219,8 +237,8 @@ export default async function ServiceDispatchPage({
         </div>
       </div>
 
-      {/* Status filter pills */}
-      {!showArchived && (
+      {/* Status filter pills — the board already sorts by status via its columns */}
+      {!showArchived && !boardView && (
         <div className="flex gap-1.5 flex-wrap mb-3">
           {STATUS_FILTERS.map((f) => (
             <Link
@@ -279,7 +297,45 @@ export default async function ServiceDispatchPage({
         </p>
       )}
 
-      <WorkOrderArchiveTable workOrders={workOrders ?? []} showArchived={showArchived} />
+      {boardView ? (
+        <div className="overflow-x-auto pb-4">
+          <div className="flex gap-3 min-w-max">
+            {OPEN_STATUSES.map(st => {
+              const col = (workOrders ?? []).filter(w => w.status === st)
+              const cfg = STATUS_CONFIG[st] ?? STATUS_CONFIG.new
+              return (
+                <div key={st} className="w-64 shrink-0">
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.className}`}>{cfg.label}</span>
+                    <span className="text-xs text-gray-400">{col.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {col.map(w => (
+                      <Link key={w.id} href={`/service/${w.id}`} className="block bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:border-blue-300 hover:shadow transition-all">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-sm text-gray-900">{w.site_number ?? '—'}</span>
+                          <PriorityBadge priorityRaw={w.priority_raw} priorityRank={w.priority_rank} />
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5 truncate">{clientLabel(w.source_portal, w.client_name)}</div>
+                        {w.portal_wo_number && <div className="text-xs text-gray-400 mt-0.5 font-mono">{w.portal_wo_number}</div>}
+                        <div className="flex items-center justify-between mt-1.5 gap-2">
+                          <span className="text-xs text-gray-500 truncate">{w.svc_technicians?.[0]?.full_name ?? 'Unassigned'}</span>
+                          <StaleBadge lastUpdateAt={w.last_update_at} status={w.status} />
+                        </div>
+                        {w.return_trip_needed && <div className="text-xs text-red-600 font-semibold mt-1">⟲ Return trip needed</div>}
+                        {w.invoice_rejected && <div className="text-xs text-amber-700 font-medium mt-1">Invoice Rejected</div>}
+                      </Link>
+                    ))}
+                    {col.length === 0 && <div className="text-xs text-gray-300 px-1 py-2">—</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : (
+        <WorkOrderArchiveTable workOrders={workOrders ?? []} showArchived={showArchived} />
+      )}
     </div>
   )
 }
