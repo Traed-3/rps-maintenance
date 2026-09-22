@@ -5,6 +5,7 @@ import { Plus, Trash2, ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PartPicker, type PickedPart } from '@/components/construction/part-picker'
 import { SitePicker, type PickedSite } from '@/components/construction/site-picker'
+import { classifySite } from '@/lib/site-number'
 import { money } from '@/lib/billing'
 import { REV19_CATEGORIES, REV19_DEFAULTS, LABOR_RATES, TAX_PRESETS, PRICE_FLAG_LABEL, TAXABLE_CATS, CONCRETE_EQUIP_CATS, categoryMeta, computeRev19, type Rev19Inputs, type Rev19LineInput } from '@/lib/rev19'
 import type { QuickPick } from '@/lib/billing-data'
@@ -100,7 +101,23 @@ export function Rev19Builder({ action, header, initialLines, customers, jobs, ra
     if (sIte.address) setFacilityAddress(sIte.address)
     const csz = [sIte.city, sIte.state].filter(Boolean).join(', ') + (sIte.zip ? ` ${sIte.zip}` : '')
     if (csz.trim()) setCityStateZip(csz.trim())
+    applyBrandToCustomer(sIte.store_brand || classifySite(sIte.site_number ?? '').brand)
   }
+  /** The brand — and so the customer — is dictated by the site number (a
+   * 5-digit number is 7-Eleven, SU-#### is Sunoco, etc.), so pick the matching
+   * customer automatically. A manual pick from the Customer dropdown always
+   * wins afterward, until the site changes again. */
+  function applyBrandToCustomer(brand: string | null) {
+    if (!brand) return
+    const match = customers.find(c => c.brand && c.brand.toLowerCase() === brand.toLowerCase())
+    if (match) pickCustomer(match.id)
+  }
+  const hasMountedSiteText = useRef(false)
+  useEffect(() => {
+    if (!hasMountedSiteText.current) { hasMountedSiteText.current = true; return }
+    applyBrandToCustomer(classifySite(siteNumber).brand)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteNumber])
   const [scope, setScope] = useState<{ scope: string; description: string }[]>(header.scope_rows?.length ? header.scope_rows : [{ scope: '', description: '' }])
   const [lines, setLines] = useState<Rev19Row[]>(initialLines?.length ? initialLines : [])
   const [open, setOpen] = useState<Record<string, boolean>>({})
