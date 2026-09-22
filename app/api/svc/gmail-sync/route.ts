@@ -58,6 +58,24 @@ export async function GET(request: NextRequest) {
       const extracted = await extractPendingWorkOrderDocuments(limit)
       return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), extracted })
     }
+    if (pass === 'lookup') {
+      // Read-only diagnostic: search rpinvoicing for a raw Gmail query (e.g. a
+      // subject:(WO1 OR WO2 OR ...) list) with no date restriction and no
+      // writes — for checking whether specific old work orders have any
+      // completion email at all, without crawling the full historical range.
+      const q = request.nextUrl.searchParams.get('q')
+      if (!q) return NextResponse.json({ error: 'q is required' }, { status: 400 })
+      const { listMessages, getMessage } = await import('@/lib/svc-gmail-client')
+      const ids = await listMessages('invoicing', q, 100)
+      const hits = []
+      for (const id of ids) {
+        const msg = await getMessage('invoicing', id)
+        const headers: { name: string; value: string }[] = msg.payload?.headers ?? []
+        const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n.toLowerCase())?.value ?? ''
+        hits.push({ id, subject: h('Subject'), from: h('From'), date: h('Date'), snippet: msg.snippet })
+      }
+      return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), count: hits.length, hits })
+    }
 
     const dispatcher = await syncDispatcher(maxResults)
     const invoicing = await syncInvoicing(maxResults)
