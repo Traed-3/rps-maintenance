@@ -44,6 +44,7 @@ export default function GuidePage() {
       <div className="flex gap-2 mb-8">
         <a href="#owner" className="px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium">Owner / Manager</a>
         <a href="#employee" className="px-4 py-2 rounded-full border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50">Shop Employees</a>
+        <a href="#construction" className="px-4 py-2 rounded-full border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50">Construction</a>
         <a href="#iphone" className="px-4 py-2 rounded-full border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50">iPhone Setup</a>
       </div>
 
@@ -147,6 +148,26 @@ export default function GuidePage() {
             <p>Tap <strong>Clock Out</strong> at the end of your shift.</p>
             <p>If you're working on a ticket when you clock out, it automatically pauses.</p>
           </Step>
+        </Section>
+      </div>
+
+      {/* ── Construction ───────────────────────────────────────────────── */}
+      <div id="construction">
+        <Section title="🏗️ Construction">
+          <Tip>
+            The Construction module (jobs, statuses, schedule, materials, quotes &amp; invoices) has its own
+            full write-up — the Construction Playbook. It covers the color-coded job stages (matched to
+            Starsky&apos;s Master Schedule), the two ways a job can start (quoted vs. no quote needed), and
+            how the schedule, materials, and daily updates all fit together.
+          </Tip>
+          <a
+            href="https://claude.ai/artifact/Tb17WwUwmigqm9mVeA6pSY"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Open the Construction Playbook →
+          </a>
         </Section>
       </div>
 
