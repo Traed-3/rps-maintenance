@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { canReadConstruction, money } from '@/lib/construction'
 import { ArrowRight, Wrench, HardHat, Fuel, AlertTriangle, CheckCircle } from 'lucide-react'
 
-const SVC_OPEN_STATUSES = ['new', 'dispatched', 'accepted', 'en_route', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
+const SVC_OPEN_STATUSES = ['dispatched', 'new', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
 
 type Figure = { label: string; value: string | number; alert?: boolean }
 
