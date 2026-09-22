@@ -19,6 +19,7 @@ export function DocList({ kind, rows, status, department, canWrite, statuses }: 
         </div>
         <div className="flex items-center gap-2">
           <Link href="/billing" className="text-sm text-gray-500 hover:text-gray-700">← Billing</Link>
+          {isQ && <Link href="/billing/quotes/templates" className="text-sm text-gray-500 hover:text-gray-700">Templates</Link>}
           {canWrite && <Link href={`/billing/${kind}/new`} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium px-3 py-2 hover:bg-blue-700"><Plus className="w-4 h-4" />{isQ ? 'New quote' : 'New invoice'}</Link>}
         </div>
       </div>
