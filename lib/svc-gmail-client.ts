@@ -88,6 +88,29 @@ export async function getMessage(mailbox: SvcMailbox, id: string): Promise<any> 
   return gmailFetch(mailbox, `/messages/${id}`, { format: 'full' })
 }
 
+/** Attachment bytes. */
+export async function getAttachment(mailbox: SvcMailbox, messageId: string, attachmentId: string): Promise<Buffer> {
+  const data = await gmailFetch(mailbox, `/messages/${messageId}/attachments/${attachmentId}`)
+  return Buffer.from(data.data, 'base64url')
+}
+
+/** Every real attachment in a message's MIME tree (skips inline signature images under 8 KB). */
+export function listAttachments(msg: any): { filename: string; mimeType: string; attachmentId: string; size: number }[] {
+  const out: { filename: string; mimeType: string; attachmentId: string; size: number }[] = []
+  const walk = (p: any) => {
+    if (!p) return
+    if (p.filename && p.body?.attachmentId) {
+      const size = p.body.size ?? 0
+      const mime = (p.mimeType ?? '').toLowerCase()
+      const tiny = mime.startsWith('image/') && size < 8_000
+      if (!tiny) out.push({ filename: p.filename, mimeType: mime || 'application/octet-stream', attachmentId: p.body.attachmentId, size })
+    }
+    p.parts?.forEach(walk)
+  }
+  walk(msg.payload)
+  return out
+}
+
 /** Mark a message as read. */
 export async function markAsRead(mailbox: SvcMailbox, id: string): Promise<void> {
   const token = await getAccessToken(mailbox)

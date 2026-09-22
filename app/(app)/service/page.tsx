@@ -55,11 +55,12 @@ export default async function ServiceDispatchPage({
 
   // Summary counts — the supervisor view: what's overdue, what needs a return trip,
   // what's unbilled. These drive the cards above the table.
-  const [{ count: openCount }, { count: rtnCount }, { count: rejectedCount }, { data: staleCandidates }] = await Promise.all([
+  const [{ count: openCount }, { count: rtnCount }, { count: rejectedCount }, { data: staleCandidates }, { count: needsReviewCount }] = await Promise.all([
     admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('archived', false).in('status', OPEN_STATUSES),
     admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('archived', false).eq('return_trip_needed', true).not('status', 'in', '(completed,invoiced,paid)'),
     admin.from('svc_work_orders').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('archived', false).eq('invoice_rejected', true),
     admin.from('svc_work_orders').select('id, last_update_at').eq('company_id', companyId).eq('archived', false).in('status', OPEN_STATUSES).not('last_update_at', 'is', null),
+    admin.from('svc_work_order_documents').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'needs_review'),
   ])
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
   const staleCount = (staleCandidates ?? []).filter(w => new Date(w.last_update_at as string).getTime() < sevenDaysAgo).length
@@ -154,6 +155,9 @@ export default async function ServiceDispatchPage({
             Service Dispatch
           </h1>
           <Link href="/service/tickets" className="ml-3 text-sm text-blue-600 hover:text-blue-800 align-middle">Field tickets →</Link>
+          <Link href="/service/tickets/inbox" className="ml-3 text-sm text-blue-600 hover:text-blue-800 align-middle">
+            Completed ticket review{needsReviewCount ? <span className="ml-1 inline-flex items-center justify-center w-5 h-5 text-[11px] font-bold rounded-full bg-amber-500 text-white">{needsReviewCount}</span> : ' →'}
+          </Link>
           <p className="text-sm text-gray-500 mt-0.5">
             7-Eleven, Wawa & Sunoco work orders — synced automatically from rpdispatcher and rpinvoicing every 15 minutes
           </p>
