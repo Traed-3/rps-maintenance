@@ -265,3 +265,78 @@ export async function deleteInvoice(id: string): Promise<void> {
   redirect('/billing/invoices')
 }
 
+// ============================================================
+// QUOTE TEMPLATES — reusable starting points for the builder
+// ============================================================
+function parseJsonArray(fd: FormData, field: string): Record<string, unknown>[] {
+  const raw = fd.get(field)
+  if (!raw) return []
+  try { const arr = JSON.parse(raw as string); return Array.isArray(arr) ? arr : [] } catch { return [] }
+}
+function parseJsonObject(fd: FormData, field: string): Record<string, string> {
+  const raw = fd.get(field)
+  if (!raw) return {}
+  try { const obj = JSON.parse(raw as string); return obj && typeof obj === 'object' ? obj : {} } catch { return {} }
+}
+
+export async function saveQuoteTemplate(id: string | null, _state: ActionState, fd: FormData): Promise<ActionState> {
+  const p = await getBillingProfile(); if (!p?.canWrite) return { error: 'You do not have permission to edit templates.' }
+  const admin = createAdminClient()
+  const name = str(fd.get('name'))
+  if (!name) return { error: 'Name is required.' }
+
+  const scopeRows = parseJsonArray(fd, 'scope_rows_json')
+    .map(r => ({ scope: String(r.scope ?? '').trim(), description: String(r.description ?? '').trim() }))
+    .filter(r => r.scope || r.description)
+  const lines = parseJsonArray(fd, 'lines_json')
+    .map(r => ({ section: r.section === 'additional' ? 'additional' : 'basic', category: Number(r.category) || 4, description: String(r.description ?? '').trim() }))
+    .filter(r => r.description)
+  const notesByBrand: Record<string, string> = {}
+  for (const [k, v] of Object.entries(parseJsonObject(fd, 'notes_by_brand_json'))) {
+    const text = String(v ?? '').trim()
+    if (k && text) notesByBrand[k] = text
+  }
+
+  const row = {
+    company_id: p.company_id,
+    name,
+    category: str(fd.get('category')),
+    description: str(fd.get('description')),
+    department: str(fd.get('department')) === 'service' ? 'service' : 'construction',
+    scope_rows: scopeRows,
+    lines,
+    exclusions: str(fd.get('exclusions')),
+    warranty_line: str(fd.get('warranty_line')),
+    notes_by_brand: notesByBrand,
+    is_active: fd.get('is_active') != null,
+  }
+
+  let templateId = id
+  if (id) {
+    const { error } = await admin.from('con_quote_templates').update(row).eq('id', id).eq('company_id', p.company_id)
+    if (error) return { error: error.message }
+  } else {
+    const { data, error } = await admin.from('con_quote_templates').insert({ ...row, created_by: p.id }).select('id').single()
+    if (error || !data) return { error: error?.message ?? 'Could not create the template.' }
+    templateId = data.id
+  }
+  revalidatePath('/billing/quotes/templates')
+  revalidatePath('/billing/quotes/new')
+  redirect(`/billing/quotes/templates/${templateId}/edit`)
+}
+
+export async function deleteQuoteTemplate(id: string): Promise<void> {
+  const p = await getBillingProfile(); if (!p?.canWrite) return
+  await createAdminClient().from('con_quote_templates').delete().eq('id', id).eq('company_id', p.company_id)
+  revalidatePath('/billing/quotes/templates')
+  revalidatePath('/billing/quotes/new')
+  redirect('/billing/quotes/templates')
+}
+
+export async function setQuoteTemplateActive(id: string, isActive: boolean): Promise<void> {
+  const p = await getBillingProfile(); if (!p?.canWrite) return
+  await createAdminClient().from('con_quote_templates').update({ is_active: isActive }).eq('id', id).eq('company_id', p.company_id)
+  revalidatePath('/billing/quotes/templates')
+  revalidatePath('/billing/quotes/new')
+}
+
