@@ -30,7 +30,7 @@ export default async function BillingHubPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Billing</h1>
+          <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">Quotes &amp; Invoices</h1>
           <p className="text-sm text-gray-500 mt-0.5">Quotes and invoices for Construction and Service, priced the REV19 way.</p>
         </div>
         {canWrite && <div className="flex gap-2"><Link href="/billing/quotes/new" className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium px-3 py-2 hover:bg-blue-700"><Plus className="w-4 h-4" />New quote</Link><Link href="/billing/invoices/new" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 hover:border-blue-300"><Plus className="w-4 h-4" />New invoice</Link></div>}

@@ -272,8 +272,9 @@ function Breakdown({ doc, lines, t }: { doc: BillingDoc; lines: Rev19Line[]; t: 
         const catTotal = t[section].rows.find(r => r.n === c.n)
         const kind = c.kind
         return (
-          <View key={`${section}-${c.n}`} wrap={false}>
-            <Text style={s.bdSection}>CATEGORY {c.n} — {c.name}{section === 'additional' ? '   (ADDITIONAL SCOPE)' : ''}</Text>
+          <View key={`${section}-${c.n}`}>
+            {/* Long categories may span pages; keep the title with at least a few rows. */}
+            <Text style={s.bdSection} minPresenceAhead={48}>CATEGORY {c.n} — {c.name}{section === 'additional' ? '   (ADDITIONAL SCOPE)' : ''}</Text>
             {kind === 'material' && <Head cols={[['PART #', 96], ['DESCRIPTION', 170], ['UNIT COST', 46, true], ['TAX', 34, true], ['MARKUP', 40, true], ['FREIGHT', 40, true], ['SELL/UNIT', 48, true], ['QTY', 32, true], ['EXTENDED', 58, true], ['SOURCE', 150]]} />}
             {kind === 'labor' && <Head cols={[['DAY', 50], ['SCOPE OF WORK FOR THAT DAY', 300], ['RATE/HR', 46, true], ['MEN', 32, true], ['HRS EACH', 42, true], ['HOURS', 40, true], ['EXTENDED', 60, true], ['NOTE', 140]]} />}
             {kind === 'trip' && <Head cols={[['TRIP', 60], ['DESCRIPTION', 220], ['RATE', 46, true], ['TRAVEL DAYS', 56, true], ['TECHS', 36, true], ['TECH-TRAVEL-DAYS', 74, true], ['EXTENDED', 60, true]]} />}
@@ -320,6 +321,7 @@ export async function renderBillingPdf(doc: BillingDoc, items: Rev19LineInput[],
     <Document title={`${title} ${doc.number}`} author="Rappahannock Petroleum Services">
       {view !== 'breakdown' && (
         <Page size="LETTER" style={s.page}>
+          <ContinuationHeader doc={doc} title={title} />
           <View style={s.frame}>
             <Letterhead doc={doc} title={title} />
             <Parties doc={doc} />
@@ -338,6 +340,7 @@ export async function renderBillingPdf(doc: BillingDoc, items: Rev19LineInput[],
       )}
       {view !== 'face' && (
         <Page size="LETTER" orientation="landscape" style={[s.page, { paddingHorizontal: 30 }]}>
+          <ContinuationHeader doc={doc} title={`Material and Labor Breakdown — ${title}`} />
           <View style={[s.row, { justifyContent: 'space-between', alignItems: 'flex-end' }]}>
             {logo() ? <Image src={{ data: logo()!, format: 'png' }} style={{ width: 170, height: 54 }} /> : <Text style={s.bold}>RAPPAHANNOCK PETROLEUM SERVICES</Text>}
             <View style={{ alignItems: 'flex-end' }}>
@@ -352,6 +355,23 @@ export async function renderBillingPdf(doc: BillingDoc, items: Rev19LineInput[],
     </Document>
   )
   return renderToBuffer(pdf)
+}
+
+/**
+ * Small running header on pages 2+ (never on page 1, which carries the letterhead):
+ * company · document and number · customer and site · page x of y.
+ */
+function ContinuationHeader({ doc, title }: { doc: BillingDoc; title: string }) {
+  const who = [doc.customerName, doc.storeLabel, doc.siteNumber && doc.siteNumber !== doc.storeLabel ? doc.siteNumber : null].filter(Boolean).join(' · ')
+  return (
+    <View fixed render={({ pageNumber }) => pageNumber > 1 ? (
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', borderBottomWidth: 0.6, borderColor: BLACK, paddingBottom: 3, marginBottom: 8 }}>
+        <Text style={[s.bold, { fontSize: 8 }]}>RAPPAHANNOCK PETROLEUM SERVICES</Text>
+        <Text style={{ fontSize: 7.5 }}>{title} {doc.number}{who ? ` · ${who}` : ''}{doc.date ? ` · ${doc.date}` : ''}</Text>
+        <Text style={{ fontSize: 7.5, color: MUTED }} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+      </View>
+    ) : null} />
+  )
 }
 
 /** Map a con_quotes / con_invoices row + its line rows into the renderer's inputs. */

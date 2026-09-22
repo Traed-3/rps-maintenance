@@ -39,7 +39,7 @@ const navItems: NavItem[] = [
   { href: '/construction', label: 'Construction', icon: HardHat, construction: true },
   // 7-Eleven / Wawa / Sunoco service calls, synced from rpdispatcher + rpinvoicing.
   { href: '/service', label: 'Service Dispatch', icon: Fuel },
-  { href: '/billing', label: 'Billing', icon: FileText, billing: true },
+  { href: '/billing', label: 'Quotes & Invoices', icon: FileText, billing: true },
   { href: '/inventory', label: 'Inventory', icon: Package },
   // Company-wide calendar that overlays Maintenance and Construction items.
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
