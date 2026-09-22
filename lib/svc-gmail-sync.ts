@@ -236,21 +236,30 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
 // in:inbox here would silently process nothing. Search all mail instead.
 // Scoped to a recent window for now (this mailbox has 120k+ messages of
 // history); a wider one-time historical backfill is a separate, deliberate step.
-function recentWindowQuery(days: number): string {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-  const y = since.getFullYear()
-  const m = String(since.getMonth() + 1).padStart(2, '0')
-  const d = String(since.getDate()).padStart(2, '0')
-  return `-in:spam -in:trash after:${y}/${m}/${d}`
+function ymd(d: Date): string {
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
 }
 
-export async function syncInvoicing(maxResults = 50, sinceDays = 14): Promise<SvcSyncResult['invoicing']> {
+/** `untilDays` (also counted back from now) lets a manual catch-up run walk
+ * a big historical range in dated slices instead of one huge query — the
+ * whole point being to stay well inside the 60s function budget. */
+function recentWindowQuery(sinceDays: number, untilDays?: number): string {
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000)
+  let q = `-in:spam -in:trash after:${ymd(since)}`
+  if (untilDays != null) {
+    const until = new Date(Date.now() - untilDays * 24 * 60 * 60 * 1000)
+    q += ` before:${ymd(until)}`
+  }
+  return q
+}
+
+export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?: number): Promise<SvcSyncResult['invoicing']> {
   const admin = createAdminClient()
   const result = { processed: 0, matched: 0, noMatch: 0, skipped: 0, errors: [] as string[] }
 
   let msgIds: string[]
   try {
-    msgIds = await listMessages('invoicing', recentWindowQuery(sinceDays), maxResults)
+    msgIds = await listMessages('invoicing', recentWindowQuery(sinceDays, untilDays), maxResults)
   } catch (e: any) {
     result.errors.push(`List failed: ${e.message}`)
     return result

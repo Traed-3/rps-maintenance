@@ -7,6 +7,9 @@ on:
       since_days:
         description: 'rpinvoicing catch-up window in days (one-time manual backfill only — leave as 14 for a normal run)'
         default: '14'
+      until_days:
+        description: 'Optional — pairs with since_days to slice a big backfill into dated chunks (e.g. since_days=60 until_days=30 = the 30-60 days ago slice). Leave blank for a normal run.'
+        default: ''
       max:
         description: 'Max rpinvoicing messages to process in this run'
         default: '50'
@@ -47,11 +50,12 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           SINCE_DAYS: ${{ github.event.inputs.since_days || '14' }}
+          UNTIL_DAYS: ${{ github.event.inputs.until_days || '' }}
           MAX_MSGS: ${{ github.event.inputs.max || '50' }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
-            -w "\nHTTP %{http_code}\n" \
-            "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=invoicing&sinceDays=$SINCE_DAYS&max=$MAX_MSGS"
+          URL="https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=invoicing&sinceDays=$SINCE_DAYS&max=$MAX_MSGS"
+          if [ -n "$UNTIL_DAYS" ]; then URL="$URL&untilDays=$UNTIL_DAYS"; fi
+          curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
       - name: Draft transcripts for newly captured tickets
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
