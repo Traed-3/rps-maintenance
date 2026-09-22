@@ -244,13 +244,13 @@ function recentWindowQuery(days: number): string {
   return `-in:spam -in:trash after:${y}/${m}/${d}`
 }
 
-export async function syncInvoicing(maxResults = 50): Promise<SvcSyncResult['invoicing']> {
+export async function syncInvoicing(maxResults = 50, sinceDays = 14): Promise<SvcSyncResult['invoicing']> {
   const admin = createAdminClient()
   const result = { processed: 0, matched: 0, noMatch: 0, skipped: 0, errors: [] as string[] }
 
   let msgIds: string[]
   try {
-    msgIds = await listMessages('invoicing', recentWindowQuery(14), maxResults)
+    msgIds = await listMessages('invoicing', recentWindowQuery(sinceDays), maxResults)
   } catch (e: any) {
     result.errors.push(`List failed: ${e.message}`)
     return result

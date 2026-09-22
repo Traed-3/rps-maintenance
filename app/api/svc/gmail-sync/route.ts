@@ -6,7 +6,13 @@ import { extractPendingWorkOrderDocuments } from '@/lib/svc-work-order-docs-extr
 export const maxDuration = 60
 
 /**
- * GET /api/svc/gmail-sync?pass=dispatcher|invoicing|extract-docs[&max=N|&limit=N]
+ * GET /api/svc/gmail-sync?pass=dispatcher|invoicing|extract-docs[&max=N|&limit=N|&sinceDays=N]
+ *
+ * `sinceDays` (invoicing only, default 14) — the rolling window is normally
+ * fine since the 15-min cron never lets it lapse, but if the sync was ever
+ * down for a stretch, or a completion note simply sat further back than 14
+ * days before ever being fetched once, it falls outside the window forever.
+ * Pass a much larger value for a one-time manual catch-up run.
  *
  * Each pass gets its own request (and its own 60s budget) — running both
  * mailboxes in one call proved too slow once invoicing had real volume
@@ -41,7 +47,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), dispatcher })
     }
     if (pass === 'invoicing') {
-      const invoicing = await syncInvoicing(maxResults)
+      const sinceDays = parseInt(request.nextUrl.searchParams.get('sinceDays') ?? '14', 10)
+      const invoicing = await syncInvoicing(maxResults, sinceDays)
       return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), invoicing })
     }
     if (pass === 'extract-docs') {
