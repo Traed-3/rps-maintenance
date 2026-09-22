@@ -267,7 +267,16 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
   panels with per-kind columns, PartPicker on every line, price flags, live face), doc-face.tsx, doc-detail.tsx.
   PDF: lib/billing-pdf.tsx → GET /api/billing/quotes|invoices/[id]/pdf?view=face|breakdown|both (RP QUOTE
   TEMPLATE face + landscape MATERIAL AND LABOR BREAKDOWN with pink/green/orange fills). Verified against the
-  SU-8001 REV19 workbook to the penny ($70,221.44); that quote exists as Q-2026-0002 as a worked example.
+  SU-8001 REV19 workbook to the penny ($70,221.44); that quote exists as Q2026-SU8001 as a worked example.
+- Quote numbers are `Q<year>-<site key>` then A, B ... Z, AA, BB ... for further quotes on the same site that year
+  (site key = site number with punctuation stripped: SU-13400 -> SU13400, IP-1234 -> IP1234, 40312). Trigger
+  `con_set_quote_number` in `supabase/migrations/billing_quote_numbers_by_site.sql`. Invoices stay INV-YYYY-####.
+- The face is the itemised RP quote layout (lines under category headers; materials vs services columns);
+  pages 2+ carry a small running header. `?detail=0` on the PDF gives the category roll-up.
+- An approved quote gets a **Start project** button -> creates a Construction job (stage permitting) linked via
+  `con_quotes.job_id`. Construction jobs are the project-management pipeline; invoicing happens at the end.
+- Trae does not want this module called "Billing" (nav now says Quotes & Invoices); the target shape is
+  Quotes -> Projects (Construction jobs) -> Invoicing, plus daily Service invoicing from tickets.
   Catalog gained sku REV19_RATE_CARD rows (lodging, per diem, mobilization, disposables, permits).
   PDFs carry the company letterhead (public/rps-letterhead-logo.png, from Proton Drive Documents/Logos) and mirror
   the RP QUOTE TEMPLATE sheet (peach headers, gray bands, black grid, boxed title, signature line). Quotes print
