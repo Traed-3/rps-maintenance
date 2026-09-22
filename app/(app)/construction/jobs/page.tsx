@@ -21,12 +21,15 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const { data: customers } = await admin
     .from('con_customers').select('id, name').eq('company_id', company_id).order('name')
 
+  // Explicit limit well above current volume — an unfiltered select otherwise
+  // silently caps at Supabase's default 1000 rows once completed jobs pile up.
   let query = admin
     .from('con_jobs')
     .select('id, site_number, job_number, work_order_number, stage, priority, gas_brand, program, status_detail, date_received, customer_id, con_customers(name)')
     .eq('company_id', company_id)
     .order('date_received', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
+    .limit(5000)
 
   if (sp.customer) query = query.eq('customer_id', sp.customer)
   if (sp.priority) query = query.eq('priority', sp.priority)

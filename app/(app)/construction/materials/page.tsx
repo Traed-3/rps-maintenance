@@ -21,7 +21,9 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
 
   const [{ data: materials }, { data: jobs }, { data: vendorRows }] = await Promise.all([
     mq,
-    admin.from('con_jobs').select('id, site_number, work_order_number').eq('company_id', company_id).order('created_at', { ascending: false }),
+    // Material tracking is about open work — also keeps this well under
+    // Supabase's default 1000-row cap now that completed jobs have piled up.
+    admin.from('con_jobs').select('id, site_number, work_order_number').eq('company_id', company_id).neq('stage', 'complete').order('created_at', { ascending: false }),
     admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
   ])
   const vendorNames = (vendorRows ?? []).map(v => v.name).filter(Boolean)
