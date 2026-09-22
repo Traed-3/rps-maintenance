@@ -18,11 +18,60 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { listMessages, getMessage, archiveThread, archiveMessage } from '@/lib/svc-gmail-client'
+import { listMessages, getMessage, archiveThread, archiveMessage, listAttachments, getAttachment } from '@/lib/svc-gmail-client'
 import {
   extractBody, getHeader, parseSender,
   parseDispatchEmail, parseCompletionEmail,
 } from '@/lib/svc-work-order-parser'
+
+export const WORK_ORDER_DOCS_BUCKET = 'svc-work-order-docs'
+const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024
+const MAX_ATTACHMENTS = 6
+
+function safeName(name: string) {
+  return name.replace(/[^\w.\-() ]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120) || 'attachment'
+}
+
+/**
+ * A tech's completion forward often carries a photo of the paper ticket (or a
+ * PDF scan) — download it and file it against the matched work order so it's
+ * ready for the human review step (manager-signature check + transcription)
+ * before it can become a service ticket. Best-effort: never let a Gmail or
+ * storage hiccup block the completion-status update itself.
+ */
+async function captureWorkOrderDocument(
+  admin: ReturnType<typeof createAdminClient>,
+  msg: any,
+  msgId: string,
+  subject: string,
+  from: { name: string; email: string },
+  receivedAt: Date,
+  workOrderId: string | null,
+): Promise<void> {
+  const atts = listAttachments(msg).filter(a => a.size <= MAX_ATTACHMENT_BYTES).slice(0, MAX_ATTACHMENTS)
+  if (!atts.length) return
+
+  const stored: { name: string; mime: string; path: string; size: number }[] = []
+  for (const a of atts) {
+    const bytes = await getAttachment('invoicing', msgId, a.attachmentId)
+    const path = `rpinvoicing/${msgId}/${safeName(a.filename)}`
+    const { error } = await admin.storage.from(WORK_ORDER_DOCS_BUCKET).upload(path, bytes, { contentType: a.mimeType, upsert: true })
+    if (error) throw new Error(`upload ${a.filename}: ${error.message}`)
+    stored.push({ name: a.filename, mime: a.mimeType, path, size: bytes.length })
+  }
+  const primary = stored.find(s => /pdf/i.test(s.mime)) ?? stored.find(s => /^image\//i.test(s.mime)) ?? stored[0]
+  const extractable = stored.some(s => /pdf|^image\/(jpeg|jpg|png|gif|webp)$/i.test(s.mime) || /\.(pdf|jpe?g|png|gif|webp)$/i.test(s.name))
+
+  await admin.from('svc_work_order_documents').insert({
+    company_id: COMPANY_ID, work_order_id: workOrderId,
+    gmail_message_id: msgId, gmail_thread_id: msg.threadId,
+    sender: from.name || from.email, sender_email: from.email, subject, received_at: receivedAt.toISOString(),
+    attachments: stored, primary_path: primary?.path ?? null,
+    extract_status: extractable ? 'pending' : 'skipped',
+    extract_error: extractable ? null : 'Attachment type not readable automatically — type up the ticket by hand.',
+    status: 'new',
+  })
+}
 
 // Single-company deployment today (same constant used by the fleet gmail-sync) —
 // every write is scoped to it so app-level company_id filtering (see app/(app)/service/*)
@@ -32,6 +81,13 @@ const COMPANY_ID = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 export interface SvcSyncResult {
   dispatcher: { processed: number; created: number; updated: number; skipped: number; errors: string[] }
   invoicing:  { processed: number; matched: number; noMatch: number; skipped: number; errors: string[] }
+}
+
+/** Short-lived link to a work order document's attachment in the private bucket. */
+export async function signedWorkOrderDocUrl(path: string, seconds = 600): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data } = await admin.storage.from(WORK_ORDER_DOCS_BUCKET).createSignedUrl(path, seconds)
+  return data?.signedUrl ?? null
 }
 
 async function alreadyLogged(admin: ReturnType<typeof createAdminClient>, mailbox: string, messageId: string): Promise<boolean> {
@@ -211,7 +267,7 @@ export async function syncInvoicing(maxResults = 50): Promise<SvcSyncResult['inv
       const fromRaw = getHeader(headers, 'From')
       const dateStr = getHeader(headers, 'Date')
       const receivedAt = dateStr ? new Date(dateStr) : new Date()
-      const { email: techEmail } = parseSender(fromRaw)
+      const { name: techName, email: techEmail } = parseSender(fromRaw)
       const body = extractBody(msg.payload)
 
       const parsed = parseCompletionEmail(subject, body)
@@ -278,6 +334,12 @@ export async function syncInvoicing(maxResults = 50): Promise<SvcSyncResult['inv
         }
       } else {
         result.noMatch++
+      }
+
+      try {
+        await captureWorkOrderDocument(admin, msg, msgId, subject, { name: techName, email: techEmail }, receivedAt, matchedWorkOrderId)
+      } catch (docErr: any) {
+        result.errors.push(`Document capture for ${msgId}: ${docErr.message}`)
       }
 
       await admin.from('svc_gmail_imports').insert({
