@@ -213,11 +213,20 @@ export function parseCompletionEmail(subject: string, body: string): ParsedCompl
   const noteLower = insertSignatureBoundary(note).toLowerCase()
 
   let status: CompletionStatus = 'unknown'
-  if (/\brtn\b|re-?trip|return trip|return call|return needed|needs? (a )?return|return visit/i.test(noteLower)) {
+  // "Ntr" (Need To Return) is a common tech shorthand distinct from "RTN";
+  // "need to return"/"needs to return" was also falling through — the old
+  // pattern only allowed a single optional "a" between "need" and "return".
+  if (/\bntr\b|\brtn\b|re-?trip|return trip|return call|return needed|need.{0,4}to return|needs? (a )?return|return visit/i.test(noteLower)) {
     status = 'rtn'
   } else if (/incomplete/i.test(noteLower)) {
     status = 'incomplete'
-  } else if (/\bcomplete\b|job complete/i.test(noteLower)) {
+  } else if (
+    /\bcomplet(?:e|ed)\b|job complete/i.test(noteLower) ||
+    // Techs almost always lead with the status word — catches it even when a
+    // mail client glues it straight into the next word with no space at all
+    // (e.g. "COMPLETEGILBARCO WARRANTY TICKET").
+    /^complet(?:e|ed)/i.test(noteLower)
+  ) {
     status = 'complete'
   }
 
