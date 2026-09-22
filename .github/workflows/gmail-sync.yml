@@ -13,6 +13,9 @@ on:
       max:
         description: 'Max rpinvoicing messages to process in this run'
         default: '50'
+      lookup_q:
+        description: 'Optional — raw Gmail query for a read-only rpinvoicing lookup (e.g. subject:(WOT1 OR WOT2)), no date crawl. Leave blank for a normal run.'
+        default: ''
 
 permissions:
   contents: read
@@ -63,6 +66,23 @@ jobs:
           curl --fail-with-body -sS --max-time 90 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=extract-docs&limit=5"
+
+  svc-lookup:
+    if: ${{ github.event.inputs.lookup_q != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read-only rpinvoicing lookup
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          LOOKUP_Q: ${{ github.event.inputs.lookup_q }}
+        run: |
+          curl -G --fail-with-body -sS --max-time 90 \
+            --data-urlencode "secret=$CRON_SECRET" \
+            --data-urlencode "pass=lookup" \
+            --data-urlencode "q=$LOOKUP_Q" \
+            -w "\nHTTP %{http_code}\n" \
+            "https://rps-maintenance.vercel.app/api/svc/gmail-sync"
 
   billing-inbox-sync:
     runs-on: ubuntu-latest
