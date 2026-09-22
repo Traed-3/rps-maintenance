@@ -14,7 +14,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
 
   const [{ data: job }, { data: customers }, { data: sites }, { data: managers }] = await Promise.all([
     admin.from('con_jobs').select('*').eq('id', id).eq('company_id', company_id).single(),
-    admin.from('con_customers').select('id, name').eq('company_id', company_id).order('name'),
+    admin.from('con_customers').select('id, name, brand').eq('company_id', company_id).order('name'),
     admin.from('con_sites').select('id, site_number, store_brand, customer_id').eq('company_id', company_id).order('site_number'),
     admin.from('profiles').select('id, full_name').eq('company_id', company_id).in('role', ['owner', 'manager', 'construction_manager', 'estimator']).eq('is_active', true).order('full_name'),
   ])

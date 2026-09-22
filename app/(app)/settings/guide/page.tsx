@@ -1,4 +1,7 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -31,7 +34,13 @@ function Tip({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function GuidePage() {
+export default async function GuidePage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const admin = createAdminClient()
+  const { data: profile } = await admin.from('profiles').select('role').eq('id', user!.id).single()
+  if (!['owner', 'manager'].includes(profile?.role ?? '')) redirect('/settings')
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6 flex items-center gap-3">
