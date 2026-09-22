@@ -29,27 +29,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Sync rpdispatcher (create/update work orders)
+      - name: Hit /api/svc/gmail-sync
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           curl --fail-with-body -sS --max-time 90 \
             -w "\nHTTP %{http_code}\n" \
-            "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=dispatcher"
-      - name: Sync rpinvoicing (completion status + ticket attachments)
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          curl --fail-with-body -sS --max-time 90 \
-            -w "\nHTTP %{http_code}\n" \
-            "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=invoicing"
-      - name: Draft transcripts for newly captured tickets
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          curl --fail-with-body -sS --max-time 90 \
-            -w "\nHTTP %{http_code}\n" \
-            "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=extract-docs&limit=5"
+            "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET"
 
   billing-inbox-sync:
     runs-on: ubuntu-latest
