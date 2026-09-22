@@ -75,6 +75,7 @@ export interface ParsedDispatch {
   isInvoiceRejection: boolean
   invoiceRejectionReason: string | null
   isAssignmentOnly: boolean        // "has been assigned" / "mentioned" / "priority changed" — no new detail to extract
+  isCancellation: boolean          // the portal cancelled the call — close it, never open one
 }
 
 function detectPortal(senderName: string, subject: string): SourcePortal {
@@ -106,6 +107,15 @@ export function parseDispatchEmail(subject: string, body: string, senderName: st
   const invoiceRejectionReason = invoiceRejectionReasonMatch ? invoiceRejectionReasonMatch[1].trim() : null
 
   const isAssignmentOnly = /has been assigned$|mentioned in|priority has been changed/i.test(subject.trim())
+
+  // 7-Eleven sends "Work Order WOT… has been Canceled", Sunoco's dispatchers
+  // write "site called and canceled WOT…", and the older portal sends
+  // "SERVICE CANCELLED FOR SERVICE REQUEST #…". Any of them means the call is
+  // dead: the work order must be closed, and must never be created.
+  const isCancellation = /has been cancell?ed\b/i.test(subject)
+    || /service cancell?ed\b/i.test(subject)
+    || /\bcancell?ed\s+(?:WOT|FWKD)\d+/i.test(subject)
+    || /\bcancell?ed\s+(?:WOT|FWKD)\d+/i.test(body)
 
   let siteNumber: string | null = null
   let siteName: string | null = null
@@ -172,6 +182,7 @@ export function parseDispatchEmail(subject: string, body: string, senderName: st
     isInvoiceRejection,
     invoiceRejectionReason,
     isAssignmentOnly,
+    isCancellation,
   }
 }
 

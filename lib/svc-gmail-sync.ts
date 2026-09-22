@@ -172,7 +172,24 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
           .order('dispatched_at', { ascending: false })
         const existing = existingRows?.[0] ?? null
 
-        if (existing) {
+        if (parsed.isCancellation) {
+          // The portal killed the call. Close the work order if we have it, and
+          // never create one from a cancellation — doing so used to put a brand
+          // new "dispatched" row on the board for a job nobody will ever run.
+          if (existing) {
+            await admin.from('svc_work_orders').update({
+              archived: true,
+              archived_at: new Date().toISOString(),
+              archived_reason: `Cancelled by the portal — "${subject.trim().slice(0, 180)}" (${receivedAt.toISOString().slice(0, 10)}).`,
+              last_update_at: receivedAt.toISOString(),
+            }).eq('id', existing.id).eq('archived', false)
+            matchedWorkOrderId = existing.id
+            result.updated++
+          } else {
+            importStatus = 'no_match'
+          }
+          if (existing) importStatus = 'skipped'
+        } else if (existing) {
           matchedWorkOrderId = existing.id
           importStatus = 'skipped'
           result.skipped++
