@@ -287,11 +287,15 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
       if (parsed.woNumber) {
         const { data: candidates } = await admin
           .from('svc_work_orders')
-          .select('id, dispatched_at, dispatch_gmail_message_id, dispatch_gmail_thread_id')
+          .select('id, source_portal, dispatched_at, dispatch_gmail_message_id, dispatch_gmail_thread_id')
           .eq('portal_wo_number', parsed.woNumber)
           .order('dispatched_at', { ascending: false })
 
-        const wo = candidates?.[0]
+        // Defense-in-depth against the duplicate-row bug fixed in 47409f7: if
+        // a phantom 'unknown'-portal twin ever slips back in, a completion
+        // note should still land on the real dispatch row rather than
+        // whichever twin happens to be newer.
+        const wo = candidates?.find(c => c.source_portal !== 'unknown') ?? candidates?.[0]
         if (wo) {
           const { data: tech } = await admin
             .from('svc_technicians')
