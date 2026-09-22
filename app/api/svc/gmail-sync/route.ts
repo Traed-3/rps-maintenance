@@ -48,7 +48,9 @@ export async function GET(request: NextRequest) {
     }
     if (pass === 'invoicing') {
       const sinceDays = parseInt(request.nextUrl.searchParams.get('sinceDays') ?? '14', 10)
-      const invoicing = await syncInvoicing(maxResults, sinceDays)
+      const untilParam = request.nextUrl.searchParams.get('untilDays')
+      const untilDays = untilParam != null ? parseInt(untilParam, 10) : undefined
+      const invoicing = await syncInvoicing(maxResults, sinceDays, untilDays)
       return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), invoicing })
     }
     if (pass === 'extract-docs') {
