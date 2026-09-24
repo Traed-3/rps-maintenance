@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { syncDispatcher, syncInvoicing } from '@/lib/svc-gmail-sync'
+import { syncDispatcher, syncInvoicing, archiveStaleWorkOrders } from '@/lib/svc-gmail-sync'
 import { extractPendingWorkOrderDocuments } from '@/lib/svc-work-order-docs-extract'
 
 // Allow enough time for a full pass through one mailbox.
@@ -24,6 +24,12 @@ export const maxDuration = 60
  * completed-ticket attachments the invoicing pass captured (see
  * captureWorkOrderDocument in svc-gmail-sync.ts), bounded by `limit` so it
  * stays inside the same time budget.
+ *
+ * `archive-stale` is a manual maintenance sweep, not part of the cron: archives
+ * work orders older than `days` (default 60) with no rpinvoicing mail ever
+ * (checked live) and no system update in that window — see
+ * archiveStaleWorkOrders in svc-gmail-sync.ts for the exact rule. Dry run by
+ * default; pass apply=1 to actually write. Optional archivedBy=<profile id>.
  */
 export async function GET(request: NextRequest) {
   const authHeader  = request.headers.get('authorization')
@@ -78,6 +84,16 @@ export async function GET(request: NextRequest) {
         hits.push({ id, subject: h('Subject'), from: h('From'), date: h('Date'), snippet: msg.snippet })
       }
       return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), count: hits.length, hits })
+    }
+    if (pass === 'archive-stale') {
+      // Sweeps for work orders that are old, dead in rpinvoicing (checked live,
+      // not just the DB), and untouched — see archiveStaleWorkOrders for the
+      // exact rule. Defaults to a dry run; pass apply=1 to actually archive.
+      const days = parseInt(request.nextUrl.searchParams.get('days') ?? '60', 10)
+      const dryRun = request.nextUrl.searchParams.get('apply') !== '1'
+      const archivedBy = request.nextUrl.searchParams.get('archivedBy')
+      const result = await archiveStaleWorkOrders(days, dryRun, archivedBy)
+      return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), result })
     }
 
     const dispatcher = await syncDispatcher(maxResults)

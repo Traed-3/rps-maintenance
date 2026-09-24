@@ -392,3 +392,91 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
   return result
 }
 
+// ── Maintenance: archive stale work orders ──────────────────────────────────
+
+export interface SvcArchiveStaleResult {
+  days: number
+  dryRun: boolean
+  candidates: number
+  archived: number
+  skippedHasInvoicingMail: number
+  gmailFailures: number
+  details: { woNumber: string; action: string }[]
+}
+
+/**
+ * A work order that's old, has never had ANY message land in rpinvoicing
+ * (not even an unmatched one — checked live against the mailbox, not just
+ * svc_gmail_imports, since the rolling sync window can miss one), and hasn't
+ * been touched in the system either is dead: nobody is ever going to report
+ * back on it. Archive it (and its source rpdispatcher email) the same way
+ * the dashboard's own archive button does.
+ *
+ * Deliberately conservative: ANY rpinvoicing hit for the WO# — even a stray
+ * forward that never classified as complete/RTN — excludes it. A human
+ * should look at those, not this sweep.
+ */
+export async function archiveStaleWorkOrders(days = 60, dryRun = true, archivedBy: string | null = null): Promise<SvcArchiveStaleResult> {
+  const admin = createAdminClient()
+  const cutoffIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: candidates } = await admin
+    .from('svc_work_orders')
+    .select('id, portal_wo_number, dispatch_gmail_message_id, dispatch_gmail_thread_id')
+    .eq('company_id', COMPANY_ID)
+    .eq('archived', false)
+    .lt('dispatched_at', cutoffIso)
+    .lt('last_update_at', cutoffIso)
+    .not('portal_wo_number', 'is', null)
+    .order('dispatched_at')
+
+  const result: SvcArchiveStaleResult = {
+    days, dryRun, candidates: candidates?.length ?? 0,
+    archived: 0, skippedHasInvoicingMail: 0, gmailFailures: 0, details: [],
+  }
+
+  for (const w of candidates ?? []) {
+    const woNumber = w.portal_wo_number!
+
+    let hasMail = false
+    try {
+      const ids = await listMessages('invoicing', `subject:${woNumber}`, 3)
+      hasMail = ids.length > 0
+    } catch (e: any) {
+      result.details.push({ woNumber, action: `error: rpinvoicing lookup failed — ${e.message}` })
+      continue
+    }
+
+    if (hasMail) {
+      result.skippedHasInvoicingMail++
+      result.details.push({ woNumber, action: 'skipped — has rpinvoicing mail' })
+      continue
+    }
+
+    if (dryRun) {
+      result.archived++
+      result.details.push({ woNumber, action: 'would archive' })
+      continue
+    }
+
+    try {
+      if (w.dispatch_gmail_thread_id) await archiveThread('dispatcher', w.dispatch_gmail_thread_id)
+      else if (w.dispatch_gmail_message_id) await archiveMessage('dispatcher', w.dispatch_gmail_message_id)
+    } catch (e: any) {
+      result.gmailFailures++
+    }
+
+    await admin.from('svc_work_orders').update({
+      archived: true,
+      archived_at: new Date().toISOString(),
+      archived_reason: `Old — cleanup: ${days}+ days old, no completion ever received in rpinvoicing, no update in ${days}+ days.`,
+      archived_by: archivedBy,
+    }).eq('id', w.id)
+
+    result.archived++
+    result.details.push({ woNumber, action: 'archived' })
+  }
+
+  return result
+}
+
