@@ -90,6 +90,7 @@ jobs:
             --data-urlencode "secret=$CRON_SECRET" \
             --data-urlencode "pass=lookup" \
             --data-urlencode "q=$LOOKUP_Q" \
+            --data-urlencode "full=1" \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync"
 
