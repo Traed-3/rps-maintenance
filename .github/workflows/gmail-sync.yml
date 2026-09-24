@@ -16,6 +16,15 @@ on:
       lookup_q:
         description: 'Optional — raw Gmail query for a read-only rpinvoicing lookup (e.g. subject:(WOT1 OR WOT2)), no date crawl. Leave blank for a normal run.'
         default: ''
+      archive_stale_days:
+        description: 'Optional — archive work orders older than this many days with no rpinvoicing mail ever and no system update in that window. Leave blank for a normal run.'
+        default: ''
+      archive_stale_apply:
+        description: 'Set to 1 to actually archive (default is a dry-run preview only).'
+        default: ''
+      archive_stale_archived_by:
+        description: 'Optional — profile id to record as archived_by on the archived rows.'
+        default: ''
 
 permissions:
   contents: read
@@ -83,6 +92,23 @@ jobs:
             --data-urlencode "q=$LOOKUP_Q" \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync"
+
+  svc-archive-stale:
+    if: ${{ github.event.inputs.archive_stale_days != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Archive stale work orders
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DAYS: ${{ github.event.inputs.archive_stale_days }}
+          APPLY: ${{ github.event.inputs.archive_stale_apply }}
+          ARCHIVED_BY: ${{ github.event.inputs.archive_stale_archived_by }}
+        run: |
+          URL="https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=archive-stale&days=$DAYS"
+          if [ "$APPLY" = "1" ]; then URL="$URL&apply=1"; fi
+          if [ -n "$ARCHIVED_BY" ]; then URL="$URL&archivedBy=$ARCHIVED_BY"; fi
+          curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
 
   billing-inbox-sync:
     runs-on: ubuntu-latest
