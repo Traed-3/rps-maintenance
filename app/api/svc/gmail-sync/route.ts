@@ -74,14 +74,18 @@ export async function GET(request: NextRequest) {
       // Defaults to rpinvoicing (completion notes); pass mailbox=dispatcher to
       // check whether a work order was ever dispatched / updated there instead.
       const mailbox = request.nextUrl.searchParams.get('mailbox') === 'dispatcher' ? 'dispatcher' : 'invoicing'
+      const full = request.nextUrl.searchParams.get('full') === '1'
       const { listMessages, getMessage } = await import('@/lib/svc-gmail-client')
+      const { extractBody, getHeader: gh } = await import('@/lib/svc-work-order-parser')
       const ids = await listMessages(mailbox, q, 100)
       const hits = []
       for (const id of ids) {
         const msg = await getMessage(mailbox, id)
         const headers: { name: string; value: string }[] = msg.payload?.headers ?? []
-        const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n.toLowerCase())?.value ?? ''
-        hits.push({ id, subject: h('Subject'), from: h('From'), date: h('Date'), snippet: msg.snippet })
+        const h = (n: string) => gh(headers, n)
+        const hit: Record<string, unknown> = { id, threadId: msg.threadId, subject: h('Subject'), from: h('From'), date: h('Date'), snippet: msg.snippet }
+        if (full) hit.body = extractBody(msg.payload).slice(0, 3000)
+        hits.push(hit)
       }
       return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), count: hits.length, hits })
     }
