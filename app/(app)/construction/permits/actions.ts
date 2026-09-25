@@ -9,6 +9,7 @@ import {
   PERMIT_STATUS_VALUES, REQUIREMENT_STATUSES, isInHandOrLater,
   defaultPulledBy, computeReadyToWork,
 } from '@/lib/permits'
+import { findOrCreateJobForPermitSite, linkProjectToChosenJob } from '@/lib/permit-job-link'
 
 export type ActionState = { error: string } | null
 
@@ -175,9 +176,48 @@ export async function createPermitProject(_state: ActionState, formData: FormDat
     permit_type: 'Electrical', pulled_by: defaultPulledBy('Electrical'), requirement_status: 'Required', status: 'Not Started',
   })
 
+  // "If we have a permit, it's a project" — auto-link (or auto-create) the
+  // matching Construction job right away rather than leave this orphaned.
+  const { data: fullSite } = await admin.from('con_permit_sites')
+    .select('id, site_number, name, address, city, state, brand').eq('id', site.id).single()
+  if (fullSite) {
+    const linkResult = await findOrCreateJobForPermitSite(admin, profile.company_id, fullSite, { id: projectId, project_type: projectType })
+    if (linkResult.status === 'created' || linkResult.status === 'linked') {
+      revalidatePath('/construction/jobs')
+      revalidatePath(`/construction/jobs/${linkResult.jobId}`)
+    }
+  }
+
   revalidatePath('/construction/permits')
   revalidatePath('/construction')
   redirect(`/construction/permits/sites/${site.id}`)
+}
+
+// ── Link a permit project to a job the user picked (ambiguous-match case) ──
+export async function linkPermitProjectToJob(projectId: string, jobId: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  await linkProjectToChosenJob(admin, profile.company_id, projectId, jobId)
+  const { data: project } = await admin.from('con_permit_projects').select('site_id').eq('id', projectId).single()
+  if (project?.site_id) revalidatePath(`/construction/permits/sites/${project.site_id}`)
+  revalidatePath(`/construction/jobs/${jobId}`)
+}
+
+// ── Create a brand-new job for a permit project instead of linking one ──
+export async function createJobForPermitProject(projectId: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  const { data: project } = await admin.from('con_permit_projects').select('id, site_id, project_type').eq('id', projectId).eq('company_id', profile.company_id).single()
+  if (!project) return
+  const { data: site } = await admin.from('con_permit_sites').select('id, site_number, name, address, city, state, brand').eq('id', project.site_id).single()
+  if (!site) return
+  const result = await findOrCreateJobForPermitSite(admin, profile.company_id, site, project, { forceCreate: true })
+  if (result.status !== 'created' && result.status !== 'already_linked') return
+  revalidatePath(`/construction/permits/sites/${project.site_id}`)
+  revalidatePath('/construction/jobs')
+  redirect(`/construction/jobs/${result.jobId}`)
 }
 
 // ── Add a permit to an existing project (e.g. a Building or Mechanical

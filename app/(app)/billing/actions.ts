@@ -198,6 +198,28 @@ export async function duplicateQuote(id: string): Promise<void> {
   redirect(`/billing/quotes/${nq.id}`)
 }
 
+/**
+ * Start a real Change Order document against an already-approved (or any)
+ * quote — distinct from the informal "additional scope" section on the same
+ * document, which stays for changes discovered before the original is signed.
+ * Starts blank (no copied line items): a change order is its own document.
+ */
+export async function createChangeOrder(parentQuoteId: string): Promise<void> {
+  const p = await getBillingProfile(); if (!p?.canWrite) return
+  const admin = createAdminClient()
+  const { data: q } = await admin.from('con_quotes').select('*').eq('id', parentQuoteId).eq('company_id', p.company_id).single()
+  if (!q) return
+  const { id: _id, quote_number: _qn, created_at: _c, updated_at: _u, sent_date: _s, decision_date: _d, kind: _k, parent_quote_id: _p, status: _st, ...rest } = q
+  const { data: co } = await admin.from('con_quotes').insert({
+    ...rest, kind: 'change_order', parent_quote_id: parentQuoteId, status: 'draft',
+    proposal_date: new Date().toISOString().slice(0, 10),
+    project_description: `Change Order — ${q.project_description ?? ''}`.trim(),
+  }).select('id').single()
+  if (!co) return
+  refresh('quotes', co.id, q.job_id)
+  redirect(`/billing/quotes/${co.id}/edit`)
+}
+
 /** Quote → draft invoice. Copies the INPUTS block and every categorized line. */
 export async function convertQuoteToInvoice(quoteId: string): Promise<void> {
   const p = await getBillingProfile(); if (!p?.canWrite) return

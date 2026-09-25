@@ -4,7 +4,7 @@ import { ClickableRow } from '@/components/clickable-row'
 import { money, fmtDate } from '@/lib/billing'
 import { QuoteStatusBadge, InvoiceStatusBadge } from '@/components/construction/badges'
 
-export type DocRow = { id: string; number: string | null; date: string | null; status: string; total: number | null; store_label: string | null; department: string | null; customer: string | null }
+export type DocRow = { id: string; number: string | null; date: string | null; status: string; total: number | null; store_label: string | null; department: string | null; customer: string | null; isChangeOrder?: boolean }
 
 /** Shared list for /billing/quotes and /billing/invoices. */
 export function DocList({ kind, rows, status, department, canWrite, statuses }: { kind: 'quotes' | 'invoices'; rows: DocRow[]; status: string; department: string; canWrite: boolean; statuses: string[] }) {
@@ -36,7 +36,7 @@ export function DocList({ kind, rows, status, department, canWrite, statuses }: 
             <tbody className="divide-y divide-gray-50">
               {rows.map(r => (
                 <ClickableRow key={r.id} href={`/billing/${kind}/${r.id}`}>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-700">{r.number ?? 'DRAFT'}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-700">{r.isChangeOrder && <span className="text-purple-600">CO · </span>}{r.number ?? 'DRAFT'}</td>
                   <td className="px-4 py-3 text-gray-700 hidden sm:table-cell">{r.customer ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{r.store_label ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell capitalize">{r.department ?? 'construction'}</td>

@@ -29,7 +29,7 @@ async function getProfile() {
   if (!user) return null
   const admin = createAdminClient()
   const { data } = await admin
-    .from('profiles').select('id, company_id, role').eq('id', user.id).single()
+    .from('profiles').select('id, company_id, role, full_name').eq('id', user.id).single()
   return data
 }
 
@@ -192,6 +192,14 @@ export async function changeJobStage(id: string, stage: string): Promise<void> {
   if (!profile || !canWriteConstruction(profile)) return
   const admin = createAdminClient()
   await admin.from('con_jobs').update({ stage }).eq('id', id).eq('company_id', profile.company_id)
+  // The con_jobs_stage_history trigger just wrote a row with no actor — patch
+  // it with who made the change (see supabase/migrations/con_job_stage_history.sql).
+  const { data: latest } = await admin.from('con_job_stage_history')
+    .select('id').eq('job_id', id).order('changed_at', { ascending: false }).limit(1).maybeSingle()
+  if (latest) {
+    await admin.from('con_job_stage_history').update({ changed_by: profile.id, changed_by_name: profile.full_name })
+      .eq('id', latest.id)
+  }
   revalidatePath('/construction/jobs')
   revalidatePath('/construction')
   revalidatePath(`/construction/jobs/${id}`)

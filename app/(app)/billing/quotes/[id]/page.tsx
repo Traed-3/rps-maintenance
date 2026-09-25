@@ -11,5 +11,6 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   const d = await loadDoc(admin, 'quote', id, company_id)
   if (!d) notFound()
   const { data: invs } = await admin.from('con_invoices').select('id, invoice_number, status').eq('quote_id', id).eq('company_id', company_id)
-  return <DocDetail kind="quote" row={d.row} lines={d.lines} canWrite={canWrite} invoicesFromQuote={invs ?? []} />
+  const { data: changeOrders } = await admin.from('con_quotes').select('id, quote_number, status').eq('parent_quote_id', id).eq('company_id', company_id)
+  return <DocDetail kind="quote" row={d.row} lines={d.lines} canWrite={canWrite} invoicesFromQuote={invs ?? []} changeOrders={changeOrders ?? []} />
 }

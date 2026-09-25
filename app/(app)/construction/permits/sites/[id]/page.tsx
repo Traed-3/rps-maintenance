@@ -11,10 +11,12 @@ import { ReadyToWorkButton } from '@/components/construction/ready-to-work-butto
 import { DeliverableUpload } from '@/components/construction/deliverable-upload'
 import { AddPermitForm } from '@/components/construction/add-permit-form'
 import { DeleteButton } from '@/components/construction/delete-button'
+import { LinkJobSelect } from '@/components/construction/link-job-select'
 import {
   updatePermitStatus, setPermitRequirement, markReadyToWork, clearReadyToWork, deleteDeliverable, addPermit,
+  linkPermitProjectToJob, createJobForPermitProject,
 } from '../../actions'
-import { CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, FileText, Briefcase } from 'lucide-react'
 
 export default async function SiteViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -53,6 +55,17 @@ export default async function SiteViewPage({ params }: { params: Promise<{ id: s
     admin.from('con_permit_deliverables').select('*').eq('company_id', company_id).eq('site_id', id).order('created_date', { ascending: false }),
     admin.from('con_permit_events').select('*').eq('company_id', company_id).in('permit_id', permitIds.length ? permitIds : ['00000000-0000-0000-0000-000000000000']).order('changed_at', { ascending: false }),
   ])
+
+  // Linked job(s) — "if we have a permit, it's a project." Most sites run one
+  // project at a time, so this is usually a single row.
+  const linkedJobIds = projects.map(p => (p as { job_id?: string | null }).job_id).filter((jid): jid is string => !!jid)
+  const [{ data: linkedJobs }, { data: openSiteJobs }] = await Promise.all([
+    linkedJobIds.length
+      ? admin.from('con_jobs').select('id, job_number, stage').in('id', linkedJobIds)
+      : Promise.resolve({ data: [] as { id: string; job_number: string | null; stage: string }[] }),
+    admin.from('con_jobs').select('id, job_number, stage').eq('company_id', company_id).eq('site_number', site.site_number).neq('stage', 'complete'),
+  ])
+  const jobById = new Map((linkedJobs ?? []).map(j => [j.id, j]))
   const eventsByPermit = new Map<string, EventRow[]>()
   for (const e of (events ?? []) as EventRow[]) {
     const arr = eventsByPermit.get(e.permit_id) ?? []
@@ -92,6 +105,38 @@ export default async function SiteViewPage({ params }: { params: Promise<{ id: s
             <ReadyToWorkButton projectId={projects[0].id} ready={anyMarkedReady} eligible={eligible} mark={markReadyToWork} clear={clearReadyToWork} />
           )}
         </div>
+      </div>
+
+      {/* Linked job(s) — a permit with no job is a data gap, not a valid state */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-5">
+        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50"><h2 className="font-semibold text-gray-900 text-sm">Linked job</h2></div>
+        <ul className="divide-y divide-gray-100">
+          {projects.map(p => {
+            const jobId = (p as { job_id?: string | null }).job_id
+            const job = jobId ? jobById.get(jobId) : null
+            return (
+              <li key={p.id} className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <span className="text-xs text-gray-500">{p.project_type}</span>
+                {job ? (
+                  <Link href={`/construction/jobs/${job.id}`} className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline">
+                    <Briefcase className="w-3.5 h-3.5" />{job.job_number ?? 'Open job'} · {job.stage}
+                  </Link>
+                ) : canWrite ? (
+                  <div className="flex items-center gap-2">
+                    {openSiteJobs && openSiteJobs.length > 0 && (
+                      <LinkJobSelect projectId={p.id} candidates={openSiteJobs} action={linkPermitProjectToJob} />
+                    )}
+                    <form action={createJobForPermitProject.bind(null, p.id)}>
+                      <button type="submit" className="text-xs font-medium text-blue-600 hover:underline">+ Create new job</button>
+                    </form>
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-400">Not linked</span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
       </div>
 
       {/* Confirmed permits (Required + resolved Not-Required) */}

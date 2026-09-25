@@ -52,5 +52,20 @@ export async function POST(request: NextRequest) {
     if (storagePath) await admin.storage.from(BUCKET).remove([storagePath])
     return NextResponse.json({ error: insErr.message }, { status: 500 })
   }
+
+  // Mirror into the job's Documents tab too — every other job document already
+  // lives there, and a permit's job link is what makes it a "project" file.
+  if (storagePath && filename && siteId) {
+    const { data: project } = await admin.from('con_permit_projects')
+      .select('job_id').eq('site_id', siteId).eq('company_id', profile.company_id).not('job_id', 'is', null).limit(1).maybeSingle()
+    if (project?.job_id) {
+      await admin.from('con_documents').insert({
+        company_id: profile.company_id, job_id: project.job_id,
+        file_name: filename, storage_path: storagePath, doc_type: 'permit', category: 'permits',
+        uploaded_by: profile.id,
+      })
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }
