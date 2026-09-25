@@ -2,7 +2,13 @@ import Image from 'next/image'
 import { SignInButton } from './sign-in-button'
 import { PasswordLoginForm } from './password-form'
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ disabled?: string }>
+}) {
+  const { disabled } = await searchParams
+
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md">
@@ -18,6 +24,12 @@ export default function LoginPage() {
           />
           <p className="mt-3 text-sm text-gray-500">Fleet &amp; Shop Operations</p>
         </div>
+
+        {disabled === '1' && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Your account has been disabled. Contact your manager if this is unexpected.
+          </div>
+        )}
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 space-y-5">
