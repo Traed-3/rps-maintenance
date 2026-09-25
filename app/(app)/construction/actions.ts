@@ -746,6 +746,20 @@ export async function deleteDailyUpdate(id: string): Promise<void> {
   if (data?.job_id) revalidatePath(`/construction/jobs/${data.job_id}`)
 }
 
+/** Confirms a backfilled field-ticket draft (review_status: needs_review -> filed).
+ * A human reading the billing preview in `notes` is the only thing that ever
+ * flips this — the backfill pipeline itself never marks its own rows filed. */
+export async function confirmFieldTicketDraft(id: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction(profile)) return
+  const admin = createAdminClient()
+  const { data } = await admin.from('con_daily_updates')
+    .update({ review_status: 'filed' })
+    .eq('id', id).eq('company_id', profile.company_id)
+    .select('job_id').single()
+  if (data?.job_id) revalidatePath(`/construction/jobs/${data.job_id}`)
+}
+
 // ============================================================
 // DOCUMENTS
 // ============================================================

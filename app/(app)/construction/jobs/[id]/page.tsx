@@ -16,6 +16,7 @@ import { DailyUpdateForm } from '@/components/construction/daily-update-form'
 import { DisposablesForm } from '@/components/construction/disposables-form'
 import { DocumentUpload } from '@/components/construction/document-upload'
 import { DeleteButton } from '@/components/construction/delete-button'
+import { ConfirmButton } from '@/components/construction/confirm-button'
 import { AssignSubcontractor } from '@/components/construction/assign-subcontractor'
 import { Button } from '@/components/ui/button'
 import { Pencil, Plus, FileText, Image as ImageIcon } from 'lucide-react'
@@ -24,7 +25,7 @@ import {
   saveScheduleEntry, deleteScheduleEntry,
   toggleCloseoutTask, deleteCloseoutTask, addCloseoutTask, seedCloseoutTasks,
   addJobLabor, deleteJobLabor, deleteDocument,
-  addDailyUpdate, deleteDailyUpdate, addDisposablesForm, deleteDisposablesForm,
+  addDailyUpdate, deleteDailyUpdate, confirmFieldTicketDraft, addDisposablesForm, deleteDisposablesForm,
   assignSubcontractor, unassignSubcontractor,
 } from '../../actions'
 
@@ -375,6 +376,7 @@ export default async function JobDetailPage({
                               <span className="font-medium text-gray-900">{fmtDate(u.work_date)}</span>
                               {u.update_number && <span className="text-xs text-gray-400">{u.update_number}</span>}
                               <span className="text-xs font-medium text-gray-600">· {hoursOf(u).toFixed(2)} hrs</span>
+                              {u.review_status === 'needs_review' && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">Needs review</span>}
                             </div>
                             {u.work_description && <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{u.work_description}</p>}
                             {techs.length > 0 && (
@@ -410,7 +412,12 @@ export default async function JobDetailPage({
                               )
                             })()}
                           </div>
-                          {canWrite && <DeleteButton action={deleteDailyUpdate.bind(null, u.id)} confirm="Delete this daily update?" iconOnly />}
+                          {canWrite && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              {u.review_status === 'needs_review' && <ConfirmButton action={confirmFieldTicketDraft.bind(null, u.id)} />}
+                              <DeleteButton action={deleteDailyUpdate.bind(null, u.id)} confirm="Delete this daily update?" iconOnly />
+                            </div>
+                          )}
                         </div>
                       </li>
                     )
