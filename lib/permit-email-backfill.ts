@@ -60,10 +60,18 @@ export async function backfillPermitEmails(opts: { limit?: number; offset?: numb
       if (!ids.length) { out.noEmail++; out.perSite.push({ site_number: site.site_number, result: 'no matching email' }); continue }
 
       let sitePdfFound = false
+      let sawWrongSite = false
       const notes: string[] = []
       for (const id of ids) {
         const msg = await getMessage('econstruction', id)
         const subject = header(msg, 'Subject')
+        // Gmail's search matches the site number anywhere in the thread (a
+        // quoted forward, a CC list, an old subject in the same thread) — not
+        // just this email's own subject. Confirmed false positives on real
+        // data (17206 and 18245 both "matched" a 34022 permit email this
+        // way), so require the site number in THIS message's own subject
+        // before trusting the match.
+        if (!subject.includes(site.site_number)) { sawWrongSite = true; continue }
         const atts = listAttachments(msg).filter(a => /pdf/i.test(a.mimeType) || /\.pdf$/i.test(a.filename))
         if (!atts.length) continue
         sitePdfFound = true
@@ -100,7 +108,10 @@ export async function backfillPermitEmails(opts: { limit?: number; offset?: numb
           }
         }
       }
-      if (!sitePdfFound) { out.noPdf++; notes.push('email(s) found but no PDF attached') }
+      if (!sitePdfFound) {
+        out.noPdf++
+        notes.push(sawWrongSite && !notes.length ? 'only matched other sites\' emails (site number not in any subject line)' : 'email(s) found but no PDF attached')
+      }
       out.perSite.push({ site_number: site.site_number, result: notes.join('; ') || 'no PDF found' })
     } catch (e) {
       out.errors.push(`${site.site_number}: ${(e as Error).message}`)
