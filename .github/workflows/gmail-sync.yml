@@ -34,6 +34,15 @@ on:
       backfill_permits_apply:
         description: 'Set to 1 to actually file/link (default is a dry-run preview only).'
         default: ''
+      billing_sync_inbox:
+        description: 'Optional — one-time historical billing-inbox catch-up for one inbox (econstruction, constructionreceipts, rpinvoicing, maintenance). Leave blank for a normal run.'
+        default: ''
+      billing_sync_since_days:
+        description: 'How many days back to search for that inbox (e.g. 365 for a full year).'
+        default: '365'
+      billing_sync_max:
+        description: 'Max messages to process in this batch (Gmail fetches are slow — keep this small, default 20).'
+        default: '20'
 
 permissions:
   contents: read
@@ -135,6 +144,22 @@ jobs:
           URL="https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=backfill-permits&offset=$OFFSET&limit=$LIMIT"
           if [ "$APPLY" = "1" ]; then URL="$URL&apply=1"; fi
           curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
+
+  billing-inbox-historical-sync:
+    if: ${{ github.event.inputs.billing_sync_inbox != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Historical sync for one billing inbox
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          INBOX: ${{ github.event.inputs.billing_sync_inbox }}
+          SINCE_DAYS: ${{ github.event.inputs.billing_sync_since_days }}
+          MAX_MSGS: ${{ github.event.inputs.billing_sync_max }}
+        run: |
+          curl --fail-with-body -sS --max-time 90 \
+            -w "\nHTTP %{http_code}\n" \
+            "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=sync&inbox=$INBOX&since=$SINCE_DAYS&max=$MAX_MSGS"
 
   billing-inbox-sync:
     runs-on: ubuntu-latest
