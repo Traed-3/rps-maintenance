@@ -111,10 +111,13 @@ export async function backfillFieldTicketsForJob(jobId: string, opts: { apply?: 
   if (!job.site_number) return { jobId, siteNumber: null, ticketsFound: 0, results: [{ workDate: '', ticketMessageId: '', status: 'error', detail: 'job has no site_number to search by' }] }
 
   const rawIds = await listMessages('rpinvoicing', job.site_number, 100)
-  // Same-day tickets can arrive twice — the instant Gmail auto-forward from
-  // const.inv.rp, and sometimes a second, later self-forward to file it under
-  // the matching work-order thread. Keep only the earliest per (day, normalized
-  // subject) so it's never filed twice under two different message ids.
+  // A ticket can arrive twice — the instant Gmail auto-forward from
+  // const.inv.rp, and sometimes a second, LATER self-forward (a different
+  // calendar day) to file it under the matching work-order thread. Both
+  // carry the same subject (Tristin's own text encodes the real work date),
+  // so dedupe on normalized subject alone — never on day+subject, or the
+  // late re-forward's own received-date would slip past as a "different"
+  // ticket — and keep the earliest copy, since that's the original send.
   const seen = new Map<string, { id: string; subject: string; internalDate: string }>()
   for (const id of rawIds) {
     const msg = await getMessage('rpinvoicing', id)
@@ -122,7 +125,7 @@ export async function backfillFieldTicketsForJob(jobId: string, opts: { apply?: 
     // Same false-positive class caught in the permit backfill: Gmail matches
     // a term anywhere in the thread, not just this message's own subject.
     if (!subject.includes(job.site_number) || !TICKET_SUBJECT.test(subject)) continue
-    const key = `${ymdInET(msg.internalDate)}|${normalizeSubject(subject)}`
+    const key = normalizeSubject(subject)
     const existing = seen.get(key)
     if (!existing || Number(msg.internalDate ?? 0) < Number(existing.internalDate ?? 0)) {
       seen.set(key, { id, subject, internalDate: msg.internalDate ?? '0' })
@@ -165,9 +168,14 @@ export async function backfillFieldTicketsForJob(jobId: string, opts: { apply?: 
     if (!ocr || ocr.illegible) { results.push({ workDate, ticketMessageId: id, status: 'illegible', detail: `Ticket photo for "${subject}" could not be confidently transcribed — file it by hand.` }); continue }
 
     const crossCheckNotes: string[] = []
-    const ticketHours = ocr.techs.reduce((s, t) => s + t.onsite_hours, 0)
-    if (ocr.subject_line_hours != null && Math.abs(ticketHours - ocr.subject_line_hours) > 0.26) {
-      crossCheckNotes.push(`Ticket hours (${ticketHours}) do not match the subject-line hours (${ocr.subject_line_hours}) — verify.`)
+    // The subject line's "(x<crew>)" hours are the SHARED onsite window (e.g.
+    // "4.5(x2)" = both techs were there the same 4.5 hours) — not a total to
+    // sum across the crew. Check each tech against it individually.
+    if (ocr.subject_line_hours != null) {
+      const mismatched = ocr.techs.filter(t => Math.abs(t.onsite_hours - ocr.subject_line_hours!) > 0.26)
+      if (mismatched.length) {
+        crossCheckNotes.push(`Ticket hours don't match the subject-line hours (${ocr.subject_line_hours}) — verify: ${mismatched.map(t => `${t.name} ${t.onsite_hours}h`).join(', ')}`)
+      }
     }
     if (ocr.subject_line_crew != null && ocr.subject_line_crew !== ocr.techs.length) {
       crossCheckNotes.push(`Subject line says crew of ${ocr.subject_line_crew} but the ticket lists ${ocr.techs.length} tech(s) — verify.`)
