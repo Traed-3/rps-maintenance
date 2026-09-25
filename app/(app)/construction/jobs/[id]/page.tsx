@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
-import { money, fmtDate, projectNotificationStatus, CON_DOC_CATEGORIES, docTypeLabel } from '@/lib/construction'
+import { money, fmtDate, projectNotificationStatus, CON_DOC_CATEGORIES, docTypeLabel, stageMeta } from '@/lib/construction'
+import { permitStatusMeta } from '@/lib/permits'
 import { NotificationCard } from '@/components/construction/notification-card'
 import { ConPriorityBadge, QuoteStatusBadge, InvoiceStatusBadge, MaterialStatusBadge } from '@/components/construction/badges'
 import { StageSelect } from '@/components/construction/stage-select'
@@ -31,6 +32,7 @@ const TABS = [
   { key: 'overview',  label: 'Overview' },
   { key: 'quote',     label: 'Quotes' },
   { key: 'invoice',   label: 'Invoices' },
+  { key: 'permits',   label: 'Permits' },
   { key: 'materials', label: 'Materials' },
   { key: 'schedule',  label: 'Schedule' },
   { key: 'daily',     label: 'Daily Updates' },
@@ -63,8 +65,9 @@ export default async function JobDetailPage({
     { data: schedule }, { data: closeout }, { data: labor }, { data: documents },
     { data: dailyUpdates }, { data: disposables },
     { data: assignedSubs }, { data: allSubs }, { data: vendorRows },
+    { data: permitProjects }, { data: stageHistory },
   ] = await Promise.all([
-    admin.from('con_quotes').select('id, quote_number, proposal_date, status, final_total').eq('job_id', id).order('created_at', { ascending: false }),
+    admin.from('con_quotes').select('id, quote_number, proposal_date, status, final_total, kind, parent_quote_id').eq('job_id', id).order('created_at', { ascending: false }),
     admin.from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, due_date').eq('job_id', id).order('created_at', { ascending: false }),
     admin.from('con_job_materials').select('*').eq('job_id', id).order('created_at'),
     admin.from('con_schedule_entries').select('*').eq('job_id', id).order('schedule_date', { ascending: false }),
@@ -76,7 +79,14 @@ export default async function JobDetailPage({
     admin.from('con_job_subcontractors').select('id, role, con_subcontractors(id, name, trade, phone)').eq('job_id', id),
     admin.from('con_subcontractors').select('id, name, trade').eq('company_id', company_id).eq('is_active', true).order('name'),
     admin.from('con_vendors').select('name').eq('company_id', company_id).eq('is_active', true).order('name'),
+    admin.from('con_permit_projects').select('id, project_type, scheduled_work_date, ready_to_work, site_id, con_permit_sites(id, site_number, name)').eq('job_id', id),
+    admin.from('con_job_stage_history').select('*').eq('job_id', id).order('changed_at', { ascending: false }).limit(20),
   ])
+
+  const permitProjectIds = (permitProjects ?? []).map((p) => p.id)
+  const { data: jobPermits } = permitProjectIds.length
+    ? await admin.from('con_permits').select('id, project_id, permit_key, permit_type, status, requirement_status').in('project_id', permitProjectIds)
+    : { data: [] as { id: string; project_id: string; permit_key: string | null; permit_type: string; status: string; requirement_status: string }[] }
 
   // Documents filed against the site's OTHER projects. A site often runs
   // several jobs, and the importer could only tell which site a file came
@@ -180,6 +190,27 @@ export default async function JobDetailPage({
               <Detail label="Date Received" value={fmtDate(job.date_received)} />
               <Detail label="Project Start" value={fmtDate(job.project_start_date)} />
             </div>
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Stage History</h2></div>
+              {!stageHistory?.length ? (
+                <p className="px-4 py-6 text-sm text-gray-400">No history yet.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {stageHistory.map((h) => (
+                    <li key={h.id} className="px-4 py-2.5 text-sm">
+                      <span className="text-gray-400 text-xs">{new Date(h.changed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                      {' — '}
+                      {h.from_stage ? (
+                        <span className="text-gray-800">{stageMeta(h.from_stage).label} → {stageMeta(h.to_stage).label}</span>
+                      ) : (
+                        <span className="text-gray-800">created at {stageMeta(h.to_stage).label}</span>
+                      )}
+                      {h.changed_by_name && <span className="text-gray-400"> ({h.changed_by_name})</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -193,7 +224,7 @@ export default async function JobDetailPage({
           empty="No quotes for this job yet."
           rows={(quotes ?? []).map(q => ({
             id: q.id, href: `/billing/quotes/${q.id}`,
-            left: q.quote_number ?? 'Draft', sub: fmtDate(q.proposal_date),
+            left: (q.kind === 'change_order' ? 'CO · ' : '') + (q.quote_number ?? 'Draft'), sub: fmtDate(q.proposal_date),
             badge: <QuoteStatusBadge status={q.status} />, amount: money(q.final_total),
           }))}
         />
@@ -212,6 +243,40 @@ export default async function JobDetailPage({
             badge: <InvoiceStatusBadge status={inv.status} />, amount: money(inv.invoice_grand_total),
           }))}
         />
+      )}
+
+      {/* ── PERMITS ────────────────────────────────────────── */}
+      {tab === 'permits' && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100"><h2 className="font-semibold text-gray-900">Permits ({(jobPermits ?? []).length})</h2></div>
+          {!(jobPermits ?? []).length ? (
+            <p className="px-4 py-6 text-sm text-gray-400">No permits linked to this job.</p>
+          ) : (
+            <ul className="divide-y divide-gray-50">
+              {(permitProjects ?? []).map((proj) => {
+                const site = (proj as any).con_permit_sites
+                const permitsForProject = (jobPermits ?? []).filter((p) => p.project_id === proj.id)
+                if (!permitsForProject.length) return null
+                return (
+                  <li key={proj.id} className="px-4 py-3">
+                    <Link href={site ? `/construction/permits/sites/${site.id}` : '/construction/permits'} className="text-sm font-medium text-blue-600 hover:underline">
+                      {proj.project_type}{site ? ` — ${site.site_number}` : ''}
+                    </Link>
+                    <ul className="mt-1.5 space-y-1">
+                      {permitsForProject.map((p) => (
+                        <li key={p.id} className="flex items-center gap-2 text-xs">
+                          <span className="font-mono font-semibold text-gray-700">{p.permit_key ?? p.permit_type}</span>
+                          <span className={`px-2 py-0.5 rounded-full border ${permitStatusMeta(p.status).className}`}>{p.status}</span>
+                          {p.requirement_status === 'Not Required' && <span className="text-gray-400">(not required)</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
       )}
 
       {/* ── MATERIALS ──────────────────────────────────────── */}

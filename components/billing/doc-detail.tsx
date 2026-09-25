@@ -8,13 +8,15 @@ import { DocBreakdown } from '@/components/billing/doc-breakdown'
 import { EmailInvoiceForm, type SentEmail } from '@/components/construction/email-invoice-form'
 import { QUOTE_STATUSES, INVOICE_STATUSES, fmtDate, money } from '@/lib/billing'
 import { docFromRow } from '@/lib/billing-pdf'
-import { setQuoteStatus, setInvoiceStatus, deleteQuote, deleteInvoice, convertQuoteToInvoice, duplicateQuote, startProjectFromQuote } from '@/app/(app)/billing/actions'
+import { setQuoteStatus, setInvoiceStatus, deleteQuote, deleteInvoice, convertQuoteToInvoice, duplicateQuote, startProjectFromQuote, createChangeOrder } from '@/app/(app)/billing/actions'
 
 type Row = Record<string, unknown> & { con_customers: { id: string; name: string; billing_address: string | null; email: string | null; billing_contact: string | null } | null }
 
 /** Detail page body for a quote or invoice: header facts, actions, the printed face, and the PDF links. */
-export function DocDetail({ kind, row, lines, canWrite, emails, resendConfigured, invoicesFromQuote }: {
-  kind: 'quote' | 'invoice'; row: Row; lines: Record<string, unknown>[]; canWrite: boolean; emails?: SentEmail[]; resendConfigured?: boolean; invoicesFromQuote?: { id: string; invoice_number: string | null; status: string }[]
+export function DocDetail({ kind, row, lines, canWrite, emails, resendConfigured, invoicesFromQuote, changeOrders }: {
+  kind: 'quote' | 'invoice'; row: Row; lines: Record<string, unknown>[]; canWrite: boolean; emails?: SentEmail[]; resendConfigured?: boolean
+  invoicesFromQuote?: { id: string; invoice_number: string | null; status: string }[]
+  changeOrders?: { id: string; quote_number: string | null; status: string }[]
 }) {
   const id = row.id as string
   const isQ = kind === 'quote'
@@ -33,7 +35,7 @@ export function DocDetail({ kind, row, lines, canWrite, emails, resendConfigured
         <Link href={isQ ? '/billing/quotes' : '/billing/invoices'} className="text-sm text-gray-500 hover:text-gray-700">← {isQ ? 'Quotes' : 'Invoices'}</Link>
         <div className="flex flex-wrap items-start justify-between gap-3 mt-2">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 font-mono">{number ?? 'DRAFT'}<span className="ml-3 text-base font-sans font-normal text-gray-500 capitalize">{String(row.department ?? 'construction')}</span></h1>
+            <h1 className="text-2xl font-bold text-gray-900 font-mono">{row.kind === 'change_order' && <span className="text-purple-600">CO · </span>}{number ?? 'DRAFT'}<span className="ml-3 text-base font-sans font-normal text-gray-500 capitalize">{String(row.department ?? 'construction')}</span></h1>
             <p className="text-sm text-gray-600 mt-0.5">{row.con_customers?.name ?? 'No customer'}{row.store_label ? ` · ${row.store_label}` : ''}{row.site_number && row.site_number !== row.store_label ? ` · ${row.site_number}` : ''}{row.csr_number ? ` · CSR ${row.csr_number}` : ''}</p>
             <p className="text-xs text-gray-400">{isQ ? `Quote date ${fmtDate(row.proposal_date as string)}${row.bid_due ? ` · bid due ${fmtDate(row.bid_due as string)}` : ''}` : `Invoice date ${fmtDate(row.invoice_date as string)}${row.due_date ? ` · due ${fmtDate(row.due_date as string)}` : ''}`} · labor {money(doc.inputs.labor_rate)}/hr{doc.laborRateLabel ? ` (${doc.laborRateLabel})` : ''} · markup {(doc.inputs.material_markup_pct * 100).toFixed(0)}%</p>
           </div>
@@ -54,11 +56,14 @@ export function DocDetail({ kind, row, lines, canWrite, emails, resendConfigured
                 {/* Approved quote → Construction job (the project pipeline). Shows once, then the Job button above takes over. */}
                 {row.status === 'approved' && !row.job_id && <form action={startProjectFromQuote.bind(null, id)}><Button type="submit" className="gap-2 bg-green-700 hover:bg-green-800"><Hammer className="w-3.5 h-3.5" />Start project</Button></form>}
                 <form action={duplicateQuote.bind(null, id)}><Button type="submit" variant="outline" className="gap-2"><Copy className="w-3.5 h-3.5" />Duplicate</Button></form>
+                {!row.parent_quote_id && <form action={createChangeOrder.bind(null, id)}><Button type="submit" variant="outline" className="gap-2 border-purple-300 text-purple-700 hover:bg-purple-50">New change order</Button></form>}
                 <form action={convertQuoteToInvoice.bind(null, id)}><Button type="submit" className="gap-2"><Receipt className="w-3.5 h-3.5" />Create invoice from this quote</Button></form>
               </div>
             )}
           </div>
         )}
+        {isQ && Boolean(row.parent_quote_id) && <p className="mt-2 text-xs text-gray-500">Change order against <Link href={`/billing/quotes/${row.parent_quote_id}`} className="text-blue-600 underline">the original quote</Link>.</p>}
+        {isQ && changeOrders && changeOrders.length > 0 && <p className="mt-2 text-xs text-gray-500">Change orders: {changeOrders.map(c => <Link key={c.id} href={`/billing/quotes/${c.id}`} className="text-purple-600 underline mr-2">{c.quote_number ?? 'draft'}</Link>)}</p>}
         {isQ && invoicesFromQuote && invoicesFromQuote.length > 0 && <p className="mt-2 text-xs text-gray-500">Invoiced as {invoicesFromQuote.map(i => <Link key={i.id} href={`/billing/invoices/${i.id}`} className="text-blue-600 underline mr-2">{i.invoice_number ?? 'draft'}</Link>)}</p>}
       </div>
 
