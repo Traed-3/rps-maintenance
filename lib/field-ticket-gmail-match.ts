@@ -1,13 +1,20 @@
-// Matches a job's handwritten field tickets (const.inv.rp) to their typed
-// daily updates (econstruction), OCRs the ticket with Claude, and files a
-// review-required draft via fileFieldTicketDraft(). Requires GMAIL_TOKEN_CONSTINVRP
-// to be connected (Settings → Billing inboxes) — const.inv.rp is not read by
-// the generic billing-inbox sync, only here.
+// Matches a job's handwritten field tickets to their typed daily updates
+// (econstruction), OCRs the ticket with Claude, and files a review-required
+// draft via fileFieldTicketDraft(). Reads the already-connected `rpinvoicing`
+// inbox for the tickets themselves — techs address them to
+// const.inv.rp@gmail.com, but that mailbox has Gmail's own "Forward a copy of
+// incoming mail to rpinvoicing@gmail.com" rule turned on (confirmed
+// 2026-09-26), so every ticket + its photos already lands in rpinvoicing the
+// instant it's sent. No separate const.inv.rp connection/token is needed.
+// (rpinvoicing sometimes also carries a SECOND copy — someone manually
+// re-forwarding the same ticket to themselves to file it under the matching
+// Sunoco/portal work-order thread — the dedup below, keyed by day + normalized
+// subject, collapses that back down to one.)
 //
 // Two-source design Trae validated on a real example (WOT0104603/SU-9901,
 // 2026-09-24): the typed econstruction update is the description source (a
 // tech's handwriting is unreliable — Vac Truck read as HVAC, "product line"
-// as "pocket line", etc. on first pass); the const.inv.rp ticket photo is the
+// as "pocket line", etc. on first pass); the ticket photo is the
 // hours/crew/trucks source, cross-checked against the ticket's own subject
 // line. Every filed row is a draft (`needs_review`) until a human confirms it.
 import Anthropic from '@anthropic-ai/sdk'
@@ -81,9 +88,18 @@ export type MatchResult = {
 
 export type JobBackfillSummary = { jobId: string; siteNumber: string | null; ticketsFound: number; results: MatchResult[] }
 
+/** A ticket's real subject convention always carries a "(x<crew>)" count —
+ * the Sunoco/portal dispatch notices sharing this inbox never do, so this is
+ * what tells a real field ticket apart from the rest of rpinvoicing's traffic. */
+const TICKET_SUBJECT = /\(x\d+\)/i
+
+function normalizeSubject(s: string): string {
+  return s.replace(/^(fwd|fw|re)\s*:\s*/i, '').trim().toLowerCase()
+}
+
 /**
- * Finds every const.inv.rp ticket for this job's site number, pairs each with
- * its same-day econstruction typed update, OCRs the ticket, and files a draft.
+ * Finds every field ticket for this job's site number, pairs each with its
+ * same-day econstruction typed update, OCRs the ticket, and files a draft.
  * Dry-run by default (apply=false) — reports what it WOULD file without
  * calling fileFieldTicketDraft, since a ticket OCR should be reviewed before
  * the first real run for a new job, same as the permit-email backfill.
@@ -94,16 +110,30 @@ export async function backfillFieldTicketsForJob(jobId: string, opts: { apply?: 
   if (!job) return { jobId, siteNumber: null, ticketsFound: 0, results: [{ workDate: '', ticketMessageId: '', status: 'error', detail: 'job not found' }] }
   if (!job.site_number) return { jobId, siteNumber: null, ticketsFound: 0, results: [{ workDate: '', ticketMessageId: '', status: 'error', detail: 'job has no site_number to search by' }] }
 
-  const ticketIds = await listMessages('constinvrp', job.site_number, 50)
-  const results: MatchResult[] = []
-  let ticketsFound = 0
-
-  for (const id of ticketIds) {
-    const msg = await getMessage('constinvrp', id)
+  const rawIds = await listMessages('rpinvoicing', job.site_number, 100)
+  // Same-day tickets can arrive twice — the instant Gmail auto-forward from
+  // const.inv.rp, and sometimes a second, later self-forward to file it under
+  // the matching work-order thread. Keep only the earliest per (day, normalized
+  // subject) so it's never filed twice under two different message ids.
+  const seen = new Map<string, { id: string; subject: string; internalDate: string }>()
+  for (const id of rawIds) {
+    const msg = await getMessage('rpinvoicing', id)
     const subject = header(msg, 'Subject')
     // Same false-positive class caught in the permit backfill: Gmail matches
     // a term anywhere in the thread, not just this message's own subject.
-    if (!subject.includes(job.site_number)) continue
+    if (!subject.includes(job.site_number) || !TICKET_SUBJECT.test(subject)) continue
+    const key = `${ymdInET(msg.internalDate)}|${normalizeSubject(subject)}`
+    const existing = seen.get(key)
+    if (!existing || Number(msg.internalDate ?? 0) < Number(existing.internalDate ?? 0)) {
+      seen.set(key, { id, subject, internalDate: msg.internalDate ?? '0' })
+    }
+  }
+
+  const results: MatchResult[] = []
+  let ticketsFound = 0
+
+  for (const { id, subject } of seen.values()) {
+    const msg = await getMessage('rpinvoicing', id)
     ticketsFound++
     const workDate = ymdInET(msg.internalDate)
 
@@ -130,7 +160,7 @@ export async function backfillFieldTicketsForJob(jobId: string, opts: { apply?: 
     const description = extractText(updateMsg).trim()
     const updatePhotoAtts = listAttachments(updateMsg).filter(a => /^image\//i.test(a.mimeType)).slice(0, 4)
 
-    const ticketBytes = await getAttachment('constinvrp', id, ticketPhoto.attachmentId)
+    const ticketBytes = await getAttachment('rpinvoicing', id, ticketPhoto.attachmentId)
     const ocr = await ocrTicket(ticketBytes, ticketPhoto.mimeType, subject)
     if (!ocr || ocr.illegible) { results.push({ workDate, ticketMessageId: id, status: 'illegible', detail: `Ticket photo for "${subject}" could not be confidently transcribed — file it by hand.` }); continue }
 
@@ -157,7 +187,7 @@ export async function backfillFieldTicketsForJob(jobId: string, opts: { apply?: 
       sourceRefs: { ticket_message_id: id, ticket_attachment_id: ticketPhoto.attachmentId, update_message_id: updateMsg.id },
       attachments: opts.apply ? [
         { bytes: ticketBytes, filename: ticketPhoto.filename, mimeType: ticketPhoto.mimeType, kind: 'daily_ticket' },
-        ...await Promise.all(extraPhotos.map(async a => ({ bytes: await getAttachment('constinvrp', id, a.attachmentId), filename: a.filename, mimeType: a.mimeType, kind: 'photo' as const }))),
+        ...await Promise.all(extraPhotos.map(async a => ({ bytes: await getAttachment('rpinvoicing', id, a.attachmentId), filename: a.filename, mimeType: a.mimeType, kind: 'photo' as const }))),
         ...await Promise.all(updatePhotoAtts.map(async a => ({ bytes: await getAttachment('econstruction', updateMsg!.id, a.attachmentId), filename: a.filename, mimeType: a.mimeType, kind: 'photo' as const }))),
       ] : undefined,
     }

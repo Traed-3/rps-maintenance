@@ -20,11 +20,11 @@ export const maxDuration = 60
  * all sites in one call. Re-run with the `nextOffset` the response returns
  * until it comes back null.
  *
- * `pass=backfill-field-tickets&jobId=…[&apply=1]` matches one job's
- * const.inv.rp field tickets to their econstruction typed updates and files
- * each as a needs_review con_daily_updates draft (see
- * lib/field-ticket-gmail-match.ts) — a read-only preview without `apply=1`.
- * Requires GMAIL_TOKEN_CONSTINVRP to be connected.
+ * `pass=backfill-field-tickets&jobId=…[&apply=1]` matches one job's field
+ * tickets (read from `rpinvoicing` — const.inv.rp auto-forwards there, see
+ * lib/field-ticket-gmail-match.ts) to their econstruction typed updates and
+ * files each as a needs_review con_daily_updates draft — a read-only preview
+ * without `apply=1`. No extra inbox connection needed.
  */
 export async function GET(request: NextRequest) {
   const auth = request.headers.get('authorization')

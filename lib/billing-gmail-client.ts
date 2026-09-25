@@ -17,15 +17,21 @@
  * marked read from this client — the inbox stays exactly as the humans left it.
  */
 
-export type BillingInbox = 'econstruction' | 'constructionreceipts' | 'rpinvoicing' | 'maintenance' | 'constinvrp'
+export type BillingInbox = 'econstruction' | 'constructionreceipts' | 'rpinvoicing' | 'maintenance'
 
 export const BILLING_INBOXES: ReadonlyArray<{ key: BillingInbox; email: string; purpose: string; envKey: string }> = [
   { key: 'econstruction',        email: 'econstruction.rp@gmail.com',    purpose: 'Construction dispatch — packing slips, vendor quotes, invoice workups', envKey: 'GMAIL_TOKEN_ECONSTRUCTION' },
   { key: 'constructionreceipts', email: 'constructionreceipts@gmail.com', purpose: 'Vendor receipts — cost updates',                                        envKey: 'GMAIL_TOKEN_CONSTRUCTIONRECEIPTS' },
-  { key: 'rpinvoicing',          email: 'rpinvoicing@gmail.com',          purpose: 'Service invoicing — tech completions and ticket workups',              envKey: 'GMAIL_TOKEN_RPINVOICING' },
+  { key: 'rpinvoicing',          email: 'rpinvoicing@gmail.com',          purpose: 'Service invoicing — tech completions, ticket workups, and (via a Gmail auto-forward rule on const.inv.rp) every foreman field ticket', envKey: 'GMAIL_TOKEN_RPINVOICING' },
   { key: 'maintenance',          email: 'maintenance.rps@gmail.com',      purpose: 'Fleet maintenance — shop receipts',                                    envKey: 'GMAIL_TOKEN_MAINTENANCE' },
-  { key: 'constinvrp',           email: 'const.inv.rp@gmail.com',         purpose: 'Foreman field tickets — handwritten hours/crew/trucks per job',        envKey: 'GMAIL_TOKEN_CONSTINVRP' },
 ]
+
+// const.inv.rp@gmail.com has Gmail's own "Forward a copy of incoming mail to
+// rpinvoicing@gmail.com" rule turned on (confirmed in its Settings ->
+// Forwarding, 2026-09-26) — so every foreman field ticket sent there already
+// lands in rpinvoicing too, attachments and all, the instant it arrives. No
+// separate const.inv.rp connection/token is needed for the field-ticket
+// backfill; it reads rpinvoicing directly (see lib/field-ticket-gmail-match.ts).
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me'

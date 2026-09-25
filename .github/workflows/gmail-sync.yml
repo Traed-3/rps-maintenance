@@ -43,6 +43,12 @@ on:
       billing_sync_max:
         description: 'Max messages to process in this batch (Gmail fetches are slow — keep this small, default 20).'
         default: '20'
+      backfill_ticket_job_id:
+        description: 'Optional — one job''s con_jobs.id to run the field-ticket backfill for (matches rpinvoicing tickets to econstruction updates). Leave blank for a normal run.'
+        default: ''
+      backfill_ticket_apply:
+        description: 'Set to 1 to actually file the drafts (default is a dry-run preview only).'
+        default: ''
 
 permissions:
   contents: read
@@ -160,6 +166,21 @@ jobs:
           curl --fail-with-body -sS --max-time 90 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=sync&inbox=$INBOX&since=$SINCE_DAYS&max=$MAX_MSGS"
+
+  billing-field-ticket-backfill:
+    if: ${{ github.event.inputs.backfill_ticket_job_id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Backfill one job's field tickets (rpinvoicing + econstruction)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          JOB_ID: ${{ github.event.inputs.backfill_ticket_job_id }}
+          APPLY: ${{ github.event.inputs.backfill_ticket_apply }}
+        run: |
+          URL="https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=backfill-field-tickets&jobId=$JOB_ID"
+          if [ "$APPLY" = "1" ]; then URL="$URL&apply=1"; fi
+          curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
 
   billing-inbox-sync:
     runs-on: ubuntu-latest
