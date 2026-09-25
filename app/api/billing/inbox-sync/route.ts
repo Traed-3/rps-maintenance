@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { syncAllInboxes, syncInbox, extractPending } from '@/lib/billing-inbox-sync'
 import { BILLING_INBOXES, inboxStatus, type BillingInbox } from '@/lib/billing-gmail-client'
 import { backfillPermitEmails } from '@/lib/permit-email-backfill'
+import { backfillFieldTicketsForJob } from '@/lib/field-ticket-gmail-match'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -18,6 +19,12 @@ export const maxDuration = 60
  * Gmail's full-message fetches are slow enough to risk the 60s budget across
  * all sites in one call. Re-run with the `nextOffset` the response returns
  * until it comes back null.
+ *
+ * `pass=backfill-field-tickets&jobId=…[&apply=1]` matches one job's
+ * const.inv.rp field tickets to their econstruction typed updates and files
+ * each as a needs_review con_daily_updates draft (see
+ * lib/field-ticket-gmail-match.ts) — a read-only preview without `apply=1`.
+ * Requires GMAIL_TOKEN_CONSTINVRP to be connected.
  */
 export async function GET(request: NextRequest) {
   const auth = request.headers.get('authorization')
@@ -43,6 +50,11 @@ export async function GET(request: NextRequest) {
       const offset = Math.max(parseInt(q.get('offset') ?? '0', 10) || 0, 0)
       const permitLimit = Math.min(parseInt(q.get('limit') ?? '5', 10) || 5, 10)
       out.backfillPermits = await backfillPermitEmails({ offset, limit: permitLimit, apply: q.get('apply') === '1' })
+    }
+    if (pass === 'backfill-field-tickets') {
+      const jobId = q.get('jobId')
+      if (!jobId) return NextResponse.json({ ok: false, error: 'jobId is required' }, { status: 400 })
+      out.backfillFieldTickets = await backfillFieldTicketsForJob(jobId, { apply: q.get('apply') === '1' })
     }
     return NextResponse.json(out)
   } catch (e) {

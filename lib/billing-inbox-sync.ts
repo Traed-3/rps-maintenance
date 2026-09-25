@@ -40,6 +40,10 @@ const INBOX_QUERY: Record<BillingInbox, string> = {
   constructionreceipts: 'has:attachment -in:spam -in:trash',
   rpinvoicing:          `has:attachment -in:spam -in:trash ${PAPERWORK} ${NOT_DISPATCH} (filename:pdf OR filename:xlsx OR filename:xls OR filename:csv)`,
   maintenance:          `has:attachment -in:spam -in:trash (invoice OR receipt OR "packing slip" OR "packing list") ${NOT_DISPATCH}`,
+  // Unused: const.inv.rp's handwritten field tickets are hours/crew/trucks,
+  // not vendor paperwork, so this inbox is excluded from syncAllInboxes below
+  // and read only by the dedicated field-ticket matcher (lib/field-ticket-backfill.ts).
+  constinvrp:           '',
 }
 
 /** A tech forwarding a portal dispatch back with photos — never paperwork for the receive queue. */
@@ -205,7 +209,10 @@ export async function syncInbox(inbox: BillingInbox, opts: { maxResults?: number
 
 export async function syncAllInboxes(opts: { maxResults?: number; sinceDays?: number } = {}): Promise<SyncResult[]> {
   const out: SyncResult[] = []
-  for (const inbox of connectedInboxes()) out.push(await syncInbox(inbox, opts))
+  for (const inbox of connectedInboxes()) {
+    if (inbox === 'constinvrp') continue // handled by the dedicated field-ticket matcher, not generic vendor-paperwork extraction
+    out.push(await syncInbox(inbox, opts))
+  }
   return out
 }
 

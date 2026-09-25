@@ -55,9 +55,13 @@ export default async function ConstructionDashboard() {
   const invoicedAllTime = invoiced.reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
   const draftInvoices = (invoices ?? []).filter(i => i.status === 'draft')
 
-  const { count: reviewCount } = await admin.from('con_documents')
-    .select('id', { count: 'exact', head: true })
-    .eq('company_id', company_id).eq('review_status', 'needs_review')
+  const [{ count: docReviewCount }, { count: ticketDraftCount }] = await Promise.all([
+    admin.from('con_documents').select('id', { count: 'exact', head: true })
+      .eq('company_id', company_id).eq('review_status', 'needs_review'),
+    admin.from('con_daily_updates').select('id', { count: 'exact', head: true })
+      .eq('company_id', company_id).eq('review_status', 'needs_review'),
+  ])
+  const reviewCount = (docReviewCount ?? 0) + (ticketDraftCount ?? 0)
 
   const tiles = [
     { href: '/construction/jobs', label: 'Jobs', icon: HardHat, value: allJobs.length },
