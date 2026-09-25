@@ -27,36 +27,44 @@ import { useRouter } from 'next/navigation'
 import { CON_ALLOWED_USER_IDS } from '@/lib/construction'
 import { BILLING_READ_ROLES } from '@/lib/billing'
 
-type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean; billing?: boolean }
+type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean; billing?: boolean; module?: string }
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   // Maintenance is now a module hub: Assets, Tickets and Shop live inside it
   // (they keep their own URLs, so the module stays highlighted while you're in any of them).
-  { href: '/maintenance', label: 'Maintenance', icon: Wrench, match: ['/maintenance', '/assets', '/tickets', '/shop'] },
+  // No `module` here on purpose — Shop/Tickets can be blocked separately from
+  // Maintenance itself (see lib/modules.ts), so this hub link only disappears
+  // if the Maintenance & Assets module specifically is blocked, checked below.
+  { href: '/maintenance', label: 'Maintenance', icon: Wrench, match: ['/maintenance', '/assets', '/tickets', '/shop'], module: 'maintenance' },
   // `construction: true` marks this link as gated to the Construction
   // allowlist (see CON_ALLOWED_USER_IDS) while the module is being refined.
-  { href: '/construction', label: 'Construction', icon: HardHat, construction: true },
+  { href: '/construction', label: 'Construction', icon: HardHat, construction: true, module: 'construction' },
   // 7-Eleven / Wawa / Sunoco service calls, synced from rpdispatcher + rpinvoicing.
-  { href: '/service', label: 'Service Dispatch', icon: Fuel },
-  { href: '/billing', label: 'Quotes & Invoices', icon: FileText, billing: true },
-  { href: '/inventory', label: 'Inventory', icon: Package },
+  { href: '/service', label: 'Service Dispatch', icon: Fuel, module: 'service_dispatch' },
+  { href: '/billing', label: 'Quotes & Invoices', icon: FileText, billing: true, module: 'billing' },
+  { href: '/inventory', label: 'Inventory', icon: Package, module: 'inventory' },
   // Company-wide calendar that overlays Maintenance and Construction items.
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/expenses', label: 'Expenses', icon: Receipt },
-  { href: '/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/reports', label: 'Reports', icon: BarChart3, module: 'reports_payroll' },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
-export default function AppNav({ email, role, userId }: { email: string; role?: string; userId?: string }) {
+export default function AppNav({ email, role, userId, blockedModules }: { email: string; role?: string; userId?: string; blockedModules?: string[] }) {
   const pathname = usePathname()
   const router = useRouter()
   const isAdmin = ['owner', 'manager'].includes(role ?? '')
   const canSeeConstruction = CON_ALLOWED_USER_IDS.includes(userId ?? '')
+  const blocked = new Set(blockedModules ?? [])
 
   // Hide the Construction link from anyone not on the allowlist.
   const canSeeBilling = canSeeConstruction || (BILLING_READ_ROLES as readonly string[]).includes(role ?? '')
-  const visibleNavItems = navItems.filter(i => (canSeeConstruction || !('construction' in i)) && (canSeeBilling || !('billing' in i)))
+  const visibleNavItems = navItems.filter(i =>
+    (canSeeConstruction || !('construction' in i)) &&
+    (canSeeBilling || !('billing' in i)) &&
+    !(i.module && blocked.has(i.module))
+  )
 
   // Mobile bottom-bar items — owners/managers get Settings so they can reach
   // user management, company info, alerts, etc. from a phone or the iPad app.

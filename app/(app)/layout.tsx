@@ -62,9 +62,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const unreadCount = filteredNotifications.filter(n => !n.is_read).length
 
+  const { data: blocks } = await admin.from('profile_module_blocks').select('module').eq('profile_id', user.id)
+  const blockedModules = (blocks ?? []).map(b => b.module)
+
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <AppNav email={user.email ?? ''} role={profile?.role ?? 'viewer'} userId={user.id} />
+      <AppNav email={user.email ?? ''} role={profile?.role ?? 'viewer'} userId={user.id} blockedModules={blockedModules} />
 
       {/* Notification bell — top right on desktop */}
       <div className="fixed top-3 right-4 z-20 hidden md:block">

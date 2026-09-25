@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
+import { MODULE_KEYS, type ModuleKey } from '@/lib/modules'
 
 async function getProfile() {
   const supabase = await createClient()
@@ -100,6 +101,31 @@ export async function toggleUserActive(userId: string, isActive: boolean) {
   await admin.from('profiles').update({ is_active: isActive })
     .eq('id', userId)
     .eq('company_id', profile.company_id)
+
+  revalidatePath('/settings/users')
+}
+
+// ── Per-module access overrides ───────────────────────────────────────────────
+
+/** Replaces this user's full set of blocked modules with `blockedKeys`. */
+export async function setUserModuleBlocks(userId: string, blockedKeys: string[]) {
+  const profile = await getProfile()
+  if (!profile || !['owner', 'manager'].includes(profile.role)) return
+  if (userId === profile.id) return  // can't block your own access — Settings would still be reachable, but no reason to allow it
+
+  const admin = createAdminClient()
+
+  // Confirm this user actually belongs to the caller's company before
+  // touching their blocks — same scoping every other action here uses.
+  const { data: target } = await admin.from('profiles').select('id').eq('id', userId).eq('company_id', profile.company_id).maybeSingle()
+  if (!target) return
+
+  const valid = blockedKeys.filter((k): k is ModuleKey => (MODULE_KEYS as readonly string[]).includes(k))
+
+  await admin.from('profile_module_blocks').delete().eq('profile_id', userId)
+  if (valid.length) {
+    await admin.from('profile_module_blocks').insert(valid.map(module => ({ profile_id: userId, module })))
+  }
 
   revalidatePath('/settings/users')
 }

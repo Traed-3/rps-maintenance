@@ -4,6 +4,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/supabase/keys'
 import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
+import { moduleForPath } from '@/lib/modules'
 
 // profiles has RLS enabled with zero policies defined (every other read of it
 // in this app goes through the service-role admin client for that reason) —
@@ -96,6 +97,21 @@ export async function proxy(request: NextRequest) {
       const page = profile?.default_landing_page
       const landingPage = page && (VALID_LANDING_PAGES as readonly string[]).includes(page) ? page : DEFAULT_LANDING_PAGE
       return NextResponse.redirect(new URL(landingPage, request.url))
+    }
+
+    // Per-user module blocks (Settings → Users). Checked after the /login
+    // special case above, since /login itself is never a blockable module.
+    const moduleKey = moduleForPath(pathname)
+    if (moduleKey) {
+      const { data: block } = await admin
+        .from('profile_module_blocks')
+        .select('module')
+        .eq('profile_id', user.id)
+        .eq('module', moduleKey)
+        .maybeSingle()
+      if (block) {
+        return NextResponse.redirect(new URL(`/dashboard?blocked=${moduleKey}`, request.url))
+      }
     }
   }
 
