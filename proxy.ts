@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/keys'
+import { createClient } from '@supabase/supabase-js'
+import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/supabase/keys'
 import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
+
+// profiles has RLS enabled with zero policies defined (every other read of it
+// in this app goes through the service-role admin client for that reason) —
+// querying it with the session-bound anon-key client below silently returns
+// nothing. Needed for both the is_active check and the /login landing-page
+// lookup, so a plain admin client here (proxy.ts already runs on the Node
+// runtime, not Edge — no restriction on using the service-role key).
+const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false },
+})
 
 // In Next.js 16, middleware is renamed to "proxy" and uses the nodejs runtime.
 export async function proxy(request: NextRequest) {
@@ -53,18 +64,39 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && pathname === '/login') {
-    // Rare path (already-signed-in user manually hits /login, e.g. an old
-    // bookmark) — still honor their configured landing page for consistency
-    // with the actual login flows in auth/callback and the password form.
-    const { data: profile } = await supabase
+  // Only for pages the login gate actually covers, plus /login itself (to
+  // catch a stale session there too) — skip it for the cron/webhook/PWA
+  // paths above, which either carry no session cookie at all or shouldn't
+  // have a real navigation bounced mid-fetch (manifest.webmanifest, sw.js).
+  if (user && (pathname === '/login' || !isPublic)) {
+    // Settings → Users has an Active/Inactive toggle, but until now nothing
+    // actually enforced it — a deactivated employee could still sign in and
+    // use the whole app. This is the one place every authenticated request
+    // already passes through, so it's the right spot to cut them off.
+    const { data: profile } = await admin
       .from('profiles')
-      .select('default_landing_page')
+      .select('is_active, default_landing_page')
       .eq('id', user.id)
       .maybeSingle()
-    const page = profile?.default_landing_page
-    const landingPage = page && (VALID_LANDING_PAGES as readonly string[]).includes(page) ? page : DEFAULT_LANDING_PAGE
-    return NextResponse.redirect(new URL(landingPage, request.url))
+
+    if (profile?.is_active === false) {
+      await supabase.auth.signOut()
+      const redirect = NextResponse.redirect(new URL('/login?disabled=1', request.url))
+      // signOut() clears the session cookies via the setAll callback above,
+      // which reassigns supabaseResponse — carry those cleared cookies onto
+      // the response we actually return, or the browser keeps the old ones.
+      supabaseResponse.cookies.getAll().forEach((c) => redirect.cookies.set(c))
+      return redirect
+    }
+
+    if (pathname === '/login') {
+      // Rare path (already-signed-in user manually hits /login, e.g. an old
+      // bookmark) — still honor their configured landing page for consistency
+      // with the actual login flows in auth/callback and the password form.
+      const page = profile?.default_landing_page
+      const landingPage = page && (VALID_LANDING_PAGES as readonly string[]).includes(page) ? page : DEFAULT_LANDING_PAGE
+      return NextResponse.redirect(new URL(landingPage, request.url))
+    }
   }
 
   return supabaseResponse
