@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { canReadConstruction, money } from '@/lib/construction'
+import { moduleLabel } from '@/lib/modules'
 import { ArrowRight, Wrench, HardHat, Fuel, AlertTriangle, CheckCircle } from 'lucide-react'
 
 const SVC_OPEN_STATUSES = ['dispatched', 'new', 'on_site', 'in_progress', 'waiting_parts', 'rtn_needed']
@@ -58,7 +59,12 @@ function DepartmentCard({
   )
 }
 
-export default async function CompanyDashboardPage() {
+export default async function CompanyDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ blocked?: string }>
+}) {
+  const { blocked } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const admin = createAdminClient()
@@ -120,6 +126,12 @@ export default async function CompanyDashboardPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
+
+      {blocked && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          You don&apos;t have access to <strong>{moduleLabel(blocked)}</strong>. Contact your manager if this is unexpected.
+        </div>
+      )}
 
       {/* Hero header band */}
       <div className="relative overflow-hidden rounded-3xl px-6 py-7 sm:px-8 sm:py-8 shadow-lg"

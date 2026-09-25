@@ -7,6 +7,7 @@ import { LandingPageForm } from './landing-page-form'
 import { AddEmployeeForm } from './add-employee-form'
 import { DeleteUserButton } from './delete-user-button'
 import { EditUserButton } from './edit-user-button'
+import { ModulesButton } from './modules-button'
 import { updateUserRole, toggleUserActive, updateDefaultLandingPage } from './actions'
 
 export default async function UsersSettingsPage() {
@@ -24,6 +25,16 @@ export default async function UsersSettingsPage() {
     .select('id, full_name, email, phone, role, is_active, created_at, default_landing_page, job_title')
     .eq('company_id', profile!.company_id)
     .order('full_name')
+
+  const { data: allBlocks } = await admin
+    .from('profile_module_blocks')
+    .select('profile_id, module')
+    .in('profile_id', (users ?? []).map(u => u.id))
+
+  const blocksByUser = new Map<string, string[]>()
+  for (const b of allBlocks ?? []) {
+    blocksByUser.set(b.profile_id, [...(blocksByUser.get(b.profile_id) ?? []), b.module])
+  }
 
   const ROLE_ORDER = ['owner', 'manager', 'shop_manager', 'shop_employee', 'service_tech', 'office_staff', 'viewer']
 
@@ -57,6 +68,7 @@ export default async function UsersSettingsPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-500">Role</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 hidden md:table-cell">Lands On</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Module Access</th>
               {profile!.role === 'owner' && <th className="px-4 py-3" />}
             </tr>
           </thead>
@@ -112,6 +124,7 @@ export default async function UsersSettingsPage() {
                       <form action={handleToggleActive}>
                         <button
                           type="submit"
+                          title={u.is_active ? 'Click to deactivate — signs them out and blocks login' : 'Click to reactivate'}
                           className={`text-xs px-2 py-0.5 rounded-full border font-medium transition-colors ${
                             u.is_active
                               ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
@@ -120,7 +133,13 @@ export default async function UsersSettingsPage() {
                         >
                           {u.is_active ? 'Active' : 'Inactive'}
                         </button>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{u.is_active ? 'Click to deactivate' : 'Click to reactivate'}</p>
                       </form>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    {!isSelf && (
+                      <ModulesButton userId={u.id} fullName={u.full_name} blockedKeys={blocksByUser.get(u.id) ?? []} />
                     )}
                   </td>
                   {/* Delete — owner only, can't delete yourself */}
