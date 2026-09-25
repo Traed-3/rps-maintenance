@@ -25,6 +25,15 @@ on:
       archive_stale_archived_by:
         description: 'Optional — profile id to record as archived_by on the archived rows.'
         default: ''
+      backfill_permits_offset:
+        description: 'Optional — one-time historical permit-email backfill (econstruction). Site offset to start this batch at (0 for the first run). Leave blank for a normal run.'
+        default: ''
+      backfill_permits_limit:
+        description: 'How many sites to process in this batch (Gmail fetches are slow — keep this small, default 5).'
+        default: '5'
+      backfill_permits_apply:
+        description: 'Set to 1 to actually file/link (default is a dry-run preview only).'
+        default: ''
 
 permissions:
   contents: read
@@ -109,6 +118,22 @@ jobs:
           URL="https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=archive-stale&days=$DAYS"
           if [ "$APPLY" = "1" ]; then URL="$URL&apply=1"; fi
           if [ -n "$ARCHIVED_BY" ]; then URL="$URL&archivedBy=$ARCHIVED_BY"; fi
+          curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
+
+  billing-permit-backfill:
+    if: ${{ github.event.inputs.backfill_permits_offset != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Backfill historical permit emails from econstruction
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          OFFSET: ${{ github.event.inputs.backfill_permits_offset }}
+          LIMIT: ${{ github.event.inputs.backfill_permits_limit }}
+          APPLY: ${{ github.event.inputs.backfill_permits_apply }}
+        run: |
+          URL="https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=backfill-permits&offset=$OFFSET&limit=$LIMIT"
+          if [ "$APPLY" = "1" ]; then URL="$URL&apply=1"; fi
           curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
 
   billing-inbox-sync:

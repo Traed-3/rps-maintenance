@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { syncAllInboxes, syncInbox, extractPending } from '@/lib/billing-inbox-sync'
 import { BILLING_INBOXES, inboxStatus, type BillingInbox } from '@/lib/billing-gmail-client'
+import { backfillPermitEmails } from '@/lib/permit-email-backfill'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 /**
- * GET /api/billing/inbox-sync?secret=…&pass=sync|extract|both[&inbox=econstruction][&max=30][&since=14][&limit=3]
+ * GET /api/billing/inbox-sync?secret=…&pass=sync|extract|both|backfill-permits[&inbox=econstruction][&max=30][&since=14][&limit=3]
  *
  * Cron hits `pass=sync` then `pass=extract` on separate ticks so each stays
  * under the 60 s budget. `pass=both` is for a manual "sync now".
+ *
+ * `pass=backfill-permits[&offset=0][&limit=5][&apply=1]` is the one-time
+ * historical-permit-email backfill (see lib/permit-email-backfill.ts) — a
+ * read-only preview without `apply=1`, batched by `offset`/`limit` since
+ * Gmail's full-message fetches are slow enough to risk the 60s budget across
+ * all sites in one call. Re-run with the `nextOffset` the response returns
+ * until it comes back null.
  */
 export async function GET(request: NextRequest) {
   const auth = request.headers.get('authorization')
@@ -31,6 +39,11 @@ export async function GET(request: NextRequest) {
       else out.sync = await syncAllInboxes({ maxResults, sinceDays })
     }
     if (pass === 'extract' || pass === 'both') out.extract = await extractPending(limit)
+    if (pass === 'backfill-permits') {
+      const offset = Math.max(parseInt(q.get('offset') ?? '0', 10) || 0, 0)
+      const permitLimit = Math.min(parseInt(q.get('limit') ?? '5', 10) || 5, 10)
+      out.backfillPermits = await backfillPermitEmails({ offset, limit: permitLimit, apply: q.get('apply') === '1' })
+    }
     return NextResponse.json(out)
   } catch (e) {
     console.error('[Billing Inbox Sync Error]', e)
