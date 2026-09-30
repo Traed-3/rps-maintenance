@@ -78,6 +78,12 @@ The ledger. One row per thing somebody owes.
 ### `con_jobs` additions
 `intake_folder_path` (iCloud mirror), `survey_summary` (text, rolled up from findings), `quote_readiness` (0–100), `last_intake_at`.
 
+### `con_vendors` additions (nearby-vendor lookup)
+`address`, `city`, `state`, `zip`, `lat`, `lng`, `service_radius_miles`, `categories` (text[]: concrete, disposal, dumpster, equipment_rental, electrical_sub, concrete_finisher, testing, vac_truck), `website`, `last_quote_at`, `rating_note`. Existing rows keep working; the intake geocodes addresses once (Google Geocoding or Mapbox, key in Vercel) and stores lat/lng on `con_sites` too.
+
+### View `con_site_vendor_distance`
+Per site and vendor: straight-line miles from the site's lat/lng, filtered to `categories` the quote needs. The Quote workup panel reads it.
+
 ### View `con_quote_readiness`
 Per quote: total lines, lines with a real price, labor rows with hours, open follow-ups by category, readiness %. Readiness = priced lines ÷ lines, minus 10 points per open price/hours item, floor 0. The job page and the daily summary read this view.
 
@@ -139,6 +145,7 @@ The ledger keeps running after the quote: `material_ordering` raises vendor-orde
 
 - **`/construction/intake`** queue: tabs New / Needs review / Filed / Ignored; inbox status strip and Sync now (like the Receive queue); row → item page with the email, attachments preview, site / brand / kind editors, File to job (picks or creates), Ignore, Re-read.
 - **Job page "Quote workup" panel** (top of `/construction/jobs/[id]`): survey summary, findings by location with photo thumbnails, take-off proposal table with Push to quote, running total by category, readiness %, open follow-ups with inline answer boxes, Download project folder.
+- **Nearby vendors strip (in the Quote workup panel and the quote builder):** when a quote carries category 5 (concrete / disposal), 9 (equipment) or 11 (subcontractor) lines, show the vendors from `con_vendors` within the site's radius, sorted by distance, with phone, last quote date and a **Draft RFQ** button that writes a ready-to-send request (quantity, mix, site address, date window) into the job's Documents and opens it in the mail client. Nothing is sent by the app. Requested by Trae 09/30/2026 after the 40013 concrete and haul-off quotes; the first list (Richmond VA) is in Construction → Vendors.
 - **Quote builder strip**: open items for this quote, click to answer.
 - **Dashboard tile + daily summary block**: "Projects waiting on you".
 - **Settings → Billing inboxes**: econstruction shows connected once the token exists; add a Project intake card for default owners and due days.

@@ -60,6 +60,16 @@ matchLinesToCatalog). Push to quote is a button; nothing is written without it. 
 readiness % on the job page and the quote page, and block sent / approved while a price
 or hours follow-up is open. Enforce that in code, not just the UI.
 
+STEP 3b — Nearby vendors
+Extend con_vendors with address, lat/lng, service radius, a categories array and
+website (plan section 4), geocode existing vendors and sites once, and add the
+con_site_vendor_distance view. In the Quote workup panel and the quote builder, when a
+quote has concrete / disposal / equipment / subcontractor lines, show the vendors within
+the site's radius sorted by distance with a Draft RFQ button that writes the request
+(quantity, spec, site address, date window) to the job's Documents. Drafts only, never
+send. Seed with the Richmond VA concrete and disposal vendors already in Construction →
+Vendors.
+
 STEP 4 — Nudges
 Pass nudge, daily: apply the cadence in plan section 7, bump nudge_count, bell the owner
 (notifications.ts), email the owner through Resend when configured, and write the
