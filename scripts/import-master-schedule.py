@@ -13,7 +13,7 @@ Rows land with source = 'master_schedule'. A re-import deletes that week's maste
 sheet stays the source of truth and hand-entered rows in the app are never touched.
 Reads NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from .env.local next to the repo root.
 """
-import sys, re, os, json, datetime, urllib.request
+import sys, re, os, json, datetime, urllib.request, urllib.error
 from pathlib import Path
 
 try:
@@ -116,8 +116,11 @@ def read_plan(path, week=None):
 def rest(url, key, method, path, body=None, prefer=None):
     req = urllib.request.Request(f'{url}/rest/v1/{path}', data=json.dumps(body).encode() if body is not None else None, method=method,
         headers={'apikey': key, 'Authorization': f'Bearer {key}', 'Content-Type': 'application/json', 'Prefer': prefer or 'return=representation'})
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read() or b'null')
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read() or b'null')
+    except urllib.error.HTTPError as ex:
+        sys.exit(f'{method} {path.split("?")[0]} -> HTTP {ex.code}: {ex.read()[:400].decode(errors="replace")}')
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
@@ -135,9 +138,9 @@ def main():
     jobs = rest(url, key, 'GET', f'con_jobs?company_id=eq.{COMPANY_ID}&stage=neq.complete&select=id,site_number,work_order_number,stage')
     by_site, by_num = {}, {}
     for j in jobs:
-        key = (j['site_number'] or '').strip().upper()
-        by_site.setdefault(key, []).append(j)
-        n = re.search(r'\d{3,5}$', key)                    # "Global 3633" in the sheet is site "3633" in the app
+        sk = (j['site_number'] or '').strip().upper()
+        by_site.setdefault(sk, []).append(j)
+        n = re.search(r'\d{3,5}$', sk)                     # "Global 3633" in the sheet is site "3633" in the app
         if n: by_num.setdefault(n.group(0), []).append(j)
     rows = []
     for p in plan:
