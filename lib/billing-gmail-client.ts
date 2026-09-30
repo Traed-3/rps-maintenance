@@ -115,6 +115,12 @@ export async function getMessage(inbox: BillingInbox, id: string): Promise<Gmail
   return gmailFetch(inbox, `/messages/${id}`, { format: 'full' })
 }
 
+/** Every message in a thread (headers + MIME tree), oldest first. */
+export async function getThread(inbox: BillingInbox, threadId: string): Promise<{ id: string; messages: GmailMessage[] }> {
+  const data = await gmailFetch(inbox, `/threads/${threadId}`, { format: 'full' })
+  return { id: data.id, messages: (data.messages ?? []) as GmailMessage[] }
+}
+
 /** Attachment bytes. */
 export async function getAttachment(inbox: BillingInbox, messageId: string, attachmentId: string): Promise<Buffer> {
   const data = await gmailFetch(inbox, `/messages/${messageId}/attachments/${attachmentId}`)

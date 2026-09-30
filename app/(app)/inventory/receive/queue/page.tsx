@@ -16,7 +16,7 @@ export default async function ReceiveQueuePage({ searchParams }: { searchParams:
   const { company_id, canWrite } = await requireInventory()
   const admin = createAdminClient()
   const [{ data: docs }, { count: newCount }] = await Promise.all([
-    admin.from('billing_inbox_documents').select('id, inbox, sender, sender_email, subject, received_at, kind, vendor, reference, attachments, extract_status, extracted, status, stock_locations(name)')
+    admin.from('billing_inbox_documents').select('id, inbox, sender, sender_email, subject, received_at, kind, vendor, reference, attachments, extract_status, extracted, status, thread_replies, stock_locations(name)')
       .eq('company_id', company_id).eq('status', status).order('received_at', { ascending: false }).limit(150),
     admin.from('billing_inbox_documents').select('id', { count: 'exact', head: true }).eq('company_id', company_id).eq('status', 'new'),
   ])
@@ -61,12 +61,13 @@ export default async function ReceiveQueuePage({ searchParams }: { searchParams:
                 const lines = (d.extracted as { lines?: unknown[] } | null)?.lines?.length ?? null
                 const atts = (d.attachments as unknown[]).length
                 const loc = (d as unknown as { stock_locations: { name: string } | null }).stock_locations
+                const lastReply = ((d.thread_replies ?? []) as { from: string; text: string }[]).at(-1)
                 return (
                   <ClickableRow key={d.id} href={`/inventory/receive/queue/${d.id}`}>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(d.received_at)}<div className="text-xs text-gray-400">{d.inbox}</div></td>
                     <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full border ${KIND_CLASS[d.kind] ?? ''}`}>{KIND_LABEL[d.kind] ?? d.kind}</span></td>
                     <td className="px-4 py-3 text-gray-900">{d.vendor ?? d.sender}<div className="text-xs text-gray-400">{d.sender_email}</div></td>
-                    <td className="px-4 py-3 text-gray-700 hidden md:table-cell max-w-xs truncate">{d.subject}<div className="text-xs text-gray-400">{atts} attachment{atts === 1 ? '' : 's'}{loc ? ` · ${loc.name}` : ''}</div></td>
+                    <td className="px-4 py-3 text-gray-700 hidden md:table-cell max-w-xs truncate">{d.subject}<div className="text-xs text-gray-400">{atts} attachment{atts === 1 ? '' : 's'}{loc ? ` · ${loc.name}` : ''}</div>{lastReply && <div className="text-xs text-emerald-700 truncate" title={lastReply.text}>↩ {lastReply.from}: {lastReply.text}</div>}</td>
                     <td className="px-4 py-3 text-gray-600 font-mono text-xs hidden sm:table-cell">{d.reference ?? '—'}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{d.extract_status === 'done' ? lines : <span className={`text-xs ${d.extract_status === 'failed' ? 'text-red-600' : 'text-amber-700'}`}>{d.extract_status === 'pending' ? 'reading…' : d.extract_status === 'failed' ? 'failed' : 'by hand'}</span>}</td>
                     <td className="px-4 py-3 text-right"><span className="text-xs font-medium text-blue-600">Open →</span></td>
