@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
 import { CON_STAGES, money, fmtDate, projectNotificationStatus } from '@/lib/construction'
 import { loadPermitGraph, computeAlerts, loadHashEnteredAt } from '@/lib/permits-data'
-import { FOCUS_TILES, buildFocusTiles, tallyMaterials, daysSince, type FocusJob } from '@/lib/construction-dashboard'
+import { FOCUS_TILES, buildFocusTiles, tallyMaterials, daysSince, packingSlipSiteKey, type FocusJob, type PackingSlip } from '@/lib/construction-dashboard'
 import { StageBadge } from '@/components/construction/badges'
 import { Users, Contact, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck, Inbox, FileCheck2, AlertTriangle } from 'lucide-react'
 
@@ -23,11 +23,12 @@ export default async function ConstructionDashboard() {
   // select silently caps at Supabase's default 1000-row limit — so this only
   // ever loads OPEN jobs (everything the dashboard shows is about active work
   // anyway) and gets the completed count separately, cheaply, via head:true.
-  const [{ data: jobs }, { count: completeCount }, { data: invoices }, { data: materialRows }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
+  const [{ data: jobs }, { count: completeCount }, { data: invoices }, { data: materialRows }, { data: slipRows }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
     admin.from('con_jobs').select('id, site_number, job_number, work_order_number, stage, status_detail, scope_of_work, gas_brand, priority, date_received, project_start_date, updated_at, notification_sent_at, notification_waived, program, con_customers(name)').eq('company_id', company_id).neq('stage', 'complete'),
     admin.from('con_jobs').select('*', { count: 'exact', head: true }).eq('company_id', company_id).eq('stage', 'complete'),
     admin.from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, con_customers(name)').eq('company_id', company_id).neq('status', 'void'),
     admin.from('con_job_materials').select('id, job_id, status').eq('company_id', company_id),
+    admin.from('billing_inbox_documents').select('id, subject, received_at, vendor, body_preview, extracted').eq('company_id', company_id).eq('kind', 'packing_slip').gte('received_at', iso(new Date(today.getTime() - 120 * 86_400_000))).order('received_at', { ascending: false }),
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id).gte('schedule_date', iso(monday)).lte('schedule_date', iso(sunday)).order('schedule_date'),
     loadPermitGraph(admin, company_id),
     loadHashEnteredAt(admin, company_id),
@@ -45,7 +46,11 @@ export default async function ConstructionDashboard() {
     priority: j.priority, date_received: (j as any).date_received, project_start_date: j.project_start_date, updated_at: (j as any).updated_at,
     customer_name: (j as any).con_customers?.name ?? null,
   }))
-  const focus = buildFocusTiles(focusJobs, tallies, todayIso)
+  const slips: PackingSlip[] = (slipRows ?? [])
+    .filter(r => !/^\s*\[test\]/i.test(r.subject ?? ''))
+    .map(r => ({ id: r.id, subject: r.subject ?? '', received_at: r.received_at, vendor: r.vendor, site_key: packingSlipSiteKey(r.subject ?? '', r.body_preview, (r.extracted as any)?.po_or_job ?? null) }))
+  const unmatchedSlips = slips.filter(sl => !sl.site_key).length
+  const focus = buildFocusTiles(focusJobs, tallies, slips, todayIso)
   const notifyDue = allJobs
     .map(j => ({ job: j, n: projectNotificationStatus(j) }))
     .filter(x => x.n.isDue)
@@ -124,13 +129,18 @@ export default async function ConstructionDashboard() {
                           {j.scope_of_work && <p className="text-xs text-gray-600 truncate">{j.scope_of_work}</p>}
                           <div className="flex items-center gap-2 mt-0.5 min-w-0">
                             <span className="shrink-0 whitespace-nowrap"><StageBadge stage={j.stage} /></span>
-                            <p className="text-[11px] text-gray-400 truncate min-w-0">{[j.work_order_number, j.status_detail].filter(Boolean).join(' · ')}</p>
+                            <p className={`text-[11px] truncate min-w-0 ${j.signal ? 'text-emerald-700 font-medium' : 'text-gray-400'}`}>{j.signal ?? [j.work_order_number, j.status_detail].filter(Boolean).join(' · ')}</p>
                           </div>
                         </Link>
                       </li>
                     )
                   })}
                 </ul>
+              )}
+              {t.key === 'parts_in' && unmatchedSlips > 0 && (
+                <Link href="/inventory/receive/queue" className="px-3 py-1.5 text-[11px] text-amber-700 border-t border-gray-100 hover:bg-amber-50">
+                  {unmatchedSlips} packing slip{unmatchedSlips === 1 ? '' : 's'} with no site number in the subject →
+                </Link>
               )}
               <Link href={`/construction/jobs?view=table&stage=${t.linkStage}`} className="px-3 py-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-800 border-t border-gray-100">
                 {list.length > 6 ? `View all ${list.length} →` : 'Open the list →'}
