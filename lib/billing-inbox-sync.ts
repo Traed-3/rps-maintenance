@@ -216,10 +216,18 @@ export async function syncInbox(inbox: BillingInbox, opts: { maxResults?: number
 /** Just the new words in a reply: cut the quoted history, the sign-off and the signature. */
 export function stripQuoted(text: string): string {
   const t = text.replace(/\r/g, '')
-  const quote = t.search(/(\bOn (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^\n]{0,160}?wrote:|\bOn [A-Z][a-z]+, [^\n]{0,160}?wrote:|-{2,}\s*(?:Original|Forwarded) Message\s*-{2,}|^From:\s|^>|^--\s*$|Sent from (?:my |Proton))/mi)
+  // Gmail wraps plain text at ~76 columns, so "On Fri, Sep 18, 2026 at 1:45 PM Rappahannock Construction Dept <\neconstruction…> wrote:" spans lines.
+  // "On Fri, Sep 18, 2026 at 1:45 PM … wrote:", "On Sep 24, 2026, at 10:17 AM, … wrote:" (iOS), "On Monday, September 21st, 2026 … wrote:" (Proton)
+  const quote = t.search(/(\bOn [A-Z][a-z]{2,8}[ ,][\s\S]{0,220}?wrote:|-{2,}\s*(?:Original|Forwarded) Message\s*-{2,}|^From:\s|^>|^--\s*$|Sent from (?:my |Proton))/mi)
   const head = quote >= 0 ? t.slice(0, quote) : t
   const signoff = head.search(/^\s*(?:thank you|thanks|thx|regards|best|sincerely)\b/mi)
-  return (signoff >= 0 ? head.slice(0, signoff) : head).split('\n').map(l => l.trim()).filter(Boolean).join(' ').trim().slice(0, 600)
+  const out = (signoff >= 0 ? head.slice(0, signoff) : head).split('\n').map(l => l.trim()).filter(Boolean).join(' ').trim().slice(0, 600)
+  return isAck(out) ? '' : out
+}
+
+/** "Ok, thanks." / "Will do. THANKS" / "Got it" say nothing about where a box goes. */
+export function isAck(text: string): boolean {
+  return /^(?:(?:ok(?:ay)?|will do|got it|sounds good|yes|yep|no problem|np|10-4|thanks?|thank you|thank ya|thx|ty|sd|pw)[\s.,!-]*){1,4}$/i.test(text.trim())
 }
 
 /**
@@ -231,18 +239,21 @@ export async function syncThreadReplies(inbox: BillingInbox, opts: { sinceDays?:
   const out = { checked: 0, updated: 0, errors: [] as string[] }
   const since = new Date(Date.now() - (opts.sinceDays ?? REPLY_WINDOW_DAYS) * 86_400_000).toISOString()
   const { data: rows, error: selErr } = await admin.from('billing_inbox_documents')
-    .select('id, gmail_message_id, gmail_thread_id, thread_replies')
+    .select('id, gmail_message_id, gmail_thread_id, received_at, thread_replies')
     .eq('inbox', inbox).eq('kind', 'packing_slip').gte('received_at', since).not('gmail_thread_id', 'is', null)
   if (selErr) { out.errors.push(`replies: ${selErr.message}`); return out }
   for (const row of rows ?? []) {
+    if (!/^[0-9a-f]{10,}$/i.test(row.gmail_thread_id as string)) continue   // smoke-test rows carry fake thread ids
     out.checked++
     try {
       const thread = await getThread(inbox, row.gmail_thread_id as string)
       const replies = [...((row.thread_replies ?? []) as ThreadReply[])]
       const known = new Set(replies.map(r => r.message_id))
+      const rowAt = Date.parse(row.received_at)
       let changed = false
       for (const m of thread.messages) {
         if (m.id === row.gmail_message_id || known.has(m.id)) continue
+        if (Number(m.internalDate) <= rowAt) continue                       // only what came after this message, not before it
         const text = stripQuoted(extractText(m))
         if (!text) continue                                  // "THANKS" and empty forwards are noise
         const from = parseAddress(header(m, 'From'))
