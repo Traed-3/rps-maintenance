@@ -133,11 +133,16 @@ def main():
     e = env(); url, key = e['NEXT_PUBLIC_SUPABASE_URL'], e['SUPABASE_SERVICE_ROLE_KEY']
     # match jobs by site (prefer a non-complete job; prefer one whose W/O text appears in the notes)
     jobs = rest(url, key, 'GET', f'con_jobs?company_id=eq.{COMPANY_ID}&stage=neq.complete&select=id,site_number,work_order_number,stage')
-    by_site = {}
-    for j in jobs: by_site.setdefault((j['site_number'] or '').strip().upper(), []).append(j)
+    by_site, by_num = {}, {}
+    for j in jobs:
+        key = (j['site_number'] or '').strip().upper()
+        by_site.setdefault(key, []).append(j)
+        n = re.search(r'\d{3,5}$', key)                    # "Global 3633" in the sheet is site "3633" in the app
+        if n: by_num.setdefault(n.group(0), []).append(j)
     rows = []
     for p in plan:
-        cands = by_site.get(p['site_number'].upper()) or by_site.get(p['raw_site'].upper()) or []
+        num = re.search(r'\d{3,5}$', p['site_number'])
+        cands = by_site.get(p['site_number'].upper()) or by_site.get(p['raw_site'].upper()) or (by_num.get(num.group(0), []) if num and not re.match(r'^(SU|IP|CP)', p['site_number'], re.I) else [])
         pick = next((j for j in cands if j.get('work_order_number') and p['notes'] and j['work_order_number'].split()[0] in p['notes']), cands[0] if cands else None)
         rows.append({k: v for k, v in p.items() if k not in ('row', 'raw_site', 'in_progress')} | {'job_id': pick['id'] if pick else None})
     dates = sorted({p['schedule_date'] for p in plan})
