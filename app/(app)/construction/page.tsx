@@ -28,7 +28,7 @@ export default async function ConstructionDashboard() {
     admin.from('con_jobs').select('*', { count: 'exact', head: true }).eq('company_id', company_id).eq('stage', 'complete'),
     admin.from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, con_customers(name)').eq('company_id', company_id).neq('status', 'void'),
     admin.from('con_job_materials').select('id, job_id, status').eq('company_id', company_id),
-    admin.from('billing_inbox_documents').select('id, subject, received_at, vendor, body_preview, extracted').eq('company_id', company_id).eq('kind', 'packing_slip').gte('received_at', iso(new Date(today.getTime() - 120 * 86_400_000))).order('received_at', { ascending: false }),
+    admin.from('billing_inbox_documents').select('id, subject, received_at, vendor, body_preview, status, note').eq('company_id', company_id).eq('kind', 'packing_slip').gte('received_at', iso(new Date(today.getTime() - 120 * 86_400_000))).order('received_at', { ascending: false }),
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id).gte('schedule_date', iso(monday)).lte('schedule_date', iso(sunday)).order('schedule_date'),
     loadPermitGraph(admin, company_id),
     loadHashEnteredAt(admin, company_id),
@@ -48,8 +48,9 @@ export default async function ConstructionDashboard() {
   }))
   const slips: PackingSlip[] = (slipRows ?? [])
     .filter(r => !/^\s*\[test\]/i.test(r.subject ?? ''))
-    .map(r => ({ id: r.id, subject: r.subject ?? '', received_at: r.received_at, vendor: r.vendor, site_key: packingSlipSiteKey(r.subject ?? '', r.body_preview, (r.extracted as any)?.po_or_job ?? null) }))
-  const unmatchedSlips = slips.filter(sl => !sl.site_key).length
+    .map(r => ({ id: r.id, subject: r.subject ?? '', received_at: r.received_at, vendor: r.vendor, status: r.status, note: r.note, stock: /\bstock\b/i.test(`${r.subject ?? ''} ${r.body_preview ?? ''} ${r.note ?? ''}`), site_key: packingSlipSiteKey(r.subject ?? '', r.body_preview) }))
+  // still nagging only while nobody has placed it: no site, not stock, still 'new', and no note saying where it went
+  const unmatchedSlips = slips.filter(sl => !sl.site_key && !sl.stock && sl.status === 'new' && !sl.note).length
   const focus = buildFocusTiles(focusJobs, tallies, slips, todayIso)
   const notifyDue = allJobs
     .map(j => ({ job: j, n: projectNotificationStatus(j) }))

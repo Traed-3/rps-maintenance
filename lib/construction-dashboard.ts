@@ -37,7 +37,7 @@ export type FocusJob = {
   signal?: string | null
 }
 
-export type PackingSlip = { id: string; subject: string; received_at: string; vendor: string | null; site_key: string | null }
+export type PackingSlip = { id: string; subject: string; received_at: string; vendor: string | null; site_key: string | null; status: string; note: string | null; /** the slip or a reply says stock ("Stock. Give to PW", "CONSTRUCTION STOCK") */ stock: boolean }
 
 export type MaterialTally = { total: number; needed: number; ordered: number; received: number; in_stock: number }
 
@@ -84,15 +84,21 @@ export function jobSiteKeys(site: string | null | undefined): string[] {
   return site.split('/').map(part => classifySite(part.trim()).siteNumber).filter(Boolean)
 }
 
-/** Pull the site number out of a packing-slip email: "46619 MORGAN METAL PACKING SLIP", "SU-4710 ICON PACKING SLIP", or a PO / body mention. */
-export function packingSlipSiteKey(subject: string, bodyPreview?: string | null, poOrJob?: string | null): string | null {
+/**
+ * Pull the site number out of a packing-slip email.
+ * The warehouse convention is a leading site token: "46619 MORGAN METAL PACKING SLIP", "SU-4710 ICON PACKING SLIP".
+ * The body is trusted only for a prefixed key (SU-8605, IP295) or an explicit "site 24234" / "store #24234".
+ * Never the PO number: Shannon's POs are five digits too (24195, 24217, 24220, 24234 …) and would collide with store numbers.
+ */
+export function packingSlipSiteKey(subject: string, bodyPreview?: string | null): string | null {
   const head = subject.replace(/^\s*((re|fwd?):\s*)+/i, '')
   const lead = head.match(/^\s*((?:SU|IP|CP|CPG)[\s-]?\d{3,5}|\d{5}|\d{4})\b/i)
   if (lead) return classifySite(lead[1]).siteNumber || null
-  for (const text of [poOrJob ?? '', head, bodyPreview ?? '']) {
-    const m = text.match(/\b((?:SU|IP)[\s-]?\d{3,5}|\d{5})\b/i)
-    if (m) return classifySite(m[1]).siteNumber || null
-  }
+  const body = bodyPreview ?? ''
+  const prefixed = body.match(/\b((?:SU|IP)[\s-]?\d{3,5})\b/i)
+  if (prefixed) return classifySite(prefixed[1]).siteNumber || null
+  const explicit = body.match(/\b(?:site|store|job)\s*#?\s*(\d{4,5})\b/i)
+  if (explicit) return classifySite(explicit[1]).siteNumber || null
   return null
 }
 
