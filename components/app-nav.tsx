@@ -19,7 +19,7 @@ import {
   CalendarDays,
   Fuel,
   Package,
-  type LucideIcon,
+  type LucideIcon, ListChecks,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -31,6 +31,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/my', label: 'My Plate', icon: ListChecks, construction: true },
   // Maintenance is now a module hub: Assets, Tickets and Shop live inside it
   // (they keep their own URLs, so the module stays highlighted while you're in any of them).
   // No `module` here on purpose — Shop/Tickets can be blocked separately from
@@ -71,6 +72,7 @@ export default function AppNav({ email, role, userId, blockedModules }: { email:
   const mobileItems = [
     { href: '/mobile',    label: 'Home',      icon: Home },
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    ...(canSeeConstruction ? [{ href: '/my', label: 'Plate', icon: ListChecks }] : []),
     { href: '/assets',    label: 'Assets',    icon: Truck },
     { href: '/tickets',   label: 'Tickets',   icon: ClipboardList },
     { href: '/shop',      label: 'Shop',      icon: Users },
