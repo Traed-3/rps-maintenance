@@ -87,7 +87,7 @@ export default async function ConstructionDashboard() {
   ]
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto overflow-x-hidden">
       <div className="mb-6">
         <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">
           Construction
@@ -96,35 +96,35 @@ export default async function ConstructionDashboard() {
       </div>
 
       {/* Focus tiles — the five lists the department is run from (workbook legend colors) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-6 min-w-0">
         {FOCUS_TILES.map(t => {
           const list = focus[t.key]
           return (
-            <section key={t.key} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-              <div className={`px-4 py-3 flex items-start justify-between gap-3 ${t.band}`}>
+            <section key={t.key} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-w-0">
+              <div className={`px-3 py-2 flex items-start justify-between gap-2 ${t.band}`}>
                 <div className="min-w-0">
-                  <h2 className="font-bold text-base leading-tight">{t.title}</h2>
-                  <p className="text-xs opacity-80 mt-0.5 leading-snug">{t.blurb}</p>
+                  <h2 className="font-bold text-sm leading-tight break-words">{t.title}</h2>
+                  <p className="text-[11px] opacity-80 mt-0.5 leading-snug break-words">{t.blurb}</p>
                 </div>
-                <span className="text-3xl font-bold tabular-nums leading-none shrink-0">{list.length}</span>
+                <span className="text-2xl font-bold tabular-nums leading-none shrink-0">{list.length}</span>
               </div>
               {list.length === 0 ? (
-                <p className="px-4 py-5 text-sm text-gray-400">Nothing here right now.</p>
+                <p className="px-3 py-4 text-xs text-gray-400">Nothing here right now.</p>
               ) : (
-                <ul className="divide-y divide-gray-50 flex-1">
-                  {list.slice(0, 8).map(j => {
+                <ul className="divide-y divide-gray-50 flex-1 min-w-0">
+                  {list.slice(0, 6).map(j => {
                     const idle = daysSince(j.updated_at, today)
                     return (
-                      <li key={j.id}>
-                        <Link href={`/construction/jobs/${j.id}`} className="block px-4 py-2.5 hover:bg-gray-50">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-gray-900 text-sm truncate">{j.site_number ?? '—'}{j.gas_brand ? <span className="ml-1.5 text-[11px] font-normal text-gray-400">{j.gas_brand}</span> : null}</span>
+                      <li key={j.id} className="min-w-0">
+                        <Link href={`/construction/jobs/${j.id}`} className="block px-3 py-2 hover:bg-gray-50 min-w-0">
+                          <div className="flex items-center justify-between gap-2 min-w-0">
+                            <span className="font-semibold text-gray-900 text-sm truncate min-w-0">{j.site_number ?? '—'}{j.gas_brand ? <span className="ml-1.5 text-[11px] font-normal text-gray-400">{j.gas_brand}</span> : null}</span>
                             {idle != null && <span className={`shrink-0 text-[11px] tabular-nums ${idle >= 14 ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>{idle}d</span>}
                           </div>
                           {j.scope_of_work && <p className="text-xs text-gray-600 truncate">{j.scope_of_work}</p>}
                           <div className="flex items-center gap-2 mt-0.5 min-w-0">
                             <span className="shrink-0 whitespace-nowrap"><StageBadge stage={j.stage} /></span>
-                            <p className="text-[11px] text-gray-400 truncate">{[j.work_order_number, j.status_detail].filter(Boolean).join(' · ')}</p>
+                            <p className="text-[11px] text-gray-400 truncate min-w-0">{[j.work_order_number, j.status_detail].filter(Boolean).join(' · ')}</p>
                           </div>
                         </Link>
                       </li>
@@ -132,8 +132,8 @@ export default async function ConstructionDashboard() {
                   })}
                 </ul>
               )}
-              <Link href={`/construction/jobs?view=table&stage=${t.linkStage}`} className="px-4 py-2 text-xs font-medium text-blue-600 hover:text-blue-800 border-t border-gray-100">
-                {list.length > 8 ? `View all ${list.length} →` : 'Open the list →'}
+              <Link href={`/construction/jobs?view=table&stage=${t.linkStage}`} className="px-3 py-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-800 border-t border-gray-100">
+                {list.length > 6 ? `View all ${list.length} →` : 'Open the list →'}
               </Link>
             </section>
           )
