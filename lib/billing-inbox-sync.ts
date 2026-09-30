@@ -240,7 +240,7 @@ export async function syncThreadReplies(inbox: BillingInbox, opts: { sinceDays?:
   const since = new Date(Date.now() - (opts.sinceDays ?? REPLY_WINDOW_DAYS) * 86_400_000).toISOString()
   const { data: rows, error: selErr } = await admin.from('billing_inbox_documents')
     .select('id, gmail_message_id, gmail_thread_id, received_at, thread_replies')
-    .eq('inbox', inbox).eq('kind', 'packing_slip').gte('received_at', since).not('gmail_thread_id', 'is', null)
+    .eq('inbox', inbox).in('kind', ['packing_slip', 'customer_invoice']).gte('received_at', since).not('gmail_thread_id', 'is', null)
   if (selErr) { out.errors.push(`replies: ${selErr.message}`); return out }
   for (const row of rows ?? []) {
     if (!/^[0-9a-f]{10,}$/i.test(row.gmail_thread_id as string)) continue   // smoke-test rows carry fake thread ids
