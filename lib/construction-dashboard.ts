@@ -37,7 +37,13 @@ export type FocusJob = {
   signal?: string | null
 }
 
-export type PackingSlip = { id: string; subject: string; received_at: string; vendor: string | null; site_key: string | null; status: string; note: string | null; /** the slip or a reply says stock ("Stock. Give to PW", "CONSTRUCTION STOCK") */ stock: boolean }
+export type PackingSlip = {
+  id: string; subject: string; received_at: string; vendor: string | null; site_key: string | null; status: string; note: string | null
+  /** the slip, a reply or the note says stock ("Stock. Give to PW", "CONSTRUCTION STOCK") */
+  stock: boolean
+  /** texts of the replies in the slip's Gmail thread, oldest first (billing_inbox_documents.thread_replies) */
+  replies: string[]
+}
 
 export type MaterialTally = { total: number; needed: number; ordered: number; received: number; in_stock: number }
 
@@ -90,7 +96,7 @@ export function jobSiteKeys(site: string | null | undefined): string[] {
  * The body is trusted only for a prefixed key (SU-8605, IP295) or an explicit "site 24234" / "store #24234".
  * Never the PO number: Shannon's POs are five digits too (24195, 24217, 24220, 24234 …) and would collide with store numbers.
  */
-export function packingSlipSiteKey(subject: string, bodyPreview?: string | null): string | null {
+export function packingSlipSiteKey(subject: string, bodyPreview?: string | null, replies: string[] = []): string | null {
   const head = subject.replace(/^\s*((re|fwd?):\s*)+/i, '')
   const lead = head.match(/^\s*((?:SU|IP|CP|CPG)[\s-]?\d{3,5}|\d{5}|\d{4})\b/i)
   if (lead) return classifySite(lead[1]).siteNumber || null
@@ -99,6 +105,29 @@ export function packingSlipSiteKey(subject: string, bodyPreview?: string | null)
   if (prefixed) return classifySite(prefixed[1]).siteNumber || null
   const explicit = body.match(/\b(?:site|store|job)\s*#?\s*(\d{4,5})\b/i)
   if (explicit) return classifySite(explicit[1]).siteNumber || null
+  // a prefixed key anywhere in the thread beats a bare number anywhere in the thread
+  for (const r of replies) { const k = replySiteKey(r, 'prefixed'); if (k) return k }
+  for (const r of replies) { const k = replySiteKey(r); if (k) return k }
+  return null
+}
+
+/**
+ * Site named in a thread reply: "SU-8605 material", "SU-4710 is the order off PO # 24220", "goes to 40013".
+ * Questions ("What site is 54080 PO# for?") are not answers and are skipped. PO / S.O. / order numbers and
+ * "the 54080 is their order number" are blanked first. A bare five-digit number counts only when it is the only
+ * one left, so "either 40013 or 40041" stays unresolved for a human.
+ */
+export function replySiteKey(text: string, mode: 'any' | 'prefixed' = 'any'): string | null {
+  if (/\?/.test(text)) return null
+  const t = text
+    .replace(/\b(?:P\.?O\.?|S\.?O\.?|order|inv(?:oice)?)\s*#?\s*:?\s*\d+/gi, ' ')   // "PO # 24220", "S.O. 54080"
+    .replace(/(?<![A-Za-z]-?)\b\d{3,}\s*(?:P\.?O\.?|S\.?O\.?)\s*#?/gi, ' ')          // "54080 PO#" (not the 4710 in "SU-4710")
+    .replace(/(?<![A-Za-z]-?)\b\d{3,}\b(?=\s+is\s+(?:their|the|our)\s+(?:\w+\s+){0,2}?(?:order|po|s\.?o\.?|vendor|invoice|number)\b)/gi, ' ')  // "the 54203 is their order number", not "40013 is the site"
+  const prefixed = t.match(/\b((?:SU|IP|CP|CPG)[\s-]?\d{3,5})\b/i)
+  if (prefixed) return classifySite(prefixed[1]).siteNumber || null
+  if (mode === 'prefixed') return null
+  const bare = t.match(/\b\d{5}\b/g)
+  if (bare && bare.length === 1) return classifySite(bare[0]).siteNumber || null
   return null
 }
 

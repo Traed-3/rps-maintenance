@@ -20,7 +20,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  type BillingInbox, connectedInboxes, listMessages, getMessage, getAttachment,
+  type BillingInbox, connectedInboxes, listMessages, getMessage, getThread, getAttachment,
   header, parseAddress, listAttachments, extractText,
 } from '@/lib/billing-gmail-client'
 
@@ -91,7 +91,12 @@ export type Extracted = {
   model?: string
 }
 
-export type SyncResult = { inbox: BillingInbox; listed: number; new: number; skipped: number; errors: string[] }
+export type SyncResult = { inbox: BillingInbox; listed: number; new: number; skipped: number; replies: number; errors: string[] }
+
+/** One reply in a packing-slip thread, e.g. Shannon's "SU-8605 material" or Starsky's "Stock". */
+export type ThreadReply = { message_id: string; from: string; from_email: string; at: string; text: string }
+/** Replies are looked for on slips this recent. Chris asks the day a box lands and the answer comes within days. */
+const REPLY_WINDOW_DAYS = 45
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -142,7 +147,7 @@ function findReference(subject: string, body: string): string | null {
 
 export async function syncInbox(inbox: BillingInbox, opts: { maxResults?: number; sinceDays?: number } = {}): Promise<SyncResult> {
   const admin = createAdminClient()
-  const result: SyncResult = { inbox, listed: 0, new: 0, skipped: 0, errors: [] }
+  const result: SyncResult = { inbox, listed: 0, new: 0, skipped: 0, replies: 0, errors: [] }
   const company_id = await companyId(admin)
 
   let ids: string[]
@@ -200,7 +205,60 @@ export async function syncInbox(inbox: BillingInbox, opts: { maxResults?: number
       result.errors.push(`${id}: ${(e as Error).message}`)
     }
   }
+
+  // Pass 1b: the answer to "where does this go?" is a reply in the slip's thread, never a new attachment.
+  const replies = await syncThreadReplies(inbox)
+  result.replies = replies.updated
+  result.errors.push(...replies.errors)
   return result
+}
+
+/** Just the new words in a reply: cut the quoted history, the sign-off and the signature. */
+export function stripQuoted(text: string): string {
+  const t = text.replace(/\r/g, '')
+  const quote = t.search(/(\bOn (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^\n]{0,160}?wrote:|\bOn [A-Z][a-z]+, [^\n]{0,160}?wrote:|-{2,}\s*(?:Original|Forwarded) Message\s*-{2,}|^From:\s|^>|^--\s*$|Sent from (?:my |Proton))/mi)
+  const head = quote >= 0 ? t.slice(0, quote) : t
+  const signoff = head.search(/^\s*(?:thank you|thanks|thx|regards|best|sincerely)\b/mi)
+  return (signoff >= 0 ? head.slice(0, signoff) : head).split('\n').map(l => l.trim()).filter(Boolean).join(' ').trim().slice(0, 600)
+}
+
+/**
+ * Store the replies in each recent packing-slip thread on the slip's row (thread_replies, last_reply_at).
+ * The construction dashboard reads them to place a shipment on a job or mark it stock; the receive queue shows them.
+ */
+export async function syncThreadReplies(inbox: BillingInbox, opts: { sinceDays?: number } = {}): Promise<{ checked: number; updated: number; errors: string[] }> {
+  const admin = createAdminClient()
+  const out = { checked: 0, updated: 0, errors: [] as string[] }
+  const since = new Date(Date.now() - (opts.sinceDays ?? REPLY_WINDOW_DAYS) * 86_400_000).toISOString()
+  const { data: rows, error: selErr } = await admin.from('billing_inbox_documents')
+    .select('id, gmail_message_id, gmail_thread_id, thread_replies')
+    .eq('inbox', inbox).eq('kind', 'packing_slip').gte('received_at', since).not('gmail_thread_id', 'is', null)
+  if (selErr) { out.errors.push(`replies: ${selErr.message}`); return out }
+  for (const row of rows ?? []) {
+    out.checked++
+    try {
+      const thread = await getThread(inbox, row.gmail_thread_id as string)
+      const replies = [...((row.thread_replies ?? []) as ThreadReply[])]
+      const known = new Set(replies.map(r => r.message_id))
+      let changed = false
+      for (const m of thread.messages) {
+        if (m.id === row.gmail_message_id || known.has(m.id)) continue
+        const text = stripQuoted(extractText(m))
+        if (!text) continue                                  // "THANKS" and empty forwards are noise
+        const from = parseAddress(header(m, 'From'))
+        replies.push({ message_id: m.id, from: from.name || from.email, from_email: from.email, at: new Date(Number(m.internalDate) || Date.now()).toISOString(), text })
+        changed = true
+      }
+      if (!changed) continue
+      replies.sort((a, b) => a.at.localeCompare(b.at))
+      const { error } = await admin.from('billing_inbox_documents').update({ thread_replies: replies, last_reply_at: replies[replies.length - 1].at }).eq('id', row.id)
+      if (error) throw new Error(error.message)
+      out.updated++
+    } catch (e) {
+      out.errors.push(`${row.id}: ${(e as Error).message}`)
+    }
+  }
+  return out
 }
 
 export async function syncAllInboxes(opts: { maxResults?: number; sinceDays?: number } = {}): Promise<SyncResult[]> {

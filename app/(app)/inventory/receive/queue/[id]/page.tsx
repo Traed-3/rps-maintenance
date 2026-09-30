@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireInventory } from '@/lib/inventory-guard'
-import { signedAttachmentUrl, type Extracted } from '@/lib/billing-inbox-sync'
+import { signedAttachmentUrl, type Extracted, type ThreadReply } from '@/lib/billing-inbox-sync'
 import { InboxDocumentForm, type QueueLine } from '@/components/inventory/inbox-document-form'
 import { fmtDate, money } from '@/lib/inventory'
 
@@ -25,6 +25,7 @@ export default async function ReceiveQueueDocumentPage({ params }: { params: Pro
   const ex = doc.extracted as Extracted | null
   const lines: QueueLine[] = (ex?.lines ?? []) as QueueLine[]
   const loc = (doc as unknown as { stock_locations: { name: string } | null }).stock_locations
+  const replies = ((doc as unknown as { thread_replies?: ThreadReply[] }).thread_replies ?? [])
   const who = (doc as unknown as { profiles: { full_name: string } | null }).profiles
   const office = (locations ?? []).find(l => l.kind === 'office')
 
@@ -88,6 +89,14 @@ export default async function ReceiveQueueDocumentPage({ params }: { params: Pro
             <div className="text-xs text-gray-400 mb-3">{doc.sender} &lt;{doc.sender_email}&gt;</div>
             <p className="text-gray-600 whitespace-pre-line text-xs leading-relaxed">{doc.body_preview}</p>
             {doc.note && <p className="mt-3 text-xs text-gray-500"><b>Note:</b> {doc.note}</p>}
+            {replies.length > 0 && (
+              <div className="mt-3 text-xs">
+                <div className="font-semibold text-gray-700">Replies in the thread</div>
+                <ul className="mt-1 space-y-1">
+                  {replies.map(r => <li key={r.message_id} className="text-gray-700"><span className="text-gray-400">{new Date(r.at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })} · {r.from}:</span> {r.text}</li>)}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
