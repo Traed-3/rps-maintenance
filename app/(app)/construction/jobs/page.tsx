@@ -107,34 +107,40 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           <p className="text-gray-400 text-sm">No jobs match.</p>
         </div>
       ) : view === 'kanban' ? (
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-3 min-w-max">
-            {CON_STAGES.map(stage => {
+        <div className="min-w-0">
+          {/* Board wraps to fit the screen (no sideways scroll); empty stages collapse to chips below. */}
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-w-0">
+            {CON_STAGES.filter(stage => list.some(j => j.stage === stage.value)).map(stage => {
               const col = list.filter(j => j.stage === stage.value)
               return (
-                <div key={stage.value} className="w-64 shrink-0">
+                <div key={stage.value} className="min-w-0">
                   <div className="flex items-center justify-between mb-2 px-1">
                     <StageBadge stage={stage.value} />
                     <span className="text-xs text-gray-400">{col.length}</span>
                   </div>
                   <div className="space-y-2">
                     {col.map(j => (
-                      <Link key={j.id} href={`/construction/jobs/${j.id}`} className="block bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:border-blue-300 hover:shadow transition-all">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-sm text-gray-900">{j.job_number ?? j.site_number ?? "—"}</span>
+                      <Link key={j.id} href={`/construction/jobs/${j.id}`} className="block bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:border-blue-300 hover:shadow transition-all min-w-0">
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <span className="font-semibold text-sm text-gray-900 truncate">{j.job_number ?? j.site_number ?? "—"}</span>
                           <ConPriorityBadge priority={j.priority} />
                         </div>
-                        {(j as any).con_customers?.name && <div className="text-xs text-gray-500 mt-0.5">{(j as any).con_customers.name}</div>}
-                        {j.work_order_number && <div className="text-xs text-gray-400 mt-0.5 font-mono">{j.work_order_number}</div>}
-                        {j.status_detail && <div className="text-xs text-gray-500 mt-1 line-clamp-2">{j.status_detail}</div>}
+                        {(j as any).con_customers?.name && <div className="text-xs text-gray-500 mt-0.5 truncate">{(j as any).con_customers.name}</div>}
+                        {j.work_order_number && <div className="text-xs text-gray-400 mt-0.5 font-mono truncate">{j.work_order_number}</div>}
+                        {j.status_detail && <div className="text-xs text-gray-500 mt-1 line-clamp-2 break-words">{j.status_detail}</div>}
                       </Link>
                     ))}
-                    {col.length === 0 && <div className="text-xs text-gray-300 px-1 py-2">—</div>}
                   </div>
                 </div>
               )
             })}
           </div>
+          {CON_STAGES.some(stage => !list.some(j => j.stage === stage.value)) && (
+            <div className="flex flex-wrap items-center gap-2 mt-4 px-1">
+              <span className="text-xs text-gray-400">Empty:</span>
+              {CON_STAGES.filter(stage => !list.some(j => j.stage === stage.value)).map(stage => <StageBadge key={stage.value} stage={stage.value} />)}
+            </div>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">

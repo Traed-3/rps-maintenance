@@ -3,7 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
 import { CON_STAGES, money, fmtDate, projectNotificationStatus } from '@/lib/construction'
 import { loadPermitGraph, computeAlerts, loadHashEnteredAt } from '@/lib/permits-data'
-import { InvoiceStatusBadge } from '@/components/construction/badges'
+import { FOCUS_TILES, buildFocusTiles, tallyMaterials, daysSince, type FocusJob } from '@/lib/construction-dashboard'
+import { StageBadge } from '@/components/construction/badges'
 import { Users, Contact, HardHat, FileText, Receipt, Package, CalendarDays, BarChart3, ClipboardList, ListChecks, Hammer, Truck, Inbox, FileCheck2, AlertTriangle } from 'lucide-react'
 
 function iso(d: Date) {
@@ -22,11 +23,11 @@ export default async function ConstructionDashboard() {
   // select silently caps at Supabase's default 1000-row limit — so this only
   // ever loads OPEN jobs (everything the dashboard shows is about active work
   // anyway) and gets the completed count separately, cheaply, via head:true.
-  const [{ data: jobs }, { count: completeCount }, { data: invoices }, { data: neededMaterials }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
-    admin.from('con_jobs').select('id, site_number, stage, priority, project_start_date, notification_sent_at, notification_waived, program, con_customers(name)').eq('company_id', company_id).neq('stage', 'complete'),
+  const [{ data: jobs }, { count: completeCount }, { data: invoices }, { data: materialRows }, { data: schedule }, permitGraph, hashEnteredAt] = await Promise.all([
+    admin.from('con_jobs').select('id, site_number, job_number, work_order_number, stage, status_detail, scope_of_work, gas_brand, priority, date_received, project_start_date, updated_at, notification_sent_at, notification_waived, program, con_customers(name)').eq('company_id', company_id).neq('stage', 'complete'),
     admin.from('con_jobs').select('*', { count: 'exact', head: true }).eq('company_id', company_id).eq('stage', 'complete'),
     admin.from('con_invoices').select('id, invoice_number, invoice_date, status, invoice_grand_total, con_customers(name)').eq('company_id', company_id).neq('status', 'void'),
-    admin.from('con_job_materials').select('id').eq('company_id', company_id).in('status', ['needed', 'ordered']),
+    admin.from('con_job_materials').select('id, job_id, status').eq('company_id', company_id),
     admin.from('con_schedule_entries').select('*').eq('company_id', company_id).gte('schedule_date', iso(monday)).lte('schedule_date', iso(sunday)).order('schedule_date'),
     loadPermitGraph(admin, company_id),
     loadHashEnteredAt(admin, company_id),
@@ -36,13 +37,20 @@ export default async function ConstructionDashboard() {
   const otherAlerts = permitAlerts.filter(a => a.key !== 'unknown-window')
 
   const allJobs = jobs ?? []
+  const neededMaterials = (materialRows ?? []).filter(m => m.status === 'needed' || m.status === 'ordered')
+  const tallies = tallyMaterials((materialRows ?? []).map(m => ({ job_id: m.job_id, status: m.status })))
+  const focusJobs: FocusJob[] = allJobs.map(j => ({
+    id: j.id, site_number: j.site_number, job_number: (j as any).job_number, work_order_number: (j as any).work_order_number,
+    stage: j.stage, status_detail: (j as any).status_detail, scope_of_work: (j as any).scope_of_work, gas_brand: (j as any).gas_brand,
+    priority: j.priority, date_received: (j as any).date_received, project_start_date: j.project_start_date, updated_at: (j as any).updated_at,
+    customer_name: (j as any).con_customers?.name ?? null,
+  }))
+  const focus = buildFocusTiles(focusJobs, tallies, todayIso)
   const notifyDue = allJobs
     .map(j => ({ job: j, n: projectNotificationStatus(j) }))
     .filter(x => x.n.isDue)
     .sort((a, b) => (a.n.daysToDeadline ?? 0) - (b.n.daysToDeadline ?? 0))
   const stageCounts = CON_STAGES.map(s => ({ ...s, count: s.value === 'complete' ? (completeCount ?? 0) : allJobs.filter(j => j.stage === s.value).length }))
-  const needingInvoice = allJobs.filter(j => j.stage === 'invoicing')
-  const waitingMaterial = allJobs.filter(j => j.stage === 'material_ordering')
 
   // Invoiced means done — accounting takes it from there. No A/R, nothing
   // overdue. What's useful here is how much has been invoiced this year and
@@ -52,8 +60,6 @@ export default async function ConstructionDashboard() {
   const invoicedThisYear = invoiced
     .filter(i => String(i.invoice_date ?? '').startsWith(thisYear))
     .reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
-  const invoicedAllTime = invoiced.reduce((a, r) => a + (Number(r.invoice_grand_total) || 0), 0)
-  const draftInvoices = (invoices ?? []).filter(i => i.status === 'draft')
 
   const [{ count: docReviewCount }, { count: ticketDraftCount }] = await Promise.all([
     admin.from('con_documents').select('id', { count: 'exact', head: true })
@@ -81,12 +87,57 @@ export default async function ConstructionDashboard() {
   ]
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto overflow-x-hidden">
       <div className="mb-6">
         <h1 className="inline-flex items-center gap-2.5 text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight before:content-[''] before:w-1.5 before:h-7 before:rounded-full before:bg-gradient-to-b before:from-blue-500 before:to-blue-700 before:shrink-0">
           Construction
         </h1>
         <p className="text-sm text-gray-500 mt-0.5">Job pipeline, quotes, invoices & scheduling</p>
+      </div>
+
+      {/* Focus tiles — the five lists the department is run from (workbook legend colors) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-6 min-w-0">
+        {FOCUS_TILES.map(t => {
+          const list = focus[t.key]
+          return (
+            <section key={t.key} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-w-0">
+              <div className={`px-3 py-2 flex items-start justify-between gap-2 ${t.band}`}>
+                <div className="min-w-0">
+                  <h2 className="font-bold text-sm leading-tight break-words">{t.title}</h2>
+                  <p className="text-[11px] opacity-80 mt-0.5 leading-snug break-words">{t.blurb}</p>
+                </div>
+                <span className="text-2xl font-bold tabular-nums leading-none shrink-0">{list.length}</span>
+              </div>
+              {list.length === 0 ? (
+                <p className="px-3 py-4 text-xs text-gray-400">Nothing here right now.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50 flex-1 min-w-0">
+                  {list.slice(0, 6).map(j => {
+                    const idle = daysSince(j.updated_at, today)
+                    return (
+                      <li key={j.id} className="min-w-0">
+                        <Link href={`/construction/jobs/${j.id}`} className="block px-3 py-2 hover:bg-gray-50 min-w-0">
+                          <div className="flex items-center justify-between gap-2 min-w-0">
+                            <span className="font-semibold text-gray-900 text-sm truncate min-w-0">{j.site_number ?? '—'}{j.gas_brand ? <span className="ml-1.5 text-[11px] font-normal text-gray-400">{j.gas_brand}</span> : null}</span>
+                            {idle != null && <span className={`shrink-0 text-[11px] tabular-nums ${idle >= 14 ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>{idle}d</span>}
+                          </div>
+                          {j.scope_of_work && <p className="text-xs text-gray-600 truncate">{j.scope_of_work}</p>}
+                          <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                            <span className="shrink-0 whitespace-nowrap"><StageBadge stage={j.stage} /></span>
+                            <p className="text-[11px] text-gray-400 truncate min-w-0">{[j.work_order_number, j.status_detail].filter(Boolean).join(' · ')}</p>
+                          </div>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              <Link href={`/construction/jobs?view=table&stage=${t.linkStage}`} className="px-3 py-1.5 text-[11px] font-medium text-blue-600 hover:text-blue-800 border-t border-gray-100">
+                {list.length > 6 ? `View all ${list.length} →` : 'Open the list →'}
+              </Link>
+            </section>
+          )
+        })}
       </div>
 
       {/* Quick links */}
@@ -162,42 +213,6 @@ export default async function ConstructionDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Needs invoice */}
-        <Panel title="Ready to Invoice" count={needingInvoice.length} href="/construction/jobs?view=table&stage=invoicing">
-          {needingInvoice.length === 0 ? <Empty>No jobs awaiting invoicing.</Empty> : needingInvoice.slice(0, 6).map(j => (
-            <Row key={j.id} href={`/construction/jobs/${j.id}`} left={j.site_number ?? '—'} right={(j as any).con_customers?.name ?? ''} />
-          ))}
-        </Panel>
-
-        {/* Waiting material */}
-        <Panel title="Waiting on Material" count={waitingMaterial.length} href="/construction/jobs?view=table&stage=material_ordering">
-          {waitingMaterial.length === 0 ? <Empty>Nothing waiting on material.</Empty> : waitingMaterial.slice(0, 6).map(j => (
-            <Row key={j.id} href={`/construction/jobs/${j.id}`} left={j.site_number ?? '—'} right={(j as any).con_customers?.name ?? ''} />
-          ))}
-        </Panel>
-
-        {/* Invoiced — revenue, not receivables */}
-        <Panel title="Invoiced" count={invoiced.length} href="/billing/invoices">
-          <div className="px-4 py-3 border-b border-gray-50">
-            <p className="text-xs text-gray-500">{thisYear} to date</p>
-            <p className="text-xl font-semibold text-gray-900">{money(invoicedThisYear)}</p>
-            <p className="text-xs text-gray-400 mt-1">{money(invoicedAllTime)} all time</p>
-          </div>
-          {draftInvoices.length > 0 && (
-            <p className="px-4 py-1.5 text-xs text-amber-700 font-medium">
-              {draftInvoices.length} still in draft
-            </p>
-          )}
-          {invoiced.slice(0, 5).map(r => (
-            <Link key={r.id} href={`/billing/invoices/${r.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-gray-50">
-              <span className="font-mono text-xs text-gray-700">{r.invoice_number}</span>
-              <span className="text-sm font-semibold text-gray-900 w-24 text-right">{money(r.invoice_grand_total)}</span>
-            </Link>
-          ))}
-        </Panel>
-      </div>
-
       {/* This week's schedule */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mt-6">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -220,25 +235,6 @@ export default async function ConstructionDashboard() {
   )
 }
 
-function Panel({ title, count, href, children }: { title: string; count: number; href: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <h2 className="font-semibold text-gray-900">{title}</h2>
-        <Link href={href} className="text-xs text-gray-400 hover:text-gray-600">{count}</Link>
-      </div>
-      <div className="divide-y divide-gray-50">{children}</div>
-    </div>
-  )
-}
-function Row({ href, left, right }: { href: string; left: string; right: string }) {
-  return (
-    <Link href={href} className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-gray-50">
-      <span className="font-medium text-gray-900 text-sm">{left}</span>
-      <span className="text-xs text-gray-500 truncate">{right}</span>
-    </Link>
-  )
-}
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="px-4 py-6 text-sm text-gray-400">{children}</p>
 }
