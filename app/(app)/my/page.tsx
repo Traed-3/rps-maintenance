@@ -214,7 +214,7 @@ function Resolver({ t }: { t: TaskRow }) {
             <div className="flex flex-wrap items-center gap-1.5">
               <a href={mailtoHref(d)} className="px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-700">Open in mail</a>
               <CopyButton text={`To: ${d.to}\nCc: ${d.cc.join(', ')}\nSubject: ${d.subject}\n\n${d.body}`} label="Copy email" />
-              <form action={markOrderSent.bind(null, t.id)} className="flex items-center gap-1"><input name="who" defaultValue={ORDER_VENDORS[a.vendor ?? 'icon']?.label.split(' ')[0] ?? 'vendor'} className={`${input} w-24`} /><button className="px-2 py-0.5 rounded border border-emerald-300 text-emerald-800 hover:bg-emerald-100">I sent it → waiting</button></form>
+              <form action={markOrderSent.bind(null, t.id)} className="flex items-center gap-1"><input name="who" defaultValue="Shannon (PO#)" className={`${input} w-28`} /><button className="px-2 py-0.5 rounded border border-emerald-300 text-emerald-800 hover:bg-emerald-100">I sent it → waiting</button></form>
             </div>
             <details><summary className="cursor-pointer text-gray-500">Edit and redraft</summary><OrderForm t={t} a={a} input={input} /></details>
           </>
