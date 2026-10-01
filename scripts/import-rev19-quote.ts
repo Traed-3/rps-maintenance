@@ -66,7 +66,17 @@ async function main() {
   const { data: parts } = partNos.length ? await sb.from('parts').select('id, part_number').eq('company_id', COMPANY_ID).in('part_number', partNos) : { data: [] }
   const partById = new Map((parts ?? []).map(p => [p.part_number, p.id]))
 
-  const lines: Rev19LineInput[] = q.lines.map((l, i) => ({ ...l, line_no: i + 1, part_id: l.part_number ? partById.get(l.part_number) ?? null : null, price_flag: l.price_flag ?? 'ok' }))
+  // Only the app's PriceFlag values may reach the database: the builder's dropdown and the My Plate "price needed"
+  // signal both match on 'price_needed', so 'needed' / 'PRICE NEEDED' / blanks are normalized here.
+  const VALID_FLAGS = new Set(['ok', 'estimate', 'price_needed', 'held_high', 'verify', 'hours_needed'])
+  const normalizeFlag = (flag: string | undefined, unitCost: number | null | undefined): string => {
+    const f = (flag ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+    if (VALID_FLAGS.has(f)) return f
+    if (f === 'needed' || f === 'price' || f === 'pricing_needed') return 'price_needed'
+    if (f === 'hours') return 'hours_needed'
+    return unitCost == null ? 'price_needed' : 'ok'
+  }
+  const lines: Rev19LineInput[] = q.lines.map((l, i) => ({ ...l, line_no: i + 1, part_id: l.part_number ? partById.get(l.part_number) ?? null : null, price_flag: normalizeFlag(l.price_flag as string | undefined, l.unit_cost) as Rev19LineInput['price_flag'] }))
 
   // ── --reprice: the workbook's numbers are old; take the catalog's cost where we know the part ──
   const repriced: string[] = []
