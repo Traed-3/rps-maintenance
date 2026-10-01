@@ -204,6 +204,9 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          # Gmail allows 6,000 query units per user per minute; the sync + thread pass above spends most of that,
+          # so wait for the next window before this pass lists and reads the update mail.
+          sleep 65
           curl --fail-with-body -sS --max-time 90 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=updates&since=3"

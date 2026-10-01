@@ -188,8 +188,12 @@ export async function syncInvoiceDocs(opts: { sinceDays?: number } = {}): Promis
       }
       if (newHere) out.filed += newHere
       // Stage: Peggy's workup = Need Invoiced; Star's "Received … IRTS" = sent to the customer = Complete.
+      // Only a job whose work was under way moves. A site can carry a service-call invoice while its open job is still
+      // a survey, a quote or waiting to be scheduled (32284 entry boots, 40041 probe daisy chain on 10/1/26) — those keep
+      // the document but not the stage change.
       const want = starReceived ? 'complete' : 'invoicing'
-      const canMove = job.stage !== 'complete' && (want === 'complete' || !['invoicing', 'complete'].includes(job.stage))
+      const underWay = ['in_progress', 'return_needed', 'on_hold', 'close_out', 'invoicing'].includes(job.stage)
+      const canMove = underWay && job.stage !== 'complete' && (want === 'complete' || job.stage !== 'invoicing')
       if (canMove && (newHere || want === 'complete')) {
         const tag = want === 'complete' ? `Invoiced ${(d.received_at as string).slice(0, 10)} · sent to customer (Star)` : `Invoice workup ${(d.received_at as string).slice(0, 10)} (Peggy) · awaiting Starsky`
         const detail = (job.status_detail ?? '').includes('Invoice') ? job.status_detail : [job.status_detail, tag].filter(Boolean).join('  ->  ')
