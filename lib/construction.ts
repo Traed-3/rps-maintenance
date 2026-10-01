@@ -16,21 +16,19 @@
 // helpers below with a role check using these lists:
 //   read roles:  ['owner', 'manager', 'construction_manager', 'estimator', 'viewer']
 //   write roles: ['owner', 'manager', 'construction_manager', 'estimator']
-export const CON_ALLOWED_USER_IDS: readonly string[] = [
-  '09d76016-7ed8-427d-83c3-1f94c484c1ce', // finance.trae@proton.me  (Trae Dodson - Admin)
-  '703891ec-8547-423c-bba3-baba65a950b2', // dodson3.trae@gmail.com  (Admin Acct)
-]
+// Who may see and change construction data. Mirrors the database policies con_can_read() / con_can_write() exactly,
+// so Settings → role is the one place access is decided (Trae 10/1/26, retiring the user-id lock that only let his
+// two logins in). Trim CON_READ_ROLES / CON_WRITE_ROLES here if a role should wait.
+export const CON_READ_ROLES: readonly string[] = ['owner', 'manager', 'construction_manager', 'estimator', 'viewer']
+export const CON_WRITE_ROLES: readonly string[] = ['owner', 'manager', 'construction_manager', 'estimator']
 
-// Pass the caller's profile object (must include `id`). Anyone not on the
-// allowlist above gets false. During the temporary lock, read and write are
-// the same gate (the allowed users can do everything).
-type ConGateProfile = { id?: string | null } | null | undefined
+type ConGateProfile = { id?: string | null; role?: string | null } | null | undefined
 
 export function canReadConstruction(profile?: ConGateProfile) {
-  return !!profile?.id && CON_ALLOWED_USER_IDS.includes(profile.id)
+  return !!profile?.id && CON_READ_ROLES.includes(profile.role ?? '')
 }
 export function canWriteConstruction(profile?: ConGateProfile) {
-  return !!profile?.id && CON_ALLOWED_USER_IDS.includes(profile.id)
+  return !!profile?.id && CON_WRITE_ROLES.includes(profile.role ?? '')
 }
 
 export type ConProfile = { id: string; company_id: string; role: string }
