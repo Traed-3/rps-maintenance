@@ -12,13 +12,36 @@ export type SurveyEntry = { kind: EntryKind; n: number; fitting: Fitting | null;
 export type LidMeasure = { a?: string; b?: string; c?: string; d?: string; e?: string }
 export type Worksheet = 'fittings' | 'lid' | 'damage'
 
+export type SurveyType = 'icon_fittings' | 'spill_bucket' | 'tank_top'
+export const SURVEY_TYPES: { value: SurveyType; label: string; ready: boolean; blurb: string }[] = [
+  { value: 'icon_fittings', label: 'ICON Fittings Survey', ready: true, blurb: 'Entry boots per sump on ICON\'s worksheet, photos, PDF to ICON for part numbers.' },
+  { value: 'spill_bucket', label: 'Spill Bucket Survey', ready: false, blurb: 'Coming after the ICON survey is right.' },
+  { value: 'tank_top', label: 'Tank Top Survey', ready: false, blurb: 'Coming after the ICON survey is right.' },
+]
+export const surveyTypeLabel = (v: string | null | undefined) => SURVEY_TYPES.find(t => t.value === v)?.label ?? 'Survey'
+
+export type SumpType = 'udc' | 'stp' | 'other'
+/** What a sump is called in the field: the type pick plus a number or product, composed into the worksheet's Sump ID. */
+export const SUMP_TYPES: { value: SumpType; label: string; prompt: string; numbers: string[]; location: 'disp' | 'tank' }[] = [
+  { value: 'udc', label: 'UDC (dispenser)', prompt: 'Dispenser #', numbers: ['1/2', '3/4', '5/6', '7/8', '9/10', '11/12', '13/14', '15/16', '17/18', '19/20'], location: 'disp' },
+  { value: 'stp', label: 'STP (tank sump)', prompt: 'Product', numbers: ['RUL', 'PUL', 'MUL', 'DSL', 'RUL 2', 'PUL 2', 'DSL 2', 'KERO', 'E85', 'DEF'], location: 'tank' },
+  { value: 'other', label: 'Other (vent / probe / transition)', prompt: 'Which', numbers: ['Vent sump', 'Probe sump', 'Transition sump', 'Fill sump', 'Interstitial', 'Remote fill'], location: 'tank' },
+]
+export function composeSumpLabel(type: SumpType | null | undefined, number: string | null | undefined): string {
+  const n = (number ?? '').trim()
+  if (type === 'udc') return n ? `UDC ${n}` : 'UDC'
+  if (type === 'stp') return n ? `STP ${n}` : 'STP'
+  if (type === 'other') return n || 'Other sump'
+  return n || 'Sump'
+}
+
 export type SurveyRow = {
   id: string; company_id: string; job_id: string | null; survey_type: string; site_number: string | null; site_name: string | null; address: string | null
   survey_date: string; tech_name: string | null; tech_phone: string | null; tech_email: string | null; status: 'draft' | 'complete' | 'sent'; notes: string | null
   pdf_document_id: string | null; sent_to: string | null; sent_at: string | null; created_at: string; updated_at: string
 }
 export type SumpRow = {
-  id: string; survey_id: string; sort_order: number; sump_label: string; location: 'tank' | 'disp' | null; material: 'poly' | 'fiberglass' | null; profile: 'flat' | 'curved' | null
+  id: string; survey_id: string; sort_order: number; sump_label: string; sump_type: SumpType | null; sump_number: string | null; location: 'tank' | 'disp' | null; material: 'poly' | 'fiberglass' | null; profile: 'flat' | 'curved' | null
   active_leak: boolean | null; worksheets: Worksheet[]; entries: SurveyEntry[]; lid: LidMeasure | null; damage: string | null; notes: string | null
 }
 export type PhotoRow = { id: string; survey_id: string; sump_id: string | null; storage_path: string; file_name: string | null; caption: string | null; entry_ref: string | null; sort_order: number; taken_at: string | null }
@@ -51,8 +74,6 @@ export const LID_FIELDS: { key: keyof LidMeasure; label: string }[] = [
   { key: 'a', label: 'a. Manhole opening ID' }, { key: 'b', label: 'b. Largest outside diameter, sump top' }, { key: 'c', label: 'c. Smallest outside diameter, sump top' },
   { key: 'd', label: 'd. Smallest space between sump and skirt' }, { key: 'e', label: 'e. Sump top to manhole lid bottom' },
 ]
-/** Typical sump labels so a tech taps instead of types. */
-export const SUMP_LABELS = ['Dispenser 1/2 UDC', 'Dispenser 3/4 UDC', 'Dispenser 5/6 UDC', 'Dispenser 7/8 UDC', 'Dispenser 9/10 UDC', 'Dispenser 11/12 UDC', 'Dispenser 13/14 UDC', 'RUL STP sump', 'PUL STP sump', 'MUL STP sump', 'DSL STP sump', 'RUL 2 STP sump', 'Transition sump', 'Vent / fill sump']
 
 export const fittingLabel = (f: Fitting | null) => FITTINGS.find(x => x.value === f)?.label ?? ''
 export const entryRef = (e: Pick<SurveyEntry, 'kind' | 'n'>) => `${e.kind}${e.n}`

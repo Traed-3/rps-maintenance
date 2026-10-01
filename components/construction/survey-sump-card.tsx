@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Plus, Trash2, Camera } from 'lucide-react'
-import { type SumpRow, type SurveyEntry, type EntryKind, type PhotoRow, ENTRY_KINDS, FITTINGS, BOLT_COUNTS, PIPE_OPTIONS, OD_OPTIONS, NOTE_OPTIONS, SUMP_LOCATIONS, SUMP_MATERIALS, SUMP_PROFILES, WORKSHEETS, LID_FIELDS, SUMP_LABELS, entryRef } from '@/lib/survey'
+import { type SumpRow, type SurveyEntry, type EntryKind, type PhotoRow, type SumpType, ENTRY_KINDS, FITTINGS, BOLT_COUNTS, PIPE_OPTIONS, OD_OPTIONS, NOTE_OPTIONS, SUMP_LOCATIONS, SUMP_MATERIALS, SUMP_PROFILES, WORKSHEETS, LID_FIELDS, SUMP_TYPES, composeSumpLabel, entryRef } from '@/lib/survey'
 
 const inp = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white'
 const sel = inp
@@ -22,6 +22,8 @@ type Props = {
 /** One sump of the survey: the ICON worksheet as taps and dropdowns, then the photos for that sump. Saves as one form. */
 export function SurveySumpCard({ sump, photos, locked, saveAction, deleteAction, photosAction, deletePhotoAction }: Props) {
   const [entries, setEntries] = useState<SurveyEntry[]>(sump.entries?.length ? sump.entries : [{ kind: 'P', n: 1, fitting: null, bolts: null, pipe: null, od: null, notes: null }])
+  const [sumpType, setSumpType] = useState<SumpType | ''>(sump.sump_type ?? '')
+  const [sumpNumber, setSumpNumber] = useState(sump.sump_number ?? '')
   const [location, setLocation] = useState(sump.location ?? '')
   const [material, setMaterial] = useState(sump.material ?? '')
   const [profile, setProfile] = useState(sump.profile ?? '')
@@ -48,11 +50,19 @@ export function SurveySumpCard({ sump, photos, locked, saveAction, deleteAction,
         {worksheets.map(w => <input key={w} type="hidden" name="worksheets" value={w} />)}
 
         <div className="flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[12rem]">
-            <label className={lbl}>Sump</label>
-            <input name="sump_label" list="sump-labels" defaultValue={sump.sump_label} onChange={() => setDirty(true)} className={inp} disabled={locked} />
-            <datalist id="sump-labels">{SUMP_LABELS.map(l => <option key={l} value={l} />)}</datalist>
+          <input type="hidden" name="sump_type" value={sumpType} /><input type="hidden" name="sump_number" value={sumpNumber} />
+          <div className="w-44">
+            <label className={lbl}>Sump type</label>
+            <select value={sumpType} disabled={locked} onChange={ev => { const v = ev.target.value as SumpType | ''; setSumpType(v); setSumpNumber(''); const loc = SUMP_TYPES.find(t => t.value === v)?.location; if (loc) setLocation(loc); setDirty(true) }} className={sel}>
+              <option value="">—</option>{SUMP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
           </div>
+          <div className="w-40">
+            <label className={lbl}>{SUMP_TYPES.find(t => t.value === sumpType)?.prompt ?? 'Number'}</label>
+            <input list={`nums-${sump.id}`} value={sumpNumber} disabled={locked || !sumpType} onChange={ev => { setSumpNumber(ev.target.value); setDirty(true) }} placeholder={sumpType === 'udc' ? '3/4' : sumpType === 'stp' ? 'RUL' : 'Vent sump'} className={inp} />
+            <datalist id={`nums-${sump.id}`}>{(SUMP_TYPES.find(t => t.value === sumpType)?.numbers ?? []).map(n => <option key={n} value={n} />)}</datalist>
+          </div>
+          <div className="flex-1 min-w-[8rem] text-sm font-semibold text-gray-800 pb-2">{composeSumpLabel(sumpType || null, sumpNumber)}</div>
           {!locked && <button type="button" onClick={() => { if (confirm('Remove this sump and its rows?')) void deleteAction() }} className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-red-600 hover:bg-red-50" title="Remove sump"><Trash2 className="w-4 h-4" /></button>}
         </div>
 

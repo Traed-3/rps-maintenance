@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
-import { surveyTitle, SUMP_LABELS, type SurveyRow, type SumpRow, type PhotoRow } from '@/lib/survey'
+import { surveyTitle, surveyTypeLabel, SUMP_TYPES, type SurveyRow, type SumpRow, type PhotoRow } from '@/lib/survey'
 import { SurveySumpCard } from '@/components/construction/survey-sump-card'
 import { saveSurveyHeader, addSump, saveSump, deleteSump, addSurveyPhotos, deletePhoto, completeSurvey, reopenSurvey, deleteSurvey } from '../actions'
 
@@ -29,7 +29,7 @@ export default async function SurveyEditorPage({ params }: { params: Promise<{ i
     <div className="p-4 sm:p-6 max-w-4xl mx-auto overflow-x-hidden space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{surveyTitle(sv)} <span className="text-base font-normal text-gray-500">· sump survey</span></h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{surveyTitle(sv)} <span className="text-base font-normal text-gray-500">· {surveyTypeLabel(sv.survey_type)}</span></h1>
           <p className="text-xs text-gray-500 mt-0.5">{sv.survey_date} · {sv.tech_name ?? 'tech'} · <span className="uppercase font-semibold">{sv.status}</span></p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -63,7 +63,8 @@ export default async function SurveyEditorPage({ params }: { params: Promise<{ i
 
       {!locked && (
         <form action={addSump.bind(null, id)} className="rounded-2xl border border-dashed border-gray-300 bg-white p-4 flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[12rem]"><label className={lbl}>Add another sump</label><input name="sump_label" list="add-sump" placeholder="Dispenser 3/4 UDC" className={inp} /><datalist id="add-sump">{SUMP_LABELS.map(l => <option key={l} value={l} />)}</datalist></div>
+          <div className="w-48"><label className={lbl}>Add another sump</label><select name="sump_type" defaultValue="udc" className={inp}>{SUMP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+          <div className="w-40"><label className={lbl}>Number / product</label><input name="sump_number" list="add-sump-num" placeholder="3/4, PUL, Probe sump" className={inp} /><datalist id="add-sump-num">{SUMP_TYPES.flatMap(t => t.numbers).map(n => <option key={n} value={n} />)}</datalist></div>
           <button className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-gray-50">+ Sump</button>
         </form>
       )}
