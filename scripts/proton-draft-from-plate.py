@@ -2,7 +2,7 @@
 """
 Push order emails drafted on My Plate (/my) into Trae's Proton Drafts through the Proton Mail Bridge.
 
-  python3 scripts/proton-draft-from-plate.py [--owner finance.trae@proton.me] [--apply]
+  python3 scripts/proton-draft-from-plate.py [--owner dodson3.trae@gmail.com] [--apply]
 
 The app only stores the draft (action.draft on con_tasks); nothing is ever sent. This script runs on the Mac with
 the Bridge (same login as scripts/proton-pull-attachments.py, split-address: tdodson.rp@proton.me) and APPENDs each
@@ -48,7 +48,7 @@ def rest(url, key, method, path, body=None):
 
 def main():
     flags = sys.argv[1:]
-    owner = flags[flags.index('--owner') + 1] if '--owner' in flags else 'finance.trae@proton.me'
+    owner = flags[flags.index('--owner') + 1] if '--owner' in flags else 'dodson3.trae@gmail.com'
     apply = '--apply' in flags
     e = env(); url, key = e['NEXT_PUBLIC_SUPABASE_URL'], e['SUPABASE_SERVICE_ROLE_KEY']
     prof = rest(url, key, 'GET', f'profiles?email=eq.{owner}&select=id')

@@ -1,7 +1,7 @@
 /**
  * Upsert follow-up items into con_tasks (the "My Plate" page) for one owner.
  *
- *   npx tsx scripts/my-tasks-upsert.ts items.json --owner finance.trae@proton.me [--apply]
+ *   npx tsx scripts/my-tasks-upsert.ts items.json --owner dodson3.trae@gmail.com [--apply]
  *
  * items.json is a list in the /rps-project-intake open_items shape:
  *   { site_key, item, category, owner, due, asked_on, status, answer }
