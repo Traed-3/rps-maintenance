@@ -5,7 +5,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } from '@react-pdf/renderer'
-import { type SurveyRow, type SumpRow, type PhotoRow, type SurveyEntry, ENTRY_KINDS, LID_FIELDS, fittingLabel, sumpTypeLine, surveyTitle } from '@/lib/survey'
+import { type SurveyRow, type SumpRow, type PhotoRow, type SurveyEntry, ENTRY_KINDS, LID_FIELDS, sumpTypeLine, surveyTitle, surveyTypeLabel } from '@/lib/survey'
 
 const BUCKET = 'construction-docs'
 export type SurveyBundle = { survey: SurveyRow; sumps: SumpRow[]; photos: (PhotoRow & { bytes?: Buffer })[] }
@@ -84,7 +84,7 @@ function SumpPage({ b, sump, idx }: { b: SurveyBundle; sump: SumpRow; idx: numbe
   const refs = (k: string) => sump.entries.filter(e => e.kind === k)
   return (
     <Page size="LETTER" style={s.page}>
-      <View style={s.band}><Text>SUMP SURVEY  |  {surveyTitle(sv).toUpperCase()}</Text><Text>Sump {idx + 1} of {b.sumps.length} · {sump.sump_label}</Text></View>
+      <View style={s.band}><Text>{surveyTypeLabel(sv.survey_type).toUpperCase()}  |  {surveyTitle(sv).toUpperCase()}</Text><Text>Sump {idx + 1} of {b.sumps.length} · {sump.sump_label}</Text></View>
       <Text style={s.h1}>Sump Survey Worksheet - Fittings</Text>
       <View style={s.row}>
         <View style={{ width: '48%' }}>

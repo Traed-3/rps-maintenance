@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canWriteConstruction } from '@/lib/construction'
-import { type SurveyEntry, type Worksheet, type LidMeasure, surveyTitle } from '@/lib/survey'
+import { type SurveyEntry, type Worksheet, type LidMeasure, type SumpType, surveyTitle, composeSumpLabel, SURVEY_TYPES, SUMP_TYPES } from '@/lib/survey'
 import { renderSurveyPdf, loadSurveyBundle } from '@/lib/survey-pdf'
 import { buildSurveyEmail } from '@/lib/order-email'
 
@@ -32,14 +32,18 @@ export async function createSurvey(formData: FormData): Promise<void> {
     const { data: j } = await admin.from('con_jobs').select('site_number, gas_brand, con_sites(address)').eq('id', jobId).maybeSingle()
     if (j) { site = site ?? j.site_number; siteName = siteName ?? (j.gas_brand as string | null); address = address ?? ((j.con_sites as unknown as { address: string | null } | null)?.address ?? null) }
   }
+  const surveyType = str(formData.get('survey_type')) ?? 'icon_fittings'
+  const chosen = SURVEY_TYPES.find(t => t.value === surveyType)
+  if (!chosen || !chosen.ready) throw new Error(`${chosen?.label ?? surveyType} is not ready yet`)
   const { data, error } = await admin.from('con_surveys').insert({
-    company_id: p.company_id, job_id: jobId, site_number: site, site_name: siteName, address,
+    company_id: p.company_id, job_id: jobId, survey_type: surveyType, site_number: site, site_name: siteName, address,
     survey_date: str(formData.get('survey_date')) ?? new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
     tech_name: str(formData.get('tech_name')) ?? p.full_name, tech_phone: str(formData.get('tech_phone')) ?? p.phone, tech_email: str(formData.get('tech_email')) ?? p.email,
     created_by: p.id,
   }).select('id').single()
   if (error || !data) throw new Error(error?.message ?? 'could not create survey')
-  await admin.from('con_survey_sumps').insert({ company_id: p.company_id, survey_id: data.id, sort_order: 1, sump_label: str(formData.get('first_sump')) ?? 'Dispenser 1/2 UDC', entries: [{ kind: 'P', n: 1, fitting: null, bolts: null, pipe: null, od: null, notes: null }] })
+  const st = (str(formData.get('sump_type')) ?? 'udc') as SumpType, sn = str(formData.get('sump_number'))
+  await admin.from('con_survey_sumps').insert({ company_id: p.company_id, survey_id: data.id, sort_order: 1, sump_type: st, sump_number: sn, sump_label: composeSumpLabel(st, sn), location: SUMP_TYPES.find(t => t.value === st)?.location ?? null, entries: [{ kind: 'P', n: 1, fitting: null, bolts: null, pipe: null, od: null, notes: null }] })
   touch(data.id)
   redirect(`/construction/surveys/${data.id}`)
 }
@@ -55,7 +59,8 @@ export async function saveSurveyHeader(id: string, formData: FormData): Promise<
 export async function addSump(surveyId: string, formData: FormData): Promise<void> {
   const { admin, p } = await me()
   const { count } = await admin.from('con_survey_sumps').select('id', { count: 'exact', head: true }).eq('survey_id', surveyId)
-  const { error } = await admin.from('con_survey_sumps').insert({ company_id: p.company_id, survey_id: surveyId, sort_order: (count ?? 0) + 1, sump_label: str(formData.get('sump_label')) ?? `Sump ${(count ?? 0) + 1}`, entries: [{ kind: 'P', n: 1, fitting: null, bolts: null, pipe: null, od: null, notes: null }] })
+  const st = (str(formData.get('sump_type')) ?? 'udc') as SumpType, sn = str(formData.get('sump_number'))
+  const { error } = await admin.from('con_survey_sumps').insert({ company_id: p.company_id, survey_id: surveyId, sort_order: (count ?? 0) + 1, sump_type: st, sump_number: sn, sump_label: composeSumpLabel(st, sn), location: SUMP_TYPES.find(t => t.value === st)?.location ?? null, entries: [{ kind: 'P', n: 1, fitting: null, bolts: null, pipe: null, od: null, notes: null }] })
   if (error) throw new Error(error.message)
   touch(surveyId)
 }
@@ -69,8 +74,9 @@ export async function saveSump(surveyId: string, sumpId: string, formData: FormD
   const worksheets = formData.getAll('worksheets').map(String).filter(w => ['fittings', 'lid', 'damage'].includes(w)) as Worksheet[]
   const lid: LidMeasure = { a: str(formData.get('lid_a')) ?? undefined, b: str(formData.get('lid_b')) ?? undefined, c: str(formData.get('lid_c')) ?? undefined, d: str(formData.get('lid_d')) ?? undefined, e: str(formData.get('lid_e')) ?? undefined }
   const leak = str(formData.get('active_leak'))
+  const st = (str(formData.get('sump_type')) ?? null) as SumpType | null, sn = str(formData.get('sump_number'))
   const { error } = await admin.from('con_survey_sumps').update({
-    sump_label: str(formData.get('sump_label')) ?? 'Sump', location: str(formData.get('location')), material: str(formData.get('material')), profile: str(formData.get('profile')),
+    sump_type: st, sump_number: sn, sump_label: composeSumpLabel(st, sn), location: str(formData.get('location')), material: str(formData.get('material')), profile: str(formData.get('profile')),
     active_leak: leak === 'yes' ? true : leak === 'no' ? false : null, worksheets: worksheets.length ? worksheets : ['fittings'], entries,
     lid: Object.values(lid).some(Boolean) ? lid : null, damage: str(formData.get('damage')), notes: str(formData.get('notes')), updated_at: new Date().toISOString(),
   }).eq('id', sumpId).eq('survey_id', surveyId).eq('company_id', p.company_id)
