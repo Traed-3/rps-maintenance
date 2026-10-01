@@ -22,6 +22,8 @@ export type TaskRow = {
   priority: number
   due_date: string | null
   status: TaskStatus
+  action: Record<string, unknown> | null
+  answer: string | null
   waiting_on: string | null
   waiting_since: string | null
   snoozed_until: string | null
@@ -108,10 +110,10 @@ export function businessDaysSince(iso: string, today: string): number {
 }
 
 /** Things the data already knows you owe, shown beside the list; one click turns one into a task. */
-export type Signal = { key: string; kind: TaskKind; title: string; detail?: string; site_number?: string | null; href?: string }
+export type Signal = { key: string; kind: TaskKind; title: string; detail?: string; site_number?: string | null; href?: string; action?: Record<string, unknown> }
 
 export function buildSignals(input: {
-  neededLines: { quote_number: string; quote_id: string; site_number: string | null; description: string }[]
+  neededLines: { quote_number: string; quote_id: string; line_id?: string; site_number: string | null; description: string }[]
   bidsDue: { quote_number: string; quote_id: string; site_number: string | null; bid_due: string }[]
   staleOrders: { site_number: string | null; description: string; ordered_date: string | null; job_id: string }[]
   quotingNoQuote: { id: string; site_number: string; work_order_number: string | null; status_detail: string | null }[]
@@ -119,7 +121,7 @@ export function buildSignals(input: {
   existingKeys: Set<string>
 }, today: string): Signal[] {
   const out: Signal[] = []
-  for (const l of input.neededLines) out.push({ key: `needed|${l.quote_id}|${l.description}`, kind: 'price', site_number: l.site_number, title: `Price needed on ${l.quote_number}: ${l.description}`, href: `/billing/quotes/${l.quote_id}` })
+  for (const l of input.neededLines) out.push({ key: `needed|${l.quote_id}|${l.description}`, kind: 'price', site_number: l.site_number, title: `Price needed on ${l.quote_number}: ${l.description}`, href: `/billing/quotes/${l.quote_id}`, action: l.line_id ? { type: 'quote_line_price', quote_id: l.quote_id, line_id: l.line_id } : undefined })
   for (const b of input.bidsDue) {
     const d = daysBetween(today, b.bid_due)
     out.push({ key: `bid|${b.quote_id}`, kind: 'bid', site_number: b.site_number, title: `${b.quote_number} bid due ${b.bid_due}${d < 0 ? ` (${-d} days ago)` : d === 0 ? ' (today)' : ` (in ${d} days)`}`, href: `/billing/quotes/${b.quote_id}` })
