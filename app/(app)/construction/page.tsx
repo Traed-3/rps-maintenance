@@ -89,6 +89,7 @@ export default async function ConstructionDashboard() {
     { href: '/construction/vendors', label: 'Vendors', icon: Truck },
     { href: '/construction/subcontractors', label: 'Subcontractors', icon: Hammer },
     { href: '/construction/schedule', label: 'Schedule', icon: CalendarDays },
+    { href: '/construction/surveys', label: 'Field Surveys', icon: ClipboardList },
     { href: '/construction/trackers', label: 'Sunoco Trackers', icon: ClipboardList },
     { href: '/construction/checklist', label: 'Checklist', icon: ListChecks },
     { href: '/construction/customers', label: 'Customers', icon: Users },

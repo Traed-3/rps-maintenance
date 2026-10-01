@@ -1,0 +1,89 @@
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireConstruction } from '@/lib/construction-guard'
+import { surveyTitle, SUMP_LABELS, type SurveyRow, type SumpRow, type PhotoRow } from '@/lib/survey'
+import { SurveySumpCard } from '@/components/construction/survey-sump-card'
+import { saveSurveyHeader, addSump, saveSump, deleteSump, addSurveyPhotos, deletePhoto, completeSurvey, reopenSurvey, deleteSurvey } from '../actions'
+
+export const dynamic = 'force-dynamic'
+const inp = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white disabled:bg-gray-50'
+const lbl = 'block text-xs font-medium text-gray-600 mb-1'
+
+export default async function SurveyEditorPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const profile = await requireConstruction()
+  const admin = createAdminClient()
+  const { data: survey } = await admin.from('con_surveys').select('*').eq('id', id).eq('company_id', profile.company_id).maybeSingle()
+  if (!survey) notFound()
+  const sv = survey as SurveyRow
+  const [{ data: sumps }, { data: photos }, { data: jobs }] = await Promise.all([
+    admin.from('con_survey_sumps').select('*').eq('survey_id', id).order('sort_order'),
+    admin.from('con_survey_photos').select('*').eq('survey_id', id).order('sort_order'),
+    admin.from('con_jobs').select('id, site_number, gas_brand, work_order_number').eq('company_id', profile.company_id).neq('stage', 'complete').order('site_number'),
+  ])
+  const locked = sv.status !== 'draft'
+  const photoList = (photos ?? []) as PhotoRow[]
+
+  return (
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto overflow-x-hidden space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{surveyTitle(sv)} <span className="text-base font-normal text-gray-500">· sump survey</span></h1>
+          <p className="text-xs text-gray-500 mt-0.5">{sv.survey_date} · {sv.tech_name ?? 'tech'} · <span className="uppercase font-semibold">{sv.status}</span></p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <a href={`/api/construction/surveys/${id}/pdf`} target="_blank" rel="noopener" className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">Preview PDF</a>
+          {sv.job_id && <Link href={`/construction/jobs/${sv.job_id}`} className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">Job</Link>}
+          <Link href="/construction/surveys" className="px-3 py-1.5 text-gray-500">All surveys</Link>
+        </div>
+      </div>
+
+      <details className="rounded-2xl border border-gray-200 bg-white shadow-sm" open={!sv.site_number}>
+        <summary className="px-4 py-3 text-sm font-semibold text-gray-800 cursor-pointer">Site and tech</summary>
+        <form action={saveSurveyHeader.bind(null, id)} className="p-4 pt-0 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="col-span-2 sm:col-span-3"><label className={lbl}>Job</label><select name="job_id" defaultValue={sv.job_id ?? ''} disabled={locked} className={inp}><option value="">— none —</option>{(jobs ?? []).map(j => <option key={j.id} value={j.id}>{j.site_number}{j.gas_brand ? ` · ${j.gas_brand}` : ''}{j.work_order_number ? ` · ${j.work_order_number}` : ''}</option>)}</select></div>
+          <div><label className={lbl}>Site #</label><input name="site_number" defaultValue={sv.site_number ?? ''} disabled={locked} className={inp} /></div>
+          <div><label className={lbl}>Brand / name</label><input name="site_name" defaultValue={sv.site_name ?? ''} disabled={locked} className={inp} /></div>
+          <div><label className={lbl}>Date</label><input name="survey_date" type="date" defaultValue={sv.survey_date} disabled={locked} className={inp} /></div>
+          <div className="col-span-2 sm:col-span-3"><label className={lbl}>Address</label><input name="address" defaultValue={sv.address ?? ''} disabled={locked} className={inp} /></div>
+          <div><label className={lbl}>Tech</label><input name="tech_name" defaultValue={sv.tech_name ?? ''} disabled={locked} className={inp} /></div>
+          <div><label className={lbl}>Phone</label><input name="tech_phone" defaultValue={sv.tech_phone ?? ''} disabled={locked} className={inp} /></div>
+          <div><label className={lbl}>Email</label><input name="tech_email" defaultValue={sv.tech_email ?? ''} disabled={locked} className={inp} /></div>
+          <div className="col-span-2 sm:col-span-3"><label className={lbl}>Site notes</label><textarea name="notes" rows={2} defaultValue={sv.notes ?? ''} disabled={locked} className={inp} /></div>
+          {!locked && <div className="col-span-2 sm:col-span-3"><button className="rounded-lg bg-gray-900 text-white px-4 py-2 text-sm font-semibold">Save site and tech</button></div>}
+        </form>
+      </details>
+
+      {((sumps ?? []) as SumpRow[]).map(sm => (
+        <SurveySumpCard key={sm.id} sump={sm} photos={photoList.filter(p => p.sump_id === sm.id)} locked={locked}
+          saveAction={saveSump.bind(null, id, sm.id)} deleteAction={deleteSump.bind(null, id, sm.id)}
+          photosAction={addSurveyPhotos.bind(null, id, sm.id)} deletePhotoAction={deletePhoto.bind(null, id)} />
+      ))}
+
+      {!locked && (
+        <form action={addSump.bind(null, id)} className="rounded-2xl border border-dashed border-gray-300 bg-white p-4 flex flex-wrap items-end gap-2">
+          <div className="flex-1 min-w-[12rem]"><label className={lbl}>Add another sump</label><input name="sump_label" list="add-sump" placeholder="Dispenser 3/4 UDC" className={inp} /><datalist id="add-sump">{SUMP_LABELS.map(l => <option key={l} value={l} />)}</datalist></div>
+          <button className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-gray-50">+ Sump</button>
+        </form>
+      )}
+
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-4 flex flex-wrap items-center gap-2">
+        {locked ? (
+          <>
+            <span className="text-sm text-gray-700 flex-1">Survey is {sv.status}. The PDF is on the job's Documents and the email to ICON is on the plate.</span>
+            <a href={`/api/construction/surveys/${id}/pdf`} target="_blank" rel="noopener" className="px-3 py-2 rounded-lg bg-gray-900 text-white text-sm">Open PDF</a>
+            <Link href="/my" className="px-3 py-2 rounded-lg border border-gray-300 text-sm">My Plate</Link>
+            <form action={reopenSurvey.bind(null, id)}><button className="px-3 py-2 rounded-lg border border-gray-300 text-sm">Reopen</button></form>
+          </>
+        ) : (
+          <>
+            <span className="text-sm text-gray-700 flex-1">Save every sump, then finish: builds the ICON PDF with the photos, files it on the job, and puts the email to ICON on the plate.</span>
+            <form action={completeSurvey.bind(null, id)}><button className="px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700">Finish survey → PDF</button></form>
+            <form action={deleteSurvey.bind(null, id)}><button className="px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-red-600">Delete</button></form>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
