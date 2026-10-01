@@ -53,7 +53,7 @@ def main():
     e = env(); url, key = e['NEXT_PUBLIC_SUPABASE_URL'], e['SUPABASE_SERVICE_ROLE_KEY']
     prof = rest(url, key, 'GET', f'profiles?email=eq.{owner}&select=id')
     if not prof: sys.exit(f'no profile for {owner}')
-    tasks = rest(url, key, 'GET', f"con_tasks?owner_id=eq.{prof[0]['id']}&action->>type=eq.order_email&action->>draft_status=eq.drafted&select=id,title,site_number,action")
+    tasks = rest(url, key, 'GET', f"con_tasks?owner_id=eq.{prof[0]['id']}&action->>type=eq.order_email&action->>draft_status=eq.drafted&status=neq.done&select=id,title,site_number,action")
     print(f'{len(tasks)} drafted order email(s) waiting')
     if not tasks: return
     for t in tasks:
@@ -69,6 +69,13 @@ def main():
         msg['From'] = f'Trae Dodson <{FROM}>'; msg['To'] = d['to']; msg['Cc'] = ', '.join(d.get('cc') or []); msg['Subject'] = d['subject']
         msg['Date'] = email.utils.formatdate(localtime=True); msg['Message-ID'] = email.utils.make_msgid(domain='proton.me')
         msg.set_content(d['body'])
+        for att in (t['action'].get('attachments') or []):
+            req = urllib.request.Request(f"{url}/storage/v1/object/{att['bucket']}/{att['path']}", headers={'apikey': key, 'Authorization': f'Bearer {key}'})
+            try:
+                with urllib.request.urlopen(req) as resp: data = resp.read()
+            except urllib.error.HTTPError as ex: print(f"  attachment {att['name']}: HTTP {ex.code}"); continue
+            main_type, sub_type = ('application', 'pdf') if att['name'].lower().endswith('.pdf') else ('application', 'octet-stream')
+            msg.add_attachment(data, maintype=main_type, subtype=sub_type, filename=att['name'])
         typ, _ = M.append('Drafts', '\\Draft', imaplib.Time2Internaldate(time.time()), msg.as_bytes())
         if typ != 'OK': print(f"  FAILED {t['title'][:60]}"); continue
         action = dict(t['action']); action['draft_status'] = 'in_proton'; action['pushed_at'] = time.strftime('%Y-%m-%dT%H:%M:%S')

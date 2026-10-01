@@ -181,7 +181,7 @@ function TaskLine({ t, today, waiting = false }: { t: TaskRow; today: string; wa
 
 /** The control that handles the need from the row: price a quote line, draft the order mail, or just answer and close. */
 function Resolver({ t }: { t: TaskRow }) {
-  const a = (t.action ?? {}) as { type?: string; vendor?: OrderVendorKey; draft?: OrderDraft; draft_status?: string; site_name?: string; address?: string; work_order?: string; takeoff?: string; items?: string }
+  const a = (t.action ?? {}) as { type?: string; vendor?: OrderVendorKey; draft?: OrderDraft; draft_status?: string; site_name?: string; address?: string; work_order?: string; takeoff?: string; items?: string; attachments?: { name: string }[]; survey_id?: string }
   const input = 'rounded border border-gray-300 px-1.5 py-0.5 text-[11px]'
   if (a.type === 'quote_line_price') {
     return (
@@ -210,6 +210,7 @@ function Resolver({ t }: { t: TaskRow }) {
             <div className="font-semibold text-emerald-900">Order email drafted{a.draft_status === 'sent' ? ' · sent' : ''}</div>
             <div className="text-gray-700"><b>To</b> {d.to} · <b>Cc</b> {d.cc.join(', ')}</div>
             <div className="text-gray-700"><b>Subject</b> {d.subject}</div>
+            {a.attachments?.length ? <div className="text-gray-700"><b>Attach</b> {a.attachments.map(x => x.name).join(', ')}{a.survey_id && <> · <a href={`/api/construction/surveys/${a.survey_id}/pdf`} target="_blank" rel="noopener" className="text-blue-600 hover:underline">open PDF</a></>} <span className="text-gray-400">(Proton push attaches it; mail link cannot)</span></div> : null}
             <pre className="whitespace-pre-wrap font-sans text-gray-700 bg-white rounded border border-emerald-100 p-2 max-h-48 overflow-auto">{d.body}</pre>
             <div className="flex flex-wrap items-center gap-1.5">
               <a href={mailtoHref(d)} className="px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-700">Open in mail</a>
