@@ -20,6 +20,9 @@ export async function requireConstruction(): Promise<ConProfile & { canWrite: bo
     .single()
 
   if (!profile || !canReadConstruction(profile)) redirect('/dashboard')
+  // Settings → Users can block a module per person (jcook and cmartinelli for Construction, 10/1/26); honor it here, not just in the sidebar.
+  const { data: block } = await admin.from('profile_module_blocks').select('module').eq('profile_id', user.id).eq('module', 'construction').maybeSingle()
+  if (block) redirect('/dashboard')
 
   return { ...(profile as ConProfile), canWrite: canWriteConstruction(profile) }
 }
