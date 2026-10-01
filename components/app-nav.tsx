@@ -24,7 +24,7 @@ import {
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { CON_ALLOWED_USER_IDS } from '@/lib/construction'
+import { canReadConstruction } from '@/lib/construction'
 import { BILLING_READ_ROLES } from '@/lib/billing'
 
 type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean; billing?: boolean; module?: string }
@@ -56,10 +56,10 @@ export default function AppNav({ email, role, userId, blockedModules }: { email:
   const pathname = usePathname()
   const router = useRouter()
   const isAdmin = ['owner', 'manager'].includes(role ?? '')
-  const canSeeConstruction = CON_ALLOWED_USER_IDS.includes(userId ?? '')
+  const canSeeConstruction = canReadConstruction({ id: userId, role })
   const blocked = new Set(blockedModules ?? [])
 
-  // Hide the Construction link from anyone not on the allowlist.
+  // Construction and My Plate show for the construction roles (Settings → role); billing for its own roles too.
   const canSeeBilling = canSeeConstruction || (BILLING_READ_ROLES as readonly string[]).includes(role ?? '')
   const visibleNavItems = navItems.filter(i =>
     (canSeeConstruction || !('construction' in i)) &&

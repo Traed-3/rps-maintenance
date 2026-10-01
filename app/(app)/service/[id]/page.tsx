@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { WorkOrderStatusBadge, PriorityBadge, clientLabel } from '@/components/svc/work-order-badges'
 import { createServiceTicket } from '@/app/(app)/service/tickets/actions'
 import { createJobFromWorkOrder } from '@/app/(app)/construction/actions'
-import { CON_ALLOWED_USER_IDS } from '@/lib/construction'
+import { canWriteConstruction } from '@/lib/construction'
 
 function fmt(d: string | null): string {
   if (!d) return '—'
@@ -25,7 +25,7 @@ export default async function WorkOrderDetailPage({
   const admin = createAdminClient()
 
   const { data: profile } = await admin
-    .from('profiles').select('company_id').eq('id', user!.id).single()
+    .from('profiles').select('company_id, role').eq('id', user!.id).single()
 
   const { data: w } = await admin
     .from('svc_work_orders')
@@ -38,7 +38,7 @@ export default async function WorkOrderDetailPage({
   const { data: existingTicket } = await admin.from('service_tickets').select('id, ticket_number, status').eq('work_order_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()
 
   // Construction users can spin this dispatched WO up as a construction job (site + address auto-filled).
-  const canConstruction = CON_ALLOWED_USER_IDS.includes(user?.id ?? '')
+  const canConstruction = canWriteConstruction({ id: user?.id, role: (profile as { role?: string } | null)?.role })
   const { data: existingJob } = canConstruction && (w as any).portal_wo_number
     ? await admin.from('con_jobs').select('id, job_number').eq('company_id', profile!.company_id).eq('work_order_number', (w as any).portal_wo_number).limit(1).maybeSingle()
     : { data: null }
