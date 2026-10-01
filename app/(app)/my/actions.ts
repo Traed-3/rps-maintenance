@@ -154,11 +154,11 @@ export async function draftOrderEmail(id: string, formData: FormData): Promise<v
   revalidatePath('/my')
 }
 
-/** He sent it: the row moves to waiting on the vendor with today's date. */
+/** He sent it: the row waits on Shannon's PO# first (no vendor ships without one), then on the vendor. */
 export async function markOrderSent(id: string, formData: FormData): Promise<void> {
   const { admin, task } = await myTask(id)
   const a = (task.action ?? {}) as Record<string, unknown>
-  const who = str(formData.get('who')) ?? (a.vendor ? String(a.vendor).toUpperCase() : 'vendor')
+  const who = str(formData.get('who')) ?? 'Shannon (PO#)'
   await admin.from('con_tasks').update({ action: { ...a, draft_status: 'sent', sent_at: new Date().toISOString() }, status: 'waiting', waiting_on: who, waiting_since: today(), updated_at: new Date().toISOString() }).eq('id', id)
   revalidatePath('/my')
 }
