@@ -3,7 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
 import { buildPlate, buildSignals, businessDaysSince, dueDelta, KIND_CLASS, KIND_LABEL, type TaskRow, type TaskKind } from '@/lib/my-plate'
 import { packingSlipSiteKey } from '@/lib/construction-dashboard'
-import { addTask, completeTask, dropTask, reopenTask, setDue, setPriority, snoozeTask, waitTask } from './actions'
+import { addTask, completeTask, dropTask, reopenTask, setDue, setPriority, snoozeTask, waitTask, answerTask, resolvePriceLine, draftOrderEmail, markOrderSent } from './actions'
+import { ORDER_VENDORS, mailtoHref, type OrderDraft, type OrderVendorKey } from '@/lib/order-email'
+import { CopyButton } from '@/components/plate/copy-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +19,7 @@ export default async function MyPlatePage() {
 
   const [{ data: rows }, { data: needed }, { data: bids }, { data: stale }, { data: quoting }, { data: quoted }, { data: slips }] = await Promise.all([
     admin.from('con_tasks').select('*').eq('owner_id', profile.id).neq('status', 'dropped').or(`status.neq.done,done_at.gte.${today}T00:00:00`).order('created_at'),
-    admin.from('con_quote_line_items').select('description, quote_id, con_quotes!inner(quote_number, site_number, status, company_id)').eq('price_flag', 'needed').eq('con_quotes.status', 'draft').eq('con_quotes.company_id', profile.company_id),
+    admin.from('con_quote_line_items').select('id, description, quote_id, con_quotes!inner(quote_number, site_number, status, company_id)').eq('price_flag', 'needed').eq('con_quotes.status', 'draft').eq('con_quotes.company_id', profile.company_id),
     admin.from('con_quotes').select('id, quote_number, site_number, bid_due').eq('company_id', profile.company_id).eq('status', 'draft').not('bid_due', 'is', null).lte('bid_due', new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)),
     admin.from('con_job_materials').select('description, ordered_date, created_at, job_id, con_jobs!inner(site_number, company_id)').eq('status', 'ordered').eq('con_jobs.company_id', profile.company_id).lt('created_at', new Date(Date.now() - 10 * 86_400_000).toISOString()),
     admin.from('con_jobs').select('id, site_number, work_order_number, status_detail').eq('company_id', profile.company_id).eq('stage', 'quoting').not('status_detail', 'ilike', '%waiting%').not('status_detail', 'ilike', '%sent to%'),
@@ -34,7 +36,7 @@ export default async function MyPlatePage() {
     return !s.note && !stock && !packingSlipSiteKey(s.subject ?? '', s.body_preview, replies)
   }).length
   const signals = buildSignals({
-    neededLines: (needed ?? []).map(l => { const q = l.con_quotes as unknown as { quote_number: string; site_number: string | null }; return { quote_number: q.quote_number, quote_id: l.quote_id, site_number: q.site_number, description: l.description } }),
+    neededLines: (needed ?? []).map(l => { const q = l.con_quotes as unknown as { quote_number: string; site_number: string | null }; return { quote_number: q.quote_number, quote_id: l.quote_id, line_id: l.id, site_number: q.site_number, description: l.description } }),
     bidsDue: (bids ?? []).map(b => ({ quote_number: b.quote_number, quote_id: b.id, site_number: b.site_number, bid_due: b.bid_due as string })),
     staleOrders: (stale ?? []).map(m => ({ site_number: (m.con_jobs as unknown as { site_number: string }).site_number, description: m.description ?? '', ordered_date: m.ordered_date, job_id: m.job_id })),
     quotingNoQuote: (quoting ?? []).filter(j => !quotedJobs.has(j.id) && /^\d{5}$|^(SU|IP)-/i.test(j.site_number ?? '')).slice(0, 12),
@@ -111,7 +113,7 @@ export default async function MyPlatePage() {
                     <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full border text-[10px] ${KIND_CLASS[s.kind]}`}>{KIND_LABEL[s.kind]}</span>
                     <span className="min-w-0 flex-1 text-gray-700">{s.href ? <Link href={s.href} className="hover:underline">{s.title}</Link> : s.title}</span>
                     <form action={addTask} className="shrink-0">
-                      <input type="hidden" name="title" value={s.title} /><input type="hidden" name="kind" value={s.kind} /><input type="hidden" name="site_number" value={s.site_number ?? ''} /><input type="hidden" name="source_key" value={s.key} /><input type="hidden" name="detail" value={s.href ? `See ${s.href}` : ''} />
+                      <input type="hidden" name="title" value={s.title} /><input type="hidden" name="kind" value={s.kind} /><input type="hidden" name="site_number" value={s.site_number ?? ''} /><input type="hidden" name="source_key" value={s.key} /><input type="hidden" name="detail" value={s.href ? `See ${s.href}` : ''} />{s.action && <input type="hidden" name="action" value={JSON.stringify(s.action)} />}
                       <button className="text-blue-600 hover:underline whitespace-nowrap">+ plate</button>
                     </form>
                   </li>
@@ -149,6 +151,7 @@ function TaskLine({ t, today, waiting = false }: { t: TaskRow; today: string; wa
         <div className="min-w-0 flex-1">
           <div className="text-sm text-gray-900 leading-snug">{t.priority === 1 && <span className="text-red-600 mr-1" title="Hot">●</span>}{t.site_number && <span className="font-mono text-xs text-gray-500 mr-1.5">{t.site_number}</span>}{t.title}</div>
           {t.detail && <div className="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{t.detail}</div>}
+          {!waiting && t.status === 'open' && <Resolver t={t} />}
           <div className="text-[11px] mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             {waiting ? <span className={waitDays >= 5 ? 'text-red-600 font-semibold' : 'text-blue-700'}>waiting on {t.waiting_on}{t.waiting_since ? ` since ${fmt(t.waiting_since)} · ${waitDays} business day${waitDays === 1 ? '' : 's'}` : ''}{waitDays >= 5 ? ' · nudge' : ''}</span> : <span className={dueClass}>{dueText}</span>}
             {t.snoozed_until && t.snoozed_until > today && <span className="text-gray-400">snoozed to {fmt(t.snoozed_until)}</span>}
@@ -172,5 +175,84 @@ function TaskLine({ t, today, waiting = false }: { t: TaskRow; today: string; wa
         </div>
       </div>
     </li>
+  )
+}
+
+
+/** The control that handles the need from the row: price a quote line, draft the order mail, or just answer and close. */
+function Resolver({ t }: { t: TaskRow }) {
+  const a = (t.action ?? {}) as { type?: string; vendor?: OrderVendorKey; draft?: OrderDraft; draft_status?: string; site_name?: string; address?: string; work_order?: string; takeoff?: string; items?: string }
+  const input = 'rounded border border-gray-300 px-1.5 py-0.5 text-[11px]'
+  if (a.type === 'quote_line_price') {
+    return (
+      <form action={resolvePriceLine.bind(null, t.id)} className="mt-1.5 rounded-md border border-amber-200 bg-amber-50/60 p-2 text-[11px] space-y-1.5">
+        <div className="font-semibold text-amber-900">Price it</div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span>$</span><input name="unit_cost" required inputMode="decimal" placeholder="275" className={`${input} w-20`} />
+          <span>per</span>
+          <select name="unit" defaultValue="job" className={input}><option value="job">job</option><option value="day">day</option><option value="each">each</option><option value="hour">hour</option><option value="load">load</option></select>
+          <input name="note" placeholder="where the number came from" className={`${input} w-44`} />
+        </div>
+        <label className="flex flex-wrap items-center gap-1.5"><input type="checkbox" name="add_to_catalog" defaultChecked /> save to RPS catalog as
+          <input name="part_number" placeholder="WALK-BEHIND SAW" className={`${input} w-36`} />
+          <select name="category" defaultValue="9" className={input}><option value="9">9 equipment</option><option value="10">10 disposables</option><option value="5">5 concrete / disposal</option><option value="11">11 sub</option><option value="12">12 permit</option></select>
+        </label>
+        <button className="px-2 py-0.5 rounded bg-amber-600 text-white hover:bg-amber-700">Apply to quote</button>
+      </form>
+    )
+  }
+  if (a.type === 'order_email' || t.kind === 'order') {
+    const d = a.draft
+    return (
+      <div className="mt-1.5 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 text-[11px] space-y-1.5">
+        {d ? (
+          <>
+            <div className="font-semibold text-emerald-900">Order email drafted{a.draft_status === 'sent' ? ' · sent' : ''}</div>
+            <div className="text-gray-700"><b>To</b> {d.to} · <b>Cc</b> {d.cc.join(', ')}</div>
+            <div className="text-gray-700"><b>Subject</b> {d.subject}</div>
+            <pre className="whitespace-pre-wrap font-sans text-gray-700 bg-white rounded border border-emerald-100 p-2 max-h-48 overflow-auto">{d.body}</pre>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <a href={mailtoHref(d)} className="px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-700">Open in mail</a>
+              <CopyButton text={`To: ${d.to}\nCc: ${d.cc.join(', ')}\nSubject: ${d.subject}\n\n${d.body}`} label="Copy email" />
+              <form action={markOrderSent.bind(null, t.id)} className="flex items-center gap-1"><input name="who" defaultValue={ORDER_VENDORS[a.vendor ?? 'icon']?.label.split(' ')[0] ?? 'vendor'} className={`${input} w-24`} /><button className="px-2 py-0.5 rounded border border-emerald-300 text-emerald-800 hover:bg-emerald-100">I sent it → waiting</button></form>
+            </div>
+            <details><summary className="cursor-pointer text-gray-500">Edit and redraft</summary><OrderForm t={t} a={a} input={input} /></details>
+          </>
+        ) : (
+          <>
+            <div className="font-semibold text-emerald-900">Draft the order email</div>
+            <OrderForm t={t} a={a} input={input} />
+          </>
+        )}
+      </div>
+    )
+  }
+  return (
+    <form action={answerTask.bind(null, t.id)} className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+      <input name="answer" placeholder="answer / what you did — closes the row" className={`${input} flex-1 min-w-0`} />
+      <button className="px-2 py-0.5 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 whitespace-nowrap">Answer & close</button>
+    </form>
+  )
+}
+
+function OrderForm({ t, a, input }: { t: TaskRow; a: { vendor?: OrderVendorKey; site_name?: string; address?: string; work_order?: string; takeoff?: string; items?: string }; input: string }) {
+  return (
+    <form action={draftOrderEmail.bind(null, t.id)} className="mt-1 space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select name="vendor" defaultValue={a.vendor ?? 'icon'} className={input}>{(Object.keys(ORDER_VENDORS) as OrderVendorKey[]).map(k => <option key={k} value={k}>{ORDER_VENDORS[k].label}</option>)}</select>
+        <input name="to" placeholder="to (blank = vendor default)" className={`${input} w-48`} />
+        <input name="site" defaultValue={t.site_number ?? ''} placeholder="site" className={`${input} w-20`} />
+        <input name="site_name" defaultValue={a.site_name ?? ''} placeholder="Global Exxon / Sunoco" className={`${input} w-32`} />
+        <input name="address" defaultValue={a.address ?? ''} placeholder="address" className={`${input} w-56`} />
+        <input name="work_order" defaultValue={a.work_order ?? ''} placeholder="WOT…" className={`${input} w-28`} />
+        <input name="takeoff" defaultValue={a.takeoff ?? ''} placeholder="take-off / quote #" className={`${input} w-32`} />
+      </div>
+      <textarea name="items" rows={4} defaultValue={a.items ?? ''} placeholder={'(4) IRF 5B3.5x3.2AC - Icon SplitRepair Flange Fitting Kit … - $459.00 each\n(2) IAC FASTFUSE - … - $109.00 each'} className="w-full rounded border border-gray-300 px-1.5 py-1 text-[11px] font-mono" />
+      <div className="flex flex-wrap items-center gap-1.5">
+        <input name="note" placeholder="extra line (optional)" className={`${input} w-64`} />
+        <label className="flex items-center gap-1"><input type="checkbox" name="ask_po" value="on" defaultChecked /> ask Shannon for a PO#</label>
+        <button className="px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-700">Draft it</button>
+      </div>
+    </form>
   )
 }
