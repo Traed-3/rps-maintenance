@@ -210,3 +210,10 @@ jobs:
           curl --fail-with-body -sS --max-time 90 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=updates&since=3"
+      - name: Invoice workups and order mail onto their jobs and the plate
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body -sS --max-time 90 \
+            -w "\nHTTP %{http_code}\n" \
+            "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=orders&since=3"

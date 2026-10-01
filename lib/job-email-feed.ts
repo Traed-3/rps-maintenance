@@ -20,19 +20,24 @@ import { backfillFieldTicketsForJob } from '@/lib/field-ticket-gmail-match'
 
 const DOCS_BUCKET = 'construction-docs'
 const MAX_PHOTO_BYTES = 12 * 1024 * 1024
-const MAX_PHOTOS_PER_UPDATE = 8
-const MAX_UPDATES_PER_PASS = 6
+const MAX_PHOTOS_PER_UPDATE = 6
+const MAX_UPDATES_PER_PASS = 4
+/** Vercel gives the route 60 s; each pass stops starting new work after this many ms and finishes on the next tick. */
+const PASS_BUDGET_MS = 40_000
 const MAX_TICKET_JOBS_PER_PASS = 3
 const PHOTO_MIME = /^image\/(jpeg|jpg|png|heic|heif|webp)$/i
 const PHOTO_EXT = /\.(jpe?g|png|heic|heif|webp)$/i
 const RPS_TECH = /@rappahannockpetroleum\.com$|\.rp@gmail\.com$|^econstruction\.rp@gmail\.com$/i
 const NOISE_SUBJECT = /action required|work order|status updates|shared folders|returns spreadsheet|packing slip|invoice/i
 
+type Budget = { deadline: number }
+const over = (b?: Budget) => !!b && Date.now() > b.deadline
+
 export type FeedResult = {
-  updates: { filed: number; skipped: number; unmatched: string[]; errors: string[] }
-  tickets: { jobs: number; filed: number; errors: string[] }
-  invoices: { filed: number; completed: number; unmatched: string[]; errors: string[] }
-  orders: { sent: number; po: number; replied: number; errors: string[] }
+  updates: { filed: number; skipped: number; unmatched: string[]; errors: string[]; budget_hit?: boolean }
+  tickets: { jobs: number; filed: number; errors: string[]; budget_hit?: boolean }
+  invoices: { filed: number; completed: number; unmatched: string[]; errors: string[]; budget_hit?: boolean }
+  orders: { sent: number; po: number; replied: number; errors: string[]; budget_hit?: boolean }
 }
 
 type Job = { id: string; company_id: string; site_number: string | null; work_order_number: string | null; stage: string; status_detail: string | null; updated_at: string | null }
@@ -69,7 +74,7 @@ const safeName = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
 const subjectKey = (s: string) => s.replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, '').replace(/\s+/g, ' ').trim().toLowerCase()
 
 /** 1. Typed tech updates → con_daily_updates + photos. */
-export async function syncTechUpdates(opts: { sinceDays?: number } = {}): Promise<FeedResult['updates']> {
+export async function syncTechUpdates(opts: { sinceDays?: number; budget?: Budget } = {}): Promise<FeedResult['updates']> {
   const out: FeedResult['updates'] = { filed: 0, skipped: 0, unmatched: [], errors: [] }
   if (!connectedInboxes().includes('econstruction')) { out.errors.push('econstruction not connected'); return out }
   const admin = createAdminClient()
@@ -80,6 +85,7 @@ export async function syncTechUpdates(opts: { sinceDays?: number } = {}): Promis
   let filedThisPass = 0
   for (const id of ids) {
     if (filedThisPass >= MAX_UPDATES_PER_PASS) break
+    if (over(opts.budget)) { out.budget_hit = true; break }
     try {
       const { data: dup } = await admin.from('con_daily_updates').select('id').contains('source_refs', { update_message_id: id }).maybeSingle()
       if (dup) { out.skipped++; continue }
@@ -123,7 +129,7 @@ export async function syncTechUpdates(opts: { sinceDays?: number } = {}): Promis
 }
 
 /** 2. New handwritten tickets in rpinvoicing → the existing per-job backfill (OCR + needs_review draft), a few jobs per pass. */
-export async function syncFieldTickets(opts: { sinceDays?: number } = {}): Promise<FeedResult['tickets']> {
+export async function syncFieldTickets(opts: { sinceDays?: number; budget?: Budget } = {}): Promise<FeedResult['tickets']> {
   const out: FeedResult['tickets'] = { jobs: 0, filed: 0, errors: [] }
   if (!connectedInboxes().includes('rpinvoicing')) { out.errors.push('rpinvoicing not connected'); return out }
   const admin = createAdminClient()
@@ -143,6 +149,7 @@ export async function syncFieldTickets(opts: { sinceDays?: number } = {}): Promi
     } catch (e) { out.errors.push(`${id}: ${(e as Error).message}`) }
   }
   for (const job of jobs.values()) {
+    if (over(opts.budget)) { out.budget_hit = true; break }
     try {
       const r = await backfillFieldTicketsForJob(job.id, { apply: true })
       out.jobs++
@@ -156,7 +163,7 @@ export async function syncFieldTickets(opts: { sinceDays?: number } = {}): Promi
 const STAR_RECEIVED = /\breceived\b[\s\S]{0,60}\b(irts|rti)\b/i
 
 /** 3. Peggy's invoice workups → the job's Documents (Invoices) and its stage. */
-export async function syncInvoiceDocs(opts: { sinceDays?: number } = {}): Promise<FeedResult['invoices']> {
+export async function syncInvoiceDocs(opts: { sinceDays?: number; budget?: Budget } = {}): Promise<FeedResult['invoices']> {
   const out: FeedResult['invoices'] = { filed: 0, completed: 0, unmatched: [], errors: [] }
   const admin = createAdminClient()
   const since = new Date(Date.now() - (opts.sinceDays ?? 45) * 86_400_000).toISOString()
@@ -164,6 +171,7 @@ export async function syncInvoiceDocs(opts: { sinceDays?: number } = {}): Promis
     .select('id, company_id, subject, received_at, primary_path, attachments, thread_replies, sender_email')
     .eq('inbox', 'econstruction').ilike('subject', '%invoice%').ilike('sender_email', 'pwilmoth%').gte('received_at', since).order('received_at')
   for (const d of docs ?? []) {
+    if (over(opts.budget)) { out.budget_hit = true; break }
     try {
       const keys = siteKeysFromSubject(d.subject ?? '')
       const job = await findJobForKeys(admin, keys, true)
@@ -219,7 +227,7 @@ const SHANNON = /^sparsons\.rp@gmail\.com$/i
  *    Shannon for the PO# first; her "PO # 24241" reply in the thread records the PO and moves the wait to the vendor;
  *    the vendor's reply brings the row back to Trae with the words on it.
  */
-export async function syncOrderMail(opts: { sinceDays?: number } = {}): Promise<FeedResult['orders']> {
+export async function syncOrderMail(opts: { sinceDays?: number; budget?: Budget } = {}): Promise<FeedResult['orders']> {
   const out: FeedResult['orders'] = { sent: 0, po: 0, replied: 0, errors: [] }
   if (!connectedInboxes().includes('econstruction')) return out
   const admin = createAdminClient()
@@ -228,6 +236,7 @@ export async function syncOrderMail(opts: { sinceDays?: number } = {}): Promise<
   const { data: tasks } = await admin.from('con_tasks').select('id, site_number, status, action, detail, waiting_on').eq('kind', 'order').in('status', ['open', 'waiting'])
   const open = (tasks ?? []) as { id: string; site_number: string | null; status: string; action: Record<string, unknown> | null; detail: string | null; waiting_on: string | null }[]
   for (const id of ids) {
+    if (over(opts.budget)) { out.budget_hit = true; break }
     try {
       const msg = await getMessage('econstruction', id)
       const subject = header(msg, 'Subject')
@@ -271,10 +280,12 @@ export async function syncOrderMail(opts: { sinceDays?: number } = {}): Promise<
   return out
 }
 
-export async function syncJobEmailFeed(opts: { sinceDays?: number } = {}): Promise<FeedResult> {
-  const updates = await syncTechUpdates(opts)
-  const invoices = await syncInvoiceDocs({ sinceDays: Math.max(opts.sinceDays ?? 3, 14) })
-  const tickets = await syncFieldTickets(opts)
-  const orders = await syncOrderMail({ sinceDays: 7 })
-  return { updates, tickets, invoices, orders }
+/** Two route passes so each stays inside the 60 s function budget: 'updates' = tech updates + field tickets, 'orders' = invoice workups + order mail. */
+export async function syncJobEmailFeed(opts: { sinceDays?: number; part?: 'updates' | 'orders' | 'all' } = {}): Promise<Partial<FeedResult>> {
+  const budget: Budget = { deadline: Date.now() + PASS_BUDGET_MS }
+  const part = opts.part ?? 'all'
+  const out: Partial<FeedResult> = {}
+  if (part !== 'orders') { out.updates = await syncTechUpdates({ ...opts, budget }); out.tickets = await syncFieldTickets({ ...opts, budget }) }
+  if (part !== 'updates') { out.invoices = await syncInvoiceDocs({ sinceDays: Math.max(opts.sinceDays ?? 3, 14), budget }); out.orders = await syncOrderMail({ sinceDays: 7, budget }) }
+  return out
 }
