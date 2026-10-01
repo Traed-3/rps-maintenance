@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 /**
- * GET /api/billing/inbox-sync?secret=…&pass=sync|extract|both|updates|backfill-permits[&inbox=econstruction][&max=30][&since=14][&limit=3]
+ * GET /api/billing/inbox-sync?secret=…&pass=sync|extract|both|updates|orders|backfill-permits[&inbox=econstruction][&max=30][&since=14][&limit=3]
  *
  * Cron hits `pass=sync` then `pass=extract` on separate ticks so each stays
  * under the 60 s budget. `pass=both` is for a manual "sync now".
@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
     }
     if (pass === 'extract' || pass === 'both') out.extract = await extractPending(limit)
     // Tech updates, field tickets and Peggy's invoice workups onto their jobs (lib/job-email-feed.ts).
-    if (pass === 'updates') out.updates = await syncJobEmailFeed({ sinceDays: Math.min(sinceDays, 7) })
+    if (pass === 'updates') out.updates = await syncJobEmailFeed({ sinceDays: Math.min(sinceDays, 7), part: 'updates' })
+    if (pass === 'orders') out.updates = await syncJobEmailFeed({ sinceDays: Math.min(sinceDays, 7), part: 'orders' })
     if (pass === 'backfill-permits') {
       const offset = Math.max(parseInt(q.get('offset') ?? '0', 10) || 0, 0)
       const permitLimit = Math.min(parseInt(q.get('limit') ?? '5', 10) || 5, 10)
