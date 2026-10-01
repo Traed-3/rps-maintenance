@@ -14,7 +14,7 @@
  * invoices dedupe on the inbox document's storage path, tickets dedupe inside the backfill.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
-import { listMessages, getMessage, getAttachment, listAttachments, header, parseAddress, extractText, connectedInboxes } from '@/lib/billing-gmail-client'
+import { listMessages, getMessage, getThread, getAttachment, listAttachments, header, parseAddress, extractText, connectedInboxes } from '@/lib/billing-gmail-client'
 import { stripQuoted, INBOX_BUCKET, type ThreadReply } from '@/lib/billing-inbox-sync'
 import { backfillFieldTicketsForJob } from '@/lib/field-ticket-gmail-match'
 
@@ -32,6 +32,7 @@ export type FeedResult = {
   updates: { filed: number; skipped: number; unmatched: string[]; errors: string[] }
   tickets: { jobs: number; filed: number; errors: string[] }
   invoices: { filed: number; completed: number; unmatched: string[]; errors: string[] }
+  orders: { sent: number; replied: number; errors: string[] }
 }
 
 type Job = { id: string; company_id: string; site_number: string | null; work_order_number: string | null; stage: string; status_detail: string | null; updated_at: string | null }
@@ -207,9 +208,58 @@ export async function syncInvoiceDocs(opts: { sinceDays?: number } = {}): Promis
   return out
 }
 
+const VENDOR_BY_DOMAIN: [RegExp, string][] = [[/icontainment\.com$/i, 'ICON'], [/sourcena\.com$/i, 'Source'], [/spatco\.com$/i, 'Spatco'], [/morgan-brothers\.net$/i, 'Morgan Brothers'], [/chaneyenterprises\.com$/i, 'Chaney']]
+const ORDER_SUBJECT = /material order|order request|placing this order|\border\b/i
+
+/**
+ * 4. Reconcile the plate with the order mail Trae sends. He copies econstruction on every order, so his sent order
+ *    shows up there: the matching order task on his plate goes to waiting on the vendor from the day it was sent, and
+ *    when the vendor answers in the thread the row comes back to him with the reply on it.
+ */
+export async function syncOrderMail(opts: { sinceDays?: number } = {}): Promise<FeedResult['orders']> {
+  const out: FeedResult['orders'] = { sent: 0, replied: 0, errors: [] }
+  if (!connectedInboxes().includes('econstruction')) return out
+  const admin = createAdminClient()
+  let ids: string[]
+  try { ids = await listMessages('econstruction', `newer_than:${opts.sinceDays ?? 7}d from:tdodson.rp@proton.me (order OR "take-off")`, 30) } catch (e) { out.errors.push(`list: ${(e as Error).message}`); return out }
+  const { data: tasks } = await admin.from('con_tasks').select('id, site_number, status, action, detail, waiting_on').eq('kind', 'order').in('status', ['open', 'waiting'])
+  const open = (tasks ?? []) as { id: string; site_number: string | null; status: string; action: Record<string, unknown> | null; detail: string | null; waiting_on: string | null }[]
+  for (const id of ids) {
+    try {
+      const msg = await getMessage('econstruction', id)
+      const subject = header(msg, 'Subject')
+      if (!ORDER_SUBJECT.test(subject)) continue
+      const keys = siteKeysFromSubject(subject)
+      const task = open.find(t => t.site_number && keys.some(k => k.toUpperCase() === t.site_number!.toUpperCase() || t.site_number!.toUpperCase().endsWith(k.toUpperCase())))
+      if (!task) continue
+      const a = (task.action ?? {}) as Record<string, unknown>
+      if (a.order_message_id === id) {
+        // already reconciled; look for a vendor reply in the thread
+        const thread = await getThread('econstruction', msg.threadId)
+        const reply = thread.messages.filter(m => m.id !== id && Number(m.internalDate) > Number(msg.internalDate)).map(m => ({ m, from: parseAddress(header(m, 'From')) }))
+          .find(x => !RPS_TECH.test(x.from.email) && !/proton\.me$/i.test(x.from.email))
+        if (reply && task.status === 'waiting' && a.replied_message_id !== reply.m.id) {
+          const text = stripQuoted(extractText(reply.m)).slice(0, 500)
+          await admin.from('con_tasks').update({ status: 'open', priority: 1, waiting_on: null, waiting_since: null, detail: [task.detail, `Reply from ${reply.from.name || reply.from.email} ${ymdET(reply.m.internalDate)}: ${text}`].filter(Boolean).join('\n'), action: { ...a, replied_message_id: reply.m.id, replied_at: new Date(Number(reply.m.internalDate)).toISOString() }, updated_at: new Date().toISOString() }).eq('id', task.id)
+          out.replied++
+        }
+        continue
+      }
+      const to = parseAddress(header(msg, 'To'))
+      const vendor = VENDOR_BY_DOMAIN.find(([re]) => re.test(to.email))?.[1] ?? (to.email.split('@')[1] ?? 'vendor')
+      const sentDay = ymdET(msg.internalDate)
+      await admin.from('con_tasks').update({ status: 'waiting', waiting_on: vendor, waiting_since: sentDay, action: { ...a, type: a.type ?? 'order_email', draft_status: 'sent', sent_at: new Date(Number(msg.internalDate)).toISOString(), order_message_id: id, order_subject: subject }, detail: [task.detail, `Sent ${sentDay} to ${to.email}: "${subject}" (reconciled from econstruction copy)`].filter(Boolean).join('\n'), updated_at: new Date().toISOString() }).eq('id', task.id)
+      task.status = 'waiting'; task.action = { ...a, order_message_id: id }
+      out.sent++
+    } catch (e) { out.errors.push(`${id}: ${(e as Error).message}`) }
+  }
+  return out
+}
+
 export async function syncJobEmailFeed(opts: { sinceDays?: number } = {}): Promise<FeedResult> {
   const updates = await syncTechUpdates(opts)
   const invoices = await syncInvoiceDocs({ sinceDays: Math.max(opts.sinceDays ?? 3, 14) })
   const tickets = await syncFieldTickets(opts)
-  return { updates, tickets, invoices }
+  const orders = await syncOrderMail({ sinceDays: 7 })
+  return { updates, tickets, invoices, orders }
 }
