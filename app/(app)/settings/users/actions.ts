@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
 import { MODULE_KEYS, type ModuleKey } from '@/lib/modules'
+import { validateNewPassword } from '@/lib/password-rules'
 
 async function getProfile() {
   const supabase = await createClient()
@@ -57,6 +58,31 @@ export async function deleteUser(userId: string): Promise<{ error?: string }> {
   if (error) return { error: error.message }
 
   revalidatePath('/settings/users')
+  return {}
+}
+
+// ── Set a user's password ─────────────────────────────────────────────────────
+// For people who sign in with the email + password form instead of Google. The password goes straight to
+// Supabase Auth and is never stored, returned or logged by the app.
+export async function setUserPassword(userId: string, password: string): Promise<{ error?: string }> {
+  const profile = await getProfile()
+  if (!profile || !['owner', 'manager'].includes(profile.role)) return { error: 'Access denied.' }
+
+  const problem = validateNewPassword(password)
+  if (problem) return { error: problem }
+
+  const admin = createAdminClient()
+  // Same company scoping every other action here uses.
+  const { data: target } = await admin.from('profiles').select('id, role')
+    .eq('id', userId).eq('company_id', profile.company_id).maybeSingle()
+  if (!target) return { error: 'User not found.' }
+  // A manager must not be able to set an owner's password and then sign in as that owner.
+  if (target.role === 'owner' && profile.role !== 'owner') return { error: "Only an owner can set an owner's password." }
+
+  const { error } = await admin.auth.admin.updateUserById(userId, { password })
+  if (error) return { error: error.message }
+
+  console.log(`[users] password set for ${userId} by ${profile.id}`)   // ids only, never the password
   return {}
 }
 

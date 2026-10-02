@@ -8,6 +8,7 @@ import { AddEmployeeForm } from './add-employee-form'
 import { DeleteUserButton } from './delete-user-button'
 import { EditUserButton } from './edit-user-button'
 import { ModulesButton } from './modules-button'
+import { SetPasswordButton } from './set-password-button'
 import { updateUserRole, toggleUserActive, updateDefaultLandingPage } from './actions'
 
 export default async function UsersSettingsPage() {
@@ -56,6 +57,7 @@ export default async function UsersSettingsPage() {
           <li>Each employee visits the app URL and signs in with their company Gmail.</li>
           <li>Their account is created automatically as <strong>Field Survey Only (locked)</strong>. They can see nothing but their own field surveys.</li>
           <li>Only an owner or manager can give them more, by changing their role here.</li>
+          <li>No Gmail? Use <strong>Password</strong> on their row to set one, then they sign in with their email and that password.</li>
         </ol>
       </div>
 
@@ -90,10 +92,14 @@ export default async function UsersSettingsPage() {
               return (
                 <tr key={u.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium text-gray-900">{u.full_name}</span>{(u as any).job_title && <span className="ml-2 text-xs text-gray-400">{(u as any).job_title}</span>}
                       {isSelf && <span className="text-xs text-gray-400">(you)</span>}
                       <EditUserButton user={{ id: u.id, full_name: u.full_name, email: u.email, phone: (u as any).phone ?? null, job_title: (u as any).job_title ?? null }} />
+                      {/* Only an owner may set an owner's password; the server action enforces the same rule. */}
+                      {(profile!.role === 'owner' || u.role !== 'owner') && (
+                        <SetPasswordButton userId={u.id} fullName={u.full_name} email={u.email} />
+                      )}
                     </div>
                     {(u as any).phone && <p className="text-xs text-gray-400 mt-0.5">{(u as any).phone}</p>}
                   </td>
