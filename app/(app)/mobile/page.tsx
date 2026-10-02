@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { redirect } from 'next/navigation'
+import { canUseFieldSurveys, isSurveyOnly, SURVEY_ONLY_HOME } from '@/lib/field-surveys'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { cn } from '@/lib/utils'
@@ -45,6 +47,10 @@ export default async function MobilePage() {
     return sum + (e.clock_out ? (e.total_minutes ?? 0) : Math.round((now - new Date(e.clock_in).getTime()) / 60000))
   }, 0)
 
+  // The Field Survey Only login has no use for this home screen: straight to its one page.
+  if (isSurveyOnly(profile?.role)) redirect(SURVEY_ONLY_HOME)
+  const canSurvey = canUseFieldSurveys({ id: profile?.id, role: profile?.role })
+  const surveyFirst = profile?.role === 'construction_tech'   // crew: Field Surveys is the big button at the top
   const isClockedIn = empStatus?.clock_status === 'clocked_in'
   const activeTicket = (empStatus as any)?.repair_tickets
   const isWorkingTicket = isClockedIn && empStatus?.current_status === 'working_on_ticket' && !!activeTicket?.id
@@ -129,6 +135,14 @@ export default async function MobilePage() {
       {/* Main actions */}
       <div className="flex-1 px-4 py-6 space-y-3">
 
+        {/* Construction crew: Field Surveys one tap from the home screen */}
+        {surveyFirst && (
+          <Link href="/construction/surveys" className="flex items-center justify-between w-full rounded-2xl px-6 py-5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg shadow-sm">
+            <span>📸 Field Surveys</span>
+            <span className="text-2xl opacity-80">→</span>
+          </Link>
+        )}
+
         {/* Field service ticket — sign on the phone, invoice from the office */}
         <Link
           href="/mobile/service-ticket"
@@ -181,10 +195,12 @@ export default async function MobilePage() {
             <span className="text-3xl">📋</span>
             <span className="text-sm font-semibold text-gray-800">Daily Update</span>
           </Link>
-          <Link href="/construction/surveys" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
-            <span className="text-3xl">📸</span>
-            <span className="text-sm font-semibold text-gray-800">Field Survey</span>
-          </Link>
+          {canSurvey && !surveyFirst && (
+            <Link href="/construction/surveys" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
+              <span className="text-3xl">📸</span>
+              <span className="text-sm font-semibold text-gray-800">Field Survey</span>
+            </Link>
+          )}
 
           <Link href="/shop/general-time" className="bg-white rounded-2xl border border-gray-200 px-4 py-5 flex flex-col items-center gap-2 hover:border-blue-300 transition-colors">
             <span className="text-3xl">⏱️</span>

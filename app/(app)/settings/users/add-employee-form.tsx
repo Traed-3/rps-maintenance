@@ -16,6 +16,7 @@ const ROLES = [
   { value: 'office_staff',  label: 'Office Staff' },
   { value: 'viewer',        label: 'Viewer (read-only)' },
   { value: 'manager',       label: 'Manager' },
+  { value: 'field_surveyor', label: 'Field Survey Only (locked)' },
 ]
 
 export function AddEmployeeForm() {
@@ -72,7 +73,7 @@ export function AddEmployeeForm() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select name="role" className={inputClass} defaultValue="shop_employee">
+            <select name="role" className={inputClass} defaultValue="field_surveyor">
               {ROLES.map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}

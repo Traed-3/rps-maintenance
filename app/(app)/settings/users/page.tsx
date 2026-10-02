@@ -54,8 +54,8 @@ export default async function UsersSettingsPage() {
         <p className="font-semibold mb-1">How employees get access:</p>
         <ol className="list-decimal list-inside space-y-0.5 text-blue-700">
           <li>Each employee visits the app URL and signs in with their company Gmail.</li>
-          <li>Their account is created automatically with the <strong>Viewer</strong> role.</li>
-          <li>You change their role here to give them the right access level.</li>
+          <li>Their account is created automatically as <strong>Field Survey Only (locked)</strong>. They can see nothing but their own field surveys.</li>
+          <li>Only an owner or manager can give them more, by changing their role here.</li>
         </ol>
       </div>
 
@@ -166,7 +166,8 @@ export default async function UsersSettingsPage() {
           <p><strong>Shop Employee</strong> — Can clock in/out, update ticket status, log time.</p>
           <p><strong>Mechanic</strong> — Shop mechanic. Can clock in/out, work on tickets, and log labor time.</p>
           <p><strong>Service Tech</strong> — Field technician. Can log mileage/hours and update asset status.</p>
-          <p><strong>Construction Tech</strong> — Construction field technician. Can log time and view assigned work.</p>
+          <p><strong>Construction Tech</strong> — Construction field technician. Can log time, view assigned work, and run Field Surveys (big button on the phone home screen).</p>
+          <p><strong>Field Survey Only</strong> — Locked to Field Surveys. Sees only the surveys they start themselves; nothing else in the app (no dashboard, jobs, tickets, quotes, settings or Ask RPS), and the database refuses them everything else too.</p>
           <p><strong>Office Staff</strong> — Administrative access. Can view assets and records.</p>
           <p><strong>Viewer</strong> — Read-only. Cannot edit anything.</p>
         </div>

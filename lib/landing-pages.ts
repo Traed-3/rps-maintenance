@@ -6,6 +6,7 @@ export const LANDING_PAGE_OPTIONS = [
   { value: '/service',           label: 'Service Dispatch' },
   { value: '/construction',      label: 'Construction' },
   { value: '/construction/jobs', label: 'Construction — Jobs (Projects Dashboard)' },
+  { value: '/construction/surveys', label: 'Field Surveys' },
 ] as const
 
 export const VALID_LANDING_PAGES = LANDING_PAGE_OPTIONS.map(o => o.value)

@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/keys'
 import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
+import { DEFAULT_NEW_USER_ROLE, SURVEY_ONLY_HOME } from '@/lib/field-surveys'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -121,25 +122,20 @@ export async function GET(request: NextRequest) {
           data.user.email?.split('@')[0] ??
           'Unknown'
 
-        let role = 'viewer'
-        if (company?.id) {
-          const { count } = await admin
-            .from('profiles')
-            .select('*', { count: 'exact', head: true })
-            .eq('company_id', company.id)
-            .eq('role', 'owner')
-          if ((count ?? 0) === 0) role = 'owner'
-        }
-
+        // Always the locked Field Survey Only role, never owner/viewer. The old "first user becomes
+        // owner" shortcut is gone on purpose: access above this only comes from an owner or manager
+        // changing the role in Settings > Users.
         await admin.from('profiles').insert({
           id: data.user.id,
           company_id: company?.id ?? null,
           full_name: fullName,
           email: data.user.email!,
-          role,
+          role: DEFAULT_NEW_USER_ROLE,
+          default_landing_page: SURVEY_ONLY_HOME,
         })
+        landingPage = SURVEY_ONLY_HOME
 
-        console.log('[callback] profile created, role:', role)
+        console.log('[callback] profile created, role:', DEFAULT_NEW_USER_ROLE)
       }
     }
   } catch (profileErr) {

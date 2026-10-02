@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireConstruction } from '@/lib/construction-guard'
+import { requireFieldSurveys } from '@/lib/construction-guard'
 import { surveyTitle, surveyTypeLabel, SUMP_TYPES, type SurveyRow, type SumpRow, type PhotoRow } from '@/lib/survey'
 import { SurveySumpCard } from '@/components/construction/survey-sump-card'
 import { saveSurveyHeader, addSump, saveSump, deleteSump, addSurveyPhotos, deletePhoto, completeSurvey, reopenSurvey, deleteSurvey } from '../actions'
@@ -12,10 +12,11 @@ const lbl = 'block text-xs font-medium text-gray-600 mb-1'
 
 export default async function SurveyEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const profile = await requireConstruction()
+  const profile = await requireFieldSurveys()
   const admin = createAdminClient()
   const { data: survey } = await admin.from('con_surveys').select('*').eq('id', id).eq('company_id', profile.company_id).maybeSingle()
   if (!survey) notFound()
+  if (profile.ownOnly && (survey as { created_by?: string | null }).created_by !== profile.id) notFound()   // the locked-down role only opens its own surveys
   const sv = survey as SurveyRow
   const [{ data: sumps }, { data: photos }, { data: jobs }] = await Promise.all([
     admin.from('con_survey_sumps').select('*').eq('survey_id', id).order('sort_order'),
@@ -34,7 +35,7 @@ export default async function SurveyEditorPage({ params }: { params: Promise<{ i
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <a href={`/api/construction/surveys/${id}/pdf`} target="_blank" rel="noopener" className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">Preview PDF</a>
-          {sv.job_id && <Link href={`/construction/jobs/${sv.job_id}`} className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">Job</Link>}
+          {sv.job_id && profile.fullAccess && <Link href={`/construction/jobs/${sv.job_id}`} className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">Job</Link>}
           <Link href="/construction/surveys" className="px-3 py-1.5 text-gray-500">All surveys</Link>
         </div>
       </div>
@@ -42,7 +43,7 @@ export default async function SurveyEditorPage({ params }: { params: Promise<{ i
       <details className="rounded-2xl border border-gray-200 bg-white shadow-sm" open={!sv.site_number}>
         <summary className="px-4 py-3 text-sm font-semibold text-gray-800 cursor-pointer">Site and tech</summary>
         <form action={saveSurveyHeader.bind(null, id)} className="p-4 pt-0 grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <div className="col-span-2 sm:col-span-3"><label className={lbl}>Job</label><select name="job_id" defaultValue={sv.job_id ?? ''} disabled={locked} className={inp}><option value="">— none —</option>{(jobs ?? []).map(j => <option key={j.id} value={j.id}>{j.site_number}{j.gas_brand ? ` · ${j.gas_brand}` : ''}{j.work_order_number ? ` · ${j.work_order_number}` : ''}</option>)}</select></div>
+          <div className="col-span-2 sm:col-span-3"><label className={lbl}>Job</label><select name="job_id" defaultValue={sv.job_id ?? ''} disabled={locked} className={inp}><option value="">— none —</option>{(jobs ?? []).map(j => <option key={j.id} value={j.id}>{j.site_number}{j.gas_brand ? ` · ${j.gas_brand}` : ''}{profile.fullAccess && j.work_order_number ? ` · ${j.work_order_number}` : ''}</option>)}</select></div>
           <div><label className={lbl}>Site #</label><input name="site_number" defaultValue={sv.site_number ?? ''} disabled={locked} className={inp} /></div>
           <div><label className={lbl}>Brand / name</label><input name="site_name" defaultValue={sv.site_name ?? ''} disabled={locked} className={inp} /></div>
           <div><label className={lbl}>Date</label><input name="survey_date" type="date" defaultValue={sv.survey_date} disabled={locked} className={inp} /></div>
@@ -74,7 +75,7 @@ export default async function SurveyEditorPage({ params }: { params: Promise<{ i
           <>
             <span className="text-sm text-gray-700 flex-1">Survey is {sv.status}. The PDF is on the job's Documents and the email to ICON is on the plate.</span>
             <a href={`/api/construction/surveys/${id}/pdf`} target="_blank" rel="noopener" className="px-3 py-2 rounded-lg bg-gray-900 text-white text-sm">Open PDF</a>
-            <Link href="/my" className="px-3 py-2 rounded-lg border border-gray-300 text-sm">My Plate</Link>
+            {profile.fullAccess && <Link href="/my" className="px-3 py-2 rounded-lg border border-gray-300 text-sm">My Plate</Link>}
             <form action={reopenSurvey.bind(null, id)}><button className="px-3 py-2 rounded-lg border border-gray-300 text-sm">Reopen</button></form>
           </>
         ) : (

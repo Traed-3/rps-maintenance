@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import AppNav from '@/components/app-nav'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { AskRps } from '@/components/assistant/ask-rps'
+import { isSurveyOnly, DEFAULT_NEW_USER_ROLE, SURVEY_ONLY_HOME } from '@/lib/field-surveys'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -28,28 +29,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       user.user_metadata?.name ??
       user.email?.split('@')[0] ??
       'Unknown'
-    let role = 'viewer'
-    if (company?.id) {
-      const { count } = await admin
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('company_id', company.id)
-        .eq('role', 'owner')
-      if ((count ?? 0) === 0) role = 'owner'
-    }
+    // Same rule as the sign-in callback: new profiles are always Field Survey Only.
     const { data: created } = await admin.from('profiles').insert({
       id: user.id,
       company_id: company?.id ?? null,
       full_name: fullName,
       email: user.email!,
-      role,
+      role: DEFAULT_NEW_USER_ROLE,
+      default_landing_page: SURVEY_ONLY_HOME,
     }).select('id, company_id, role').single()
     profile = created
   }
 
   // Notifications — skip if we still have no profile (should never happen)
+  const surveyOnly = isSurveyOnly(profile?.role)   // Field Survey Only login: no bell, no Ask RPS, slim nav
   let filteredNotifications: any[] = []
-  if (profile?.company_id) {
+  if (profile?.company_id && !surveyOnly) {
     const { data } = await admin
       .from('notifications')
       .select('id, type, title, message, link, is_read, created_at')
@@ -67,22 +62,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <AppNav email={user.email ?? ''} role={profile?.role ?? 'viewer'} userId={user.id} blockedModules={blockedModules} />
+      <AppNav email={user.email ?? ''} role={profile?.role ?? DEFAULT_NEW_USER_ROLE} userId={user.id} blockedModules={blockedModules} />
 
       {/* Notification bell — top right on desktop */}
-      <div className="fixed top-3 right-4 z-20 hidden md:block">
+      {!surveyOnly && <div className="fixed top-3 right-4 z-20 hidden md:block">
         <NotificationBell
           initialNotifications={(filteredNotifications ?? []) as any[]}
           unreadCount={unreadCount}
         />
-      </div>
+      </div>}
 
       <main className="flex-1 min-w-0 pb-16 md:pb-0 overflow-y-auto overflow-x-hidden">
         {children}
       </main>
 
       {/* In-app AI assistant */}
-      <AskRps />
+      {!surveyOnly && <AskRps />}
     </div>
   )
 }
