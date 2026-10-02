@@ -103,6 +103,22 @@ export async function syncTechUpdates(opts: { sinceDays?: number; budget?: Budge
       const { data: twin } = await admin.from('con_daily_updates').select('id').eq('job_id', job.id).eq('work_date', workDate).contains('source_refs', { subject_key: skey }).maybeSingle()
       if (twin) { out.skipped++; continue }
       const body = stripQuoted(extractText(msg)) || '(photos only)'
+      // Starsky re-forwards a tech's update with the site number fixed (a different subject, so the check
+      // above misses it) — and the tech's original, carrying the wrong site, can resolve to some other job.
+      // Same day + identical text anywhere = the same update, so file it once.
+      if (body !== '(photos only)') {
+        const { data: sameText } = await admin.from('con_daily_updates').select('id, job_id').eq('work_date', workDate).eq('source', 'gmail_update').eq('work_description', body.slice(0, 4000)).limit(1)
+        const prior = sameText?.[0]
+        if (prior) {
+          // The office's own forward carries the corrected site: if the original already landed on a different
+          // job, move it (and its photos) to the right one instead of leaving it on the wrong job.
+          if (prior.job_id !== job.id && from.email.toLowerCase() === 'econstruction.rp@gmail.com') {
+            await admin.from('con_daily_updates').update({ job_id: job.id }).eq('id', prior.id)
+            await admin.from('con_documents').update({ job_id: job.id }).eq('daily_update_id', prior.id)
+          }
+          out.skipped++; continue
+        }
+      }
       const { data: du, error: duErr } = await admin.from('con_daily_updates').insert({
         company_id: job.company_id, job_id: job.id, work_date: workDate, work_description: body.slice(0, 4000),
         notes: `Emailed to econstruction by ${from.name || from.email} · "${subject}"`,
