@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { VALID_LANDING_PAGES, DEFAULT_LANDING_PAGE } from '@/lib/landing-pages'
 import { MODULE_KEYS, type ModuleKey } from '@/lib/modules'
 import { validateNewPassword } from '@/lib/password-rules'
+import { canManageUser, canAssignRole } from '@/lib/user-admin-rules'
 
 async function getProfile() {
   const supabase = await createClient()
@@ -14,6 +15,13 @@ async function getProfile() {
   const admin = createAdminClient()
   const { data } = await admin.from('profiles').select('id, company_id, role').eq('id', user.id).single()
   return data
+}
+
+/** Current role of someone in the caller's company, or null if they are not found. */
+async function targetRoleOf(userId: string, companyId: string | null): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data } = await admin.from('profiles').select('role').eq('id', userId).eq('company_id', companyId).maybeSingle()
+  return data?.role ?? null
 }
 
 // ── Edit user profile ─────────────────────────────────────────────────────────
@@ -25,6 +33,9 @@ export async function editUser(
   const profile = await getProfile()
   if (!profile || !['owner', 'manager'].includes(profile.role)) {
     return { error: 'Access denied.' }
+  }
+  if (!canManageUser(profile.role, await targetRoleOf(userId, profile.company_id))) {
+    return { error: "Only an owner can edit an owner's account." }
   }
   const admin = createAdminClient()
   if (data.email) {
@@ -77,7 +88,7 @@ export async function setUserPassword(userId: string, password: string): Promise
     .eq('id', userId).eq('company_id', profile.company_id).maybeSingle()
   if (!target) return { error: 'User not found.' }
   // A manager must not be able to set an owner's password and then sign in as that owner.
-  if (target.role === 'owner' && profile.role !== 'owner') return { error: "Only an owner can set an owner's password." }
+  if (!canManageUser(profile.role, target.role)) return { error: "Only an owner can set an owner's password." }
 
   const { error } = await admin.auth.admin.updateUserById(userId, { password })
   if (error) return { error: error.message }
@@ -93,10 +104,12 @@ export async function updateUserRole(userId: string, newRole: string) {
 
   const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech', 'construction_manager', 'estimator', 'office_staff', 'viewer', 'field_surveyor']
   if (!validRoles.includes(newRole)) return
+  if (!canAssignRole(profile.role, newRole)) return   // only an owner can hand out owner
 
   const admin = createAdminClient()
   // Field Survey Only logins land on the survey list; moving someone off that role clears that landing page.
   const { data: before } = await admin.from('profiles').select('role, default_landing_page').eq('id', userId).eq('company_id', profile.company_id).maybeSingle()
+  if (!canManageUser(profile.role, before?.role)) return   // and a manager cannot change an existing owner's role
   const patch: Record<string, unknown> = { role: newRole }
   if (newRole === 'field_surveyor') patch.default_landing_page = '/construction/surveys'
   else if (before?.role === 'field_surveyor' && before.default_landing_page === '/construction/surveys') patch.default_landing_page = null
@@ -127,6 +140,7 @@ export async function toggleUserActive(userId: string, isActive: boolean) {
   const profile = await getProfile()
   if (!profile || !['owner', 'manager'].includes(profile.role)) return
   if (userId === profile.id) return  // can't deactivate yourself
+  if (!canManageUser(profile.role, await targetRoleOf(userId, profile.company_id))) return   // managers cannot deactivate an owner
 
   const admin = createAdminClient()
   await admin.from('profiles').update({ is_active: isActive })
@@ -148,8 +162,8 @@ export async function setUserModuleBlocks(userId: string, blockedKeys: string[])
 
   // Confirm this user actually belongs to the caller's company before
   // touching their blocks — same scoping every other action here uses.
-  const { data: target } = await admin.from('profiles').select('id').eq('id', userId).eq('company_id', profile.company_id).maybeSingle()
-  if (!target) return
+  const { data: target } = await admin.from('profiles').select('id, role').eq('id', userId).eq('company_id', profile.company_id).maybeSingle()
+  if (!target || !canManageUser(profile.role, target.role)) return
 
   const valid = blockedKeys.filter((k): k is ModuleKey => (MODULE_KEYS as readonly string[]).includes(k))
 
@@ -180,6 +194,7 @@ export async function createEmployee(
 
   const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech', 'construction_manager', 'estimator', 'office_staff', 'viewer', 'field_surveyor']
   if (!validRoles.includes(role)) return { error: 'Invalid role.' }
+  if (!canAssignRole(profile.role, role)) return { error: 'Only an owner can add another owner.' }
 
   const admin = createAdminClient()
 

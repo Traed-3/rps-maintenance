@@ -22,11 +22,13 @@ export function UserRoleForm({
   currentRole,
   onUpdate,
   disabled,
+  canAssignOwner,
 }: {
   userId: string
   currentRole: string
   onUpdate: (role: string) => Promise<void>
   disabled?: boolean
+  canAssignOwner: boolean
 }) {
   const [isPending, startTransition] = useTransition()
 
@@ -40,7 +42,7 @@ export function UserRoleForm({
       }}
       className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 bg-white"
     >
-      {ROLES.map(r => (
+      {ROLES.filter(r => r.value !== 'owner' || canAssignOwner || currentRole === 'owner').map(r => (
         <option key={r.value} value={r.value}>{r.label}</option>
       ))}
     </select>
