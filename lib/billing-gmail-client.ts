@@ -130,7 +130,7 @@ export async function getAttachment(inbox: BillingInbox, messageId: string, atta
 // ── MIME helpers ──────────────────────────────────────────────────────────────
 
 export type GmailPart = { partId?: string; mimeType?: string; filename?: string; headers?: { name: string; value: string }[]; body?: { attachmentId?: string; size?: number; data?: string }; parts?: GmailPart[] }
-export type GmailMessage = { id: string; threadId: string; snippet?: string; internalDate?: string; payload?: GmailPart }
+export type GmailMessage = { id: string; threadId: string; labelIds?: string[]; snippet?: string; internalDate?: string; payload?: GmailPart }
 
 export function header(msg: GmailMessage, name: string): string {
   const h = msg.payload?.headers?.find(x => x.name.toLowerCase() === name.toLowerCase())
