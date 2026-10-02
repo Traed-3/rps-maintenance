@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { canWriteConstruction } from '@/lib/construction'
+import { canEditFieldSurveys, surveyOwnOnly } from '@/lib/field-surveys'
 import { type SurveyEntry, type Worksheet, type LidMeasure, type SumpType, surveyTitle, composeSumpLabel, SURVEY_TYPES, SUMP_TYPES } from '@/lib/survey'
 import { renderSurveyPdf, loadSurveyBundle } from '@/lib/survey-pdf'
 import { buildSurveyEmail } from '@/lib/order-email'
@@ -12,13 +12,19 @@ import { buildSurveyEmail } from '@/lib/order-email'
 const BUCKET = 'construction-docs'
 const str = (v: FormDataEntryValue | null) => { const s = (v as string | null)?.trim(); return s || null }
 
-async function me() {
+/** Signed-in survey user. Pass the survey id on every action that touches an existing survey: the locked-down
+ *  field_surveyor role may only change surveys it created. */
+async function me(surveyId?: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not signed in')
   const admin = createAdminClient()
   const { data: p } = await admin.from('profiles').select('id, company_id, role, full_name, phone, email').eq('id', user.id).single()
-  if (!p || !canWriteConstruction(p)) throw new Error('No construction write access')
+  if (!p || !canEditFieldSurveys(p)) throw new Error('No field survey access')
+  if (surveyId && surveyOwnOnly(p.role)) {
+    const { data: own } = await admin.from('con_surveys').select('created_by').eq('id', surveyId).eq('company_id', p.company_id).maybeSingle()
+    if (!own || own.created_by !== p.id) throw new Error('That survey belongs to someone else')
+  }
   return { admin, p }
 }
 const touch = (id: string) => { revalidatePath('/construction/surveys'); revalidatePath(`/construction/surveys/${id}`); revalidatePath('/mobile/survey') }
@@ -49,7 +55,7 @@ export async function createSurvey(formData: FormData): Promise<void> {
 }
 
 export async function saveSurveyHeader(id: string, formData: FormData): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(id)
   const patch = { site_number: str(formData.get('site_number')), site_name: str(formData.get('site_name')), address: str(formData.get('address')), survey_date: str(formData.get('survey_date')), tech_name: str(formData.get('tech_name')), tech_phone: str(formData.get('tech_phone')), tech_email: str(formData.get('tech_email')), notes: str(formData.get('notes')), job_id: str(formData.get('job_id')), updated_at: new Date().toISOString() }
   const { error } = await admin.from('con_surveys').update(patch).eq('id', id).eq('company_id', p.company_id)
   if (error) throw new Error(error.message)
@@ -57,7 +63,7 @@ export async function saveSurveyHeader(id: string, formData: FormData): Promise<
 }
 
 export async function addSump(surveyId: string, formData: FormData): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(surveyId)
   const { count } = await admin.from('con_survey_sumps').select('id', { count: 'exact', head: true }).eq('survey_id', surveyId)
   const st = (str(formData.get('sump_type')) ?? 'udc') as SumpType, sn = str(formData.get('sump_number'))
   const { error } = await admin.from('con_survey_sumps').insert({ company_id: p.company_id, survey_id: surveyId, sort_order: (count ?? 0) + 1, sump_type: st, sump_number: sn, sump_label: composeSumpLabel(st, sn), location: SUMP_TYPES.find(t => t.value === st)?.location ?? null, entries: [{ kind: 'P', n: 1, fitting: null, bolts: null, pipe: null, od: null, notes: null }] })
@@ -67,7 +73,7 @@ export async function addSump(surveyId: string, formData: FormData): Promise<voi
 
 /** The whole sump card posts at once: type boxes, leak, worksheets, every entry row, lid measurements, damage text. */
 export async function saveSump(surveyId: string, sumpId: string, formData: FormData): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(surveyId)
   let entries: SurveyEntry[] = []
   try { entries = JSON.parse((formData.get('entries') as string) || '[]') } catch { entries = [] }
   entries = entries.filter(e => e && ['P', 'V', 'C'].includes(e.kind)).map(e => ({ kind: e.kind, n: Number(e.n) || 1, fitting: e.fitting || null, bolts: e.bolts ? Number(e.bolts) : null, pipe: e.pipe || null, od: e.od || null, notes: e.notes || null }))
@@ -86,14 +92,14 @@ export async function saveSump(surveyId: string, sumpId: string, formData: FormD
 }
 
 export async function deleteSump(surveyId: string, sumpId: string): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(surveyId)
   await admin.from('con_survey_sumps').delete().eq('id', sumpId).eq('survey_id', surveyId).eq('company_id', p.company_id)
   touch(surveyId)
 }
 
 /** Photos straight from the phone camera (input capture=environment) or the roll; several at once; tied to the sump and optionally one entry. */
 export async function addSurveyPhotos(surveyId: string, sumpId: string | null, formData: FormData): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(surveyId)
   const files = formData.getAll('photos').filter((f): f is File => typeof f === 'object' && !!f && (f as File).size > 0)
   if (!files.length) return
   const entryRef = str(formData.get('entry_ref'))
@@ -116,13 +122,13 @@ export async function addSurveyPhotos(surveyId: string, sumpId: string | null, f
 }
 
 export async function updatePhoto(surveyId: string, photoId: string, formData: FormData): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(surveyId)
   await admin.from('con_survey_photos').update({ caption: str(formData.get('caption')), entry_ref: str(formData.get('entry_ref')) }).eq('id', photoId).eq('survey_id', surveyId).eq('company_id', p.company_id)
   touch(surveyId)
 }
 
 export async function deletePhoto(surveyId: string, photoId: string): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(surveyId)
   const { data } = await admin.from('con_survey_photos').select('storage_path').eq('id', photoId).eq('company_id', p.company_id).maybeSingle()
   if (data?.storage_path) await admin.storage.from(BUCKET).remove([data.storage_path])
   await admin.from('con_survey_photos').delete().eq('id', photoId).eq('survey_id', surveyId)
@@ -134,7 +140,7 @@ export async function deletePhoto(surveyId: string, photoId: string): Promise<vo
  * survey complete, and put the "send to ICON" email on the plate as a drafted order-email task with the PDF attached.
  */
 export async function completeSurvey(id: string): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(id)
   const bundle = await loadSurveyBundle(admin, id, p.company_id)
   if (!bundle) throw new Error('survey not found')
   const pdf = await renderSurveyPdf(bundle)
@@ -161,13 +167,13 @@ export async function completeSurvey(id: string): Promise<void> {
 }
 
 export async function reopenSurvey(id: string): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(id)
   await admin.from('con_surveys').update({ status: 'draft', updated_at: new Date().toISOString() }).eq('id', id).eq('company_id', p.company_id)
   touch(id)
 }
 
 export async function deleteSurvey(id: string): Promise<void> {
-  const { admin, p } = await me()
+  const { admin, p } = await me(id)
   const { data: photos } = await admin.from('con_survey_photos').select('storage_path').eq('survey_id', id).eq('company_id', p.company_id)
   if (photos?.length) await admin.storage.from(BUCKET).remove(photos.map(x => x.storage_path))
   await admin.from('con_surveys').delete().eq('id', id).eq('company_id', p.company_id)

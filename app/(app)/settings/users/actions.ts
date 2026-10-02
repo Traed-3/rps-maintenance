@@ -65,11 +65,16 @@ export async function updateUserRole(userId: string, newRole: string) {
   if (!profile || !['owner', 'manager'].includes(profile.role)) return
   if (userId === profile.id) return  // can't change own role
 
-  const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech', 'construction_manager', 'estimator', 'office_staff', 'viewer']
+  const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech', 'construction_manager', 'estimator', 'office_staff', 'viewer', 'field_surveyor']
   if (!validRoles.includes(newRole)) return
 
   const admin = createAdminClient()
-  await admin.from('profiles').update({ role: newRole })
+  // Field Survey Only logins land on the survey list; moving someone off that role clears that landing page.
+  const { data: before } = await admin.from('profiles').select('role, default_landing_page').eq('id', userId).eq('company_id', profile.company_id).maybeSingle()
+  const patch: Record<string, unknown> = { role: newRole }
+  if (newRole === 'field_surveyor') patch.default_landing_page = '/construction/surveys'
+  else if (before?.role === 'field_surveyor' && before.default_landing_page === '/construction/surveys') patch.default_landing_page = null
+  await admin.from('profiles').update(patch)
     .eq('id', userId)
     .eq('company_id', profile.company_id)
 
@@ -147,7 +152,7 @@ export async function createEmployee(
 
   if (!fullName || !email) return { error: 'Name and email are required.' }
 
-  const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech', 'construction_manager', 'estimator', 'office_staff', 'viewer']
+  const validRoles = ['owner', 'manager', 'shop_manager', 'shop_employee', 'mechanic', 'service_tech', 'construction_tech', 'construction_manager', 'estimator', 'office_staff', 'viewer', 'field_surveyor']
   if (!validRoles.includes(role)) return { error: 'Invalid role.' }
 
   const admin = createAdminClient()
@@ -185,6 +190,7 @@ export async function createEmployee(
     email,
     role,
     is_active: true,
+    ...(role === 'field_surveyor' ? { default_landing_page: '/construction/surveys' } : {}),
   })
 
   if (profileError) {

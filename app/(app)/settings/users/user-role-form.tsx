@@ -14,6 +14,7 @@ const ROLES = [
   { value: 'estimator',         label: 'Estimator' },
   { value: 'office_staff',      label: 'Office Staff' },
   { value: 'viewer',            label: 'Viewer' },
+  { value: 'field_surveyor',    label: 'Field Survey Only (locked)' },
 ]
 
 export function UserRoleForm({

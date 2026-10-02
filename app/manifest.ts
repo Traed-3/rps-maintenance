@@ -26,6 +26,12 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       {
+        name: 'Field Surveys',
+        short_name: 'Surveys',
+        url: '/construction/surveys',
+        description: 'Start or continue an ICON field survey',
+      },
+      {
         name: 'Clock In / Out',
         short_name: 'Clock',
         url: '/shop/clock',

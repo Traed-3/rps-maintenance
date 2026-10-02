@@ -19,12 +19,13 @@ import {
   CalendarDays,
   Fuel,
   Package,
-  type LucideIcon, ListChecks,
+  type LucideIcon, ListChecks, ClipboardCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { canReadConstruction } from '@/lib/construction'
+import { canUseFieldSurveys, isSurveyOnly } from '@/lib/field-surveys'
 import { BILLING_READ_ROLES } from '@/lib/billing'
 
 type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean; billing?: boolean; module?: string }
@@ -58,10 +59,16 @@ export default function AppNav({ email, role, userId, blockedModules }: { email:
   const isAdmin = ['owner', 'manager'].includes(role ?? '')
   const canSeeConstruction = canReadConstruction({ id: userId, role })
   const blocked = new Set(blockedModules ?? [])
+  const surveyOnly = isSurveyOnly(role)
+  // Crew who can run surveys but do not have the Construction module (construction techs) get a Field Surveys link of their own.
+  const surveysLink: NavItem = { href: '/construction/surveys', label: 'Field Surveys', icon: ClipboardCheck }
+  const needsSurveysLink = canUseFieldSurveys({ id: userId, role }) && !canSeeConstruction
 
   // Construction and My Plate show for the construction roles (Settings → role); billing for its own roles too.
   const canSeeBilling = canSeeConstruction || (BILLING_READ_ROLES as readonly string[]).includes(role ?? '')
-  const visibleNavItems = navItems.filter(i =>
+  const visibleNavItems = surveyOnly ? [surveysLink] : [
+    ...(needsSurveysLink ? [navItems[0], surveysLink, ...navItems.slice(1)] : navItems),
+  ].filter(i =>
     (canSeeConstruction || !('construction' in i)) &&
     (canSeeBilling || !('billing' in i)) &&
     !(i.module && blocked.has(i.module))
@@ -69,7 +76,7 @@ export default function AppNav({ email, role, userId, blockedModules }: { email:
 
   // Mobile bottom-bar items — owners/managers get Settings so they can reach
   // user management, company info, alerts, etc. from a phone or the iPad app.
-  const mobileItems = [
+  const mobileItems = surveyOnly ? [{ href: '/construction/surveys', label: 'Surveys', icon: ClipboardCheck }] : [
     { href: '/mobile',    label: 'Home',      icon: Home },
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     ...(canSeeConstruction ? [{ href: '/my', label: 'Plate', icon: ListChecks }] : []),
@@ -77,6 +84,7 @@ export default function AppNav({ email, role, userId, blockedModules }: { email:
     { href: '/tickets',   label: 'Tickets',   icon: ClipboardList },
     { href: '/shop',      label: 'Shop',      icon: Users },
     ...(canSeeConstruction ? [{ href: '/construction', label: 'Build', icon: HardHat }] : []),
+    ...(needsSurveysLink ? [{ href: '/construction/surveys', label: 'Surveys', icon: ClipboardCheck }] : []),
     ...(isAdmin ? [{ href: '/settings', label: 'Settings', icon: Settings }] : []),
   ]
 

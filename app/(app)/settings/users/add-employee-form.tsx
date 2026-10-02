@@ -16,6 +16,7 @@ const ROLES = [
   { value: 'office_staff',  label: 'Office Staff' },
   { value: 'viewer',        label: 'Viewer (read-only)' },
   { value: 'manager',       label: 'Manager' },
+  { value: 'field_surveyor', label: 'Field Survey Only (locked)' },
 ]
 
 export function AddEmployeeForm() {
