@@ -167,7 +167,7 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
         // safely tolerates leftover duplicates from before this fix.
         const { data: existingRows } = await admin
           .from('svc_work_orders')
-          .select('id')
+          .select('id, source_portal')
           .eq('portal_wo_number', parsed.woNumber)
           .order('dispatched_at', { ascending: false })
         const existing = existingRows?.[0] ?? null
@@ -192,7 +192,37 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
         } else if (existing) {
           matchedWorkOrderId = existing.id
           importStatus = 'skipped'
-          result.skipped++
+          // An answering-service "Messages" email that merely mentions the WO# used to
+          // win the race and create a detail-blank 'unknown' row; the real portal
+          // dispatch then hit this branch and was skipped, so the call never got its
+          // site/address/priority. Let the real dispatch fill that row in.
+          if (existing.source_portal === 'unknown' && parsed.sourcePortal !== 'unknown') {
+            await admin.from('svc_work_orders').update({
+              source_portal:      parsed.sourcePortal,
+              client_name:        parsed.clientName,
+              incident_number:    parsed.incidentNumber,
+              site_number:        parsed.siteNumber,
+              site_name:          parsed.siteName,
+              site_address:       parsed.siteAddress,
+              site_city:          parsed.siteCity,
+              site_state:         parsed.siteState,
+              priority_raw:       parsed.priorityRaw,
+              priority_rank:      parsed.priorityRank,
+              subject_raw:        subject,
+              dispatch_gmail_message_id: msgId,
+              dispatch_gmail_thread_id: msg.threadId,
+              raw_dispatch_payload: parsed,
+            }).eq('id', existing.id)
+            importStatus = 'updated_wo'
+            result.updated++
+          } else {
+            result.skipped++
+          }
+        } else if (parsed.sourcePortal === 'unknown') {
+          // Not from a recognized portal (answering-service transcript, a forward from
+          // a person): it can mention a WO# but it is not a dispatch. Creating a row
+          // from it blocks the real dispatch that follows — leave it logged only.
+          importStatus = 'ignored'
         } else {
           const slaDueAt = parsed.priorityRank === 1
             ? new Date(receivedAt.getTime() + 4 * 60 * 60 * 1000).toISOString()
@@ -282,7 +312,13 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
     return result
   }
 
+  // Vercel gives the route 60 s. Stop starting new messages at 45 s and let the next
+  // cron tick pick up the rest (unlogged messages are re-listed), instead of timing
+  // out with a 504 and failing the whole svc-sync job.
+  const deadline = Date.now() + 45_000
+
   for (const msgId of msgIds) {
+    if (Date.now() > deadline) break
     try {
       if (await alreadyLogged(admin, 'rpinvoicing', msgId)) continue
       result.processed++
