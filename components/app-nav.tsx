@@ -101,12 +101,12 @@ export default function AppNav({ email, role, userId, blockedModules }: { email:
         {/* Brand */}
         <div className="px-4 py-4 border-b border-gray-200">
           <Image
-            src="/logo-full-v3.png"
+            src="/logo-full.png"
             alt="RPS Intelligence"
             width={220}
             height={100}
             priority
-            className="h-24 w-auto"
+            className="h-20 w-auto"
           />
         </div>
 
