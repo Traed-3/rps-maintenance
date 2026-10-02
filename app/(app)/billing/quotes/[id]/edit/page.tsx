@@ -16,6 +16,13 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
   if (!d) notFound()
   const r = d.row
   const header: Rev19Header = { ...(r as unknown as Rev19Header), kind: 'quote', id, customer_id: r.con_customers?.id ?? (r.customer_id as string | null) }
+  // The job pick-list is the 300 newest jobs. A quote attached to an older job (28960's canopy bid sits on a
+  // June row) would otherwise render "— none —" and a save would silently detach it, so make sure its job is listed.
+  const jobId = r.job_id as string | null
+  if (jobId && !lists.jobs.some(j => j.id === jobId)) {
+    const { data: own } = await admin.from('con_jobs').select('id, site_number, work_order_number').eq('id', jobId).eq('company_id', company_id).maybeSingle()
+    if (own) lists.jobs = [own, ...lists.jobs]
+  }
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-5"><Link href={`/billing/quotes/${id}`} className="text-sm text-gray-500 hover:text-gray-700">← {String(r.quote_number ?? 'Quote')}</Link><h1 className="text-2xl font-bold text-gray-900 mt-1">Edit quote</h1></div>

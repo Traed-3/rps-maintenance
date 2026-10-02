@@ -19,7 +19,7 @@ export default async function MyPlatePage() {
 
   const [{ data: rows }, { data: needed }, { data: bids }, { data: stale }, { data: quoting }, { data: quoted }, { data: slips }] = await Promise.all([
     admin.from('con_tasks').select('*').eq('owner_id', profile.id).neq('status', 'dropped').or(`status.neq.done,done_at.gte.${today}T00:00:00`).order('created_at'),
-    admin.from('con_quote_line_items').select('id, description, quote_id, con_quotes!inner(quote_number, site_number, status, company_id)').eq('price_flag', 'needed').eq('con_quotes.status', 'draft').eq('con_quotes.company_id', profile.company_id),
+    admin.from('con_quote_line_items').select('id, description, quote_id, con_quotes!inner(quote_number, site_number, status, company_id)').eq('price_flag', 'price_needed').eq('con_quotes.status', 'draft').eq('con_quotes.company_id', profile.company_id),
     admin.from('con_quotes').select('id, quote_number, site_number, bid_due').eq('company_id', profile.company_id).eq('status', 'draft').not('bid_due', 'is', null).lte('bid_due', new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)),
     admin.from('con_job_materials').select('description, ordered_date, created_at, job_id, con_jobs!inner(site_number, company_id)').eq('status', 'ordered').eq('con_jobs.company_id', profile.company_id).lt('created_at', new Date(Date.now() - 10 * 86_400_000).toISOString()),
     admin.from('con_jobs').select('id, site_number, work_order_number, status_detail').eq('company_id', profile.company_id).eq('stage', 'quoting').not('status_detail', 'ilike', '%waiting%').not('status_detail', 'ilike', '%sent to%'),
