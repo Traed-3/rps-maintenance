@@ -9,6 +9,7 @@ import { DeleteUserButton } from './delete-user-button'
 import { EditUserButton } from './edit-user-button'
 import { ModulesButton } from './modules-button'
 import { SetPasswordButton } from './set-password-button'
+import { canManageUser, canAssignRole } from '@/lib/user-admin-rules'
 import { updateUserRole, toggleUserActive, updateDefaultLandingPage } from './actions'
 
 export default async function UsersSettingsPage() {
@@ -77,6 +78,7 @@ export default async function UsersSettingsPage() {
           <tbody className="divide-y divide-gray-50">
             {(users ?? []).map(u => {
               const isSelf = u.id === profile!.id
+              const lockedOwner = !canManageUser(profile!.role, u.role)   // a manager can see an owner but not change them
               async function handleRoleChange(newRole: string) {
                 'use server'
                 await updateUserRole(u.id, newRole)
@@ -95,9 +97,9 @@ export default async function UsersSettingsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium text-gray-900">{u.full_name}</span>{(u as any).job_title && <span className="ml-2 text-xs text-gray-400">{(u as any).job_title}</span>}
                       {isSelf && <span className="text-xs text-gray-400">(you)</span>}
-                      <EditUserButton user={{ id: u.id, full_name: u.full_name, email: u.email, phone: (u as any).phone ?? null, job_title: (u as any).job_title ?? null }} />
+                      {!lockedOwner && <EditUserButton user={{ id: u.id, full_name: u.full_name, email: u.email, phone: (u as any).phone ?? null, job_title: (u as any).job_title ?? null }} />}
                       {/* Only an owner may set an owner's password; the server action enforces the same rule. */}
-                      {(profile!.role === 'owner' || u.role !== 'owner') && (
+                      {!lockedOwner && (
                         <SetPasswordButton userId={u.id} fullName={u.full_name} email={u.email} />
                       )}
                     </div>
@@ -112,7 +114,8 @@ export default async function UsersSettingsPage() {
                         userId={u.id}
                         currentRole={u.role}
                         onUpdate={handleRoleChange}
-                        disabled={isSelf}
+                        disabled={isSelf || lockedOwner}
+                        canAssignOwner={canAssignRole(profile!.role, 'owner')}
                       />
                     )}
                   </td>
@@ -124,8 +127,8 @@ export default async function UsersSettingsPage() {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    {isSelf ? (
-                      <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">Active</span>
+                    {isSelf || lockedOwner ? (
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${u.is_active ? 'text-green-700 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
                     ) : (
                       <form action={handleToggleActive}>
                         <button
@@ -144,7 +147,7 @@ export default async function UsersSettingsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
-                    {!isSelf && (
+                    {!isSelf && !lockedOwner && (
                       <ModulesButton userId={u.id} fullName={u.full_name} blockedKeys={blocksByUser.get(u.id) ?? []} />
                     )}
                   </td>
