@@ -18,6 +18,9 @@ export const canEditFieldSurveys = (p: P) => !!p?.id && (CON_WRITE_ROLES.include
 export const surveyOwnOnly = (role?: string | null) => isSurveyOnly(role)
 
 export const SURVEY_ONLY_HOME = '/construction/surveys'
+
+/** Every brand-new sign-in starts locked to Field Surveys. Only an owner or manager in Settings > Users can give anyone more. */
+export const DEFAULT_NEW_USER_ROLE = SURVEY_ONLY_ROLE
 const PAGE_PREFIXES = ['/construction/surveys']
 const API_PREFIXES = ['/api/construction/surveys', '/api/construction/survey-photos']
 

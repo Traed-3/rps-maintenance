@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import AppNav from '@/components/app-nav'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { AskRps } from '@/components/assistant/ask-rps'
-import { isSurveyOnly } from '@/lib/field-surveys'
+import { isSurveyOnly, DEFAULT_NEW_USER_ROLE, SURVEY_ONLY_HOME } from '@/lib/field-surveys'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -29,21 +29,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       user.user_metadata?.name ??
       user.email?.split('@')[0] ??
       'Unknown'
-    let role = 'viewer'
-    if (company?.id) {
-      const { count } = await admin
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('company_id', company.id)
-        .eq('role', 'owner')
-      if ((count ?? 0) === 0) role = 'owner'
-    }
+    // Same rule as the sign-in callback: new profiles are always Field Survey Only.
     const { data: created } = await admin.from('profiles').insert({
       id: user.id,
       company_id: company?.id ?? null,
       full_name: fullName,
       email: user.email!,
-      role,
+      role: DEFAULT_NEW_USER_ROLE,
+      default_landing_page: SURVEY_ONLY_HOME,
     }).select('id, company_id, role').single()
     profile = created
   }
@@ -69,7 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <AppNav email={user.email ?? ''} role={profile?.role ?? 'viewer'} userId={user.id} blockedModules={blockedModules} />
+      <AppNav email={user.email ?? ''} role={profile?.role ?? DEFAULT_NEW_USER_ROLE} userId={user.id} blockedModules={blockedModules} />
 
       {/* Notification bell — top right on desktop */}
       {!surveyOnly && <div className="fixed top-3 right-4 z-20 hidden md:block">

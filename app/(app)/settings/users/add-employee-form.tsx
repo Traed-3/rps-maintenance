@@ -73,7 +73,7 @@ export function AddEmployeeForm() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select name="role" className={inputClass} defaultValue="shop_employee">
+            <select name="role" className={inputClass} defaultValue="field_surveyor">
               {ROLES.map(r => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
