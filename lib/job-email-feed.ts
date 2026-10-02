@@ -44,9 +44,10 @@ type Job = { id: string; company_id: string; site_number: string | null; work_or
 
 /** "Re: Fwd: SU-9901 update MUL boots" -> ["SU-9901"]; "45967/58802 Invoice Wire Pull" -> ["45967","58802"]; "Wawa 8659 Update" -> ["Wawa 8659","8659"]. */
 export function siteKeysFromSubject(subject: string): string[] {
-  const head = subject.replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, '').trim()
-  let m = head.match(/^((?:SU|IP|CP|CPG)\s*-?\s*\d{3,5})\b/i)
-  if (m) { const p = m[1].toUpperCase().replace(/\s+/g, ''); return [p.startsWith('IP') ? p.replace('-', '') : p.replace(/^(SU|CP|CPG)-?/, '$1-')] }
+  // Techs sometimes lead with the word: "Update SU 9901", "UPDATE 32361".
+  const head = subject.replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, '').replace(/^update\s*[:\-]?\s+(?=\S)/i, '').trim()
+  let m = head.match(/^((?:SU|IP|CP|CPG|F)\s*-?\s*\d{3,5})\b/i)
+  if (m) { const p = m[1].toUpperCase().replace(/\s+/g, ''); return [p.startsWith('IP') ? p.replace('-', '') : p.replace(/^(SU|CP|CPG|F)-?/, '$1-')] }
   m = head.match(/^((?:Wawa|Global|Sheetz|Sunoco|Royal Farms|Handy Mart)\s*#?\s*(\d{2,5}))\b/i)
   if (m) return [m[1].replace(/\s+/g, ' '), m[2]]
   m = head.match(/^(\d{4,5}(?:\s*\/\s*\d{4,5})*)\b/)
