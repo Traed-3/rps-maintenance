@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { CON_DONE_STAGES, CON_STAGE_LABEL, type ConstructionTag } from '@/lib/con-stage'
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
@@ -68,4 +69,22 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export function clientLabel(sourcePortal: string, clientName: string | null): string {
   return clientName ?? SOURCE_LABEL[sourcePortal] ?? sourcePortal
+}
+
+// ── Handed to construction ───────────────────────────────────────────────────────
+
+/** "🏗 32361-26 · Invoicing" — the call has become a construction job; green once the work is done. */
+export function ConstructionBadge({ link }: { link: ConstructionTag }) {
+  const done = (CON_DONE_STAGES as readonly string[]).includes(link.stage)
+  return (
+    <span
+      title={`Construction job ${link.jobNumber ?? ''} — ${CON_STAGE_LABEL[link.stage] ?? link.stage}`}
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border',
+        done ? 'bg-green-50 text-green-800 border-green-200' : 'bg-amber-50 text-amber-800 border-amber-200',
+      )}
+    >
+      🏗 {link.jobNumber ? `${link.jobNumber} · ` : ''}{CON_STAGE_LABEL[link.stage] ?? link.stage}
+    </span>
+  )
 }

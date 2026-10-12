@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { GripVertical } from 'lucide-react'
-import { PriorityBadge, StaleBadge, clientLabel, STATUS_CONFIG } from './work-order-badges'
+import { PriorityBadge, StaleBadge, ConstructionBadge, clientLabel, STATUS_CONFIG } from './work-order-badges'
+import type { ConstructionTag } from '@/lib/con-stage'
 
 type WorkOrder = {
   id: string
@@ -18,6 +19,7 @@ type WorkOrder = {
   return_trip_needed: boolean
   invoice_rejected: boolean
   svc_technicians?: { full_name: string }[] | null
+  construction?: ConstructionTag | null
 }
 
 const STORAGE_KEY = 'svc-board-column-order'
@@ -97,6 +99,7 @@ export function WorkOrderBoard({ workOrders, statuses }: { workOrders: WorkOrder
                       <span className="text-xs text-gray-500 truncate">{w.svc_technicians?.[0]?.full_name ?? 'Unassigned'}</span>
                       <StaleBadge lastUpdateAt={w.last_update_at} status={w.status} />
                     </div>
+                    {w.construction && <div className="mt-1.5"><ConstructionBadge link={w.construction} /></div>}
                     {w.return_trip_needed && <div className="text-xs text-red-600 font-semibold mt-1">⟲ Return trip needed</div>}
                     {w.invoice_rejected && <div className="text-xs text-amber-700 font-medium mt-1">Invoice Rejected</div>}
                   </Link>

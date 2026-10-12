@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { WorkOrderArchiveTable } from '@/components/svc/work-order-archive-table'
 import { WorkOrderBoard } from '@/components/svc/work-order-board'
+import { loadConstructionLinks } from '@/lib/svc-construction-link'
 
 // 'new' / 'accepted' / 'en_route' are retired (everything is auto-accepted under
 // contract); 'new' stays in the query only so a straggler row is still counted.
@@ -43,6 +44,7 @@ export default async function ServiceDispatchPage({
   const staleOnly = view === 'stale'
   const oldOnly = view === 'old'
   const showArchived = view === 'archived'
+  const constructionOnly = view === 'construction'
   // Tiles by status are the default — bulk-select tools (archive/unarchive) only
   // make sense in the table, so Old/Archived force it regardless of the toggle.
   const boardView = layout !== 'list' && !showArchived && !oldOnly
@@ -55,6 +57,10 @@ export default async function ServiceDispatchPage({
   const { data: profile } = await admin
     .from('profiles').select('company_id').eq('id', user!.id).single()
   const companyId = profile!.company_id
+
+  // Calls handed to construction: WO# → the con_jobs row carrying it (and how far along it is).
+  const links = await loadConstructionLinks(admin, companyId)
+  const linkedWos = Array.from(links.keys())
 
   // Summary counts — the supervisor view: what's overdue, what needs a return trip,
   // what's unbilled. These drive the cards above the table.
@@ -83,7 +89,9 @@ export default async function ServiceDispatchPage({
     query = query.eq('archived', true).order('archived_at', { ascending: false })
   } else {
     query = query.eq('archived', false)
-    if (staleOnly) {
+    if (constructionOnly) {
+      query = query.in('status', OPEN_STATUSES).in('portal_wo_number', linkedWos.length ? linkedWos : ['—'])
+    } else if (staleOnly) {
       query = query.in('status', OPEN_STATUSES).lt('last_update_at', new Date(sevenDaysAgo).toISOString())
     } else if (oldOnly) {
       // Any status — the point is to surface everything old enough to be
@@ -101,15 +109,25 @@ export default async function ServiceDispatchPage({
   }
   if (client) query = query.eq('source_portal', client)
 
-  const { data: workOrders } = await query
+  const { data: rawWorkOrders } = await query
+  const workOrders = (rawWorkOrders ?? []).map(w => {
+    const l = w.portal_wo_number ? links.get(w.portal_wo_number) : undefined
+    return { ...w, construction: l ? { jobId: l.jobId, jobNumber: l.jobNumber, stage: l.stage } : null }
+  })
+
+  // How many open calls have been handed to construction (drives the filter pill).
+  const { data: openLinked } = linkedWos.length
+    ? await admin.from('svc_work_orders').select('id').eq('company_id', companyId).eq('archived', false).in('status', OPEN_STATUSES).in('portal_wo_number', linkedWos)
+    : { data: [] as { id: string }[] }
+  const constructionCount = openLinked?.length ?? 0
 
   // Every quick/status/client pill below is built from the same current selection,
   // so clicking one preserves whatever else is already active (e.g. P1 + Wawa + RTN).
-  // `view` is single-select: '' | 'stale' | 'old' | 'archived'.
+  // `view` is single-select: '' | 'stale' | 'old' | 'archived' | 'construction'.
   function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; view?: string; layout?: string }) {
     const next = {
       status, client, priority: priorityRank ? String(priorityRank) : '',
-      rtn: rtnOnly, view: showArchived ? 'archived' : staleOnly ? 'stale' : oldOnly ? 'old' : '',
+      rtn: rtnOnly, view: showArchived ? 'archived' : staleOnly ? 'stale' : oldOnly ? 'old' : constructionOnly ? 'construction' : '',
       layout,
       ...overrides,
     }
@@ -139,6 +157,9 @@ export default async function ServiceDispatchPage({
   function oldFilterHref() {
     return buildHref({ view: oldOnly ? '' : 'old', status: '' })
   }
+  function constructionFilterHref() {
+    return buildHref({ view: constructionOnly ? '' : 'construction', status: '' })
+  }
   function archivedFilterHref() {
     return buildHref({ view: showArchived ? '' : 'archived', status: '', rtn: false, priority: null })
   }
@@ -162,7 +183,7 @@ export default async function ServiceDispatchPage({
             Completed ticket review{needsReviewCount ? <span className="ml-1 inline-flex items-center justify-center w-5 h-5 text-[11px] font-bold rounded-full bg-amber-500 text-white">{needsReviewCount}</span> : ' →'}
           </Link>
           <p className="text-sm text-gray-500 mt-0.5">
-            7-Eleven, Wawa & Sunoco work orders — synced automatically from rpdispatcher and rpinvoicing every 15 minutes
+            7-Eleven, Wawa & Sunoco work orders — synced automatically from rpdispatcher and rpinvoicing; calls handed to construction follow their job
           </p>
         </div>
         {!showArchived && !oldOnly && (
@@ -220,6 +241,16 @@ export default async function ServiceDispatchPage({
             }`}
           >
             📦 60+ Days Old
+          </Link>
+          <Link
+            href={constructionFilterHref()}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
+              constructionOnly
+                ? 'bg-amber-700 text-white border-amber-700'
+                : 'bg-white text-amber-800 border-amber-300 hover:border-amber-500'
+            }`}
+          >
+            🏗 In Construction ({constructionCount})
           </Link>
         </div>
       )}
@@ -298,6 +329,12 @@ export default async function ServiceDispatchPage({
         </p>
       )}
 
+      {constructionOnly && (
+        <p className="text-xs text-gray-500 mb-3">
+          Open calls that have been handed to a construction job. When the job reaches close-out, invoicing or complete the call is marked completed automatically.
+        </p>
+      )}
+
       {oldOnly && (
         <p className="text-xs text-gray-500 mb-3">
           Dispatched more than 60 days ago, any status — check the box next to &quot;WO #&quot; to select all, then Archive Selected.
@@ -305,9 +342,9 @@ export default async function ServiceDispatchPage({
       )}
 
       {boardView ? (
-        <WorkOrderBoard workOrders={workOrders ?? []} statuses={BOARD_STATUSES} />
+        <WorkOrderBoard workOrders={workOrders} statuses={BOARD_STATUSES} />
       ) : (
-        <WorkOrderArchiveTable workOrders={workOrders ?? []} showArchived={showArchived} />
+        <WorkOrderArchiveTable workOrders={workOrders} showArchived={showArchived} />
       )}
     </div>
   )

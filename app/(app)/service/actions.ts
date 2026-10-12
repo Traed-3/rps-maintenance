@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { archiveThread, archiveMessage } from '@/lib/svc-gmail-client'
+import { canWriteConstruction } from '@/lib/construction'
+import { reconcileWorkOrders } from '@/lib/svc-reconcile'
+import { woTokens } from '@/lib/svc-construction-link'
 
 async function getProfile() {
   const supabase = await createClient()
@@ -91,4 +94,27 @@ export async function unarchiveWorkOrder(id: string): Promise<{ error?: string }
 
   revalidatePath('/service')
   return {}
+}
+
+// Tie a service call to the construction job that is doing the work: puts the call's WO# on the job.
+// From then on the call follows the job (completes when the job reaches close-out / invoicing / complete),
+// and it is applied right away for this one call rather than waiting for the next sync tick.
+export async function linkConstructionJob(workOrderId: string, jobId: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || !canWriteConstruction({ id: profile.id, role: profile.role })) return
+
+  const admin = createAdminClient()
+  const { data: wo } = await admin.from('svc_work_orders').select('portal_wo_number').eq('id', workOrderId).eq('company_id', profile.company_id).single()
+  const { data: job } = await admin.from('con_jobs').select('id, work_order_number').eq('id', jobId).eq('company_id', profile.company_id).single()
+  if (!wo?.portal_wo_number || !job) return
+
+  if (!woTokens(job.work_order_number).includes(wo.portal_wo_number.toUpperCase())) {
+    const next = job.work_order_number?.trim() ? `${job.work_order_number.trim()} / ${wo.portal_wo_number}` : wo.portal_wo_number
+    await admin.from('con_jobs').update({ work_order_number: next }).eq('id', job.id)
+  }
+  await reconcileWorkOrders({ dryRun: false, archivedBy: profile.id, onlyWo: wo.portal_wo_number })
+
+  revalidatePath('/service')
+  revalidatePath(`/service/${workOrderId}`)
+  revalidatePath(`/construction/jobs/${jobId}`)
 }

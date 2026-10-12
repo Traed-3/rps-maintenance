@@ -6,6 +6,9 @@ import { createClient } from '@/lib/supabase/server'
 import { WorkOrderStatusBadge, PriorityBadge, clientLabel } from '@/components/svc/work-order-badges'
 import { createServiceTicket } from '@/app/(app)/service/tickets/actions'
 import { createJobFromWorkOrder } from '@/app/(app)/construction/actions'
+import { linkConstructionJob } from '@/app/(app)/service/actions'
+import { loadConstructionLinks, woTokens } from '@/lib/svc-construction-link'
+import { CON_STAGE_LABEL, CON_DONE_STAGES } from '@/lib/con-stage'
 import { canWriteConstruction } from '@/lib/construction'
 
 function fmt(d: string | null): string {
@@ -39,9 +42,17 @@ export default async function WorkOrderDetailPage({
 
   // Construction users can spin this dispatched WO up as a construction job (site + address auto-filled).
   const canConstruction = canWriteConstruction({ id: user?.id, role: (profile as { role?: string } | null)?.role })
-  const { data: existingJob } = canConstruction && (w as any).portal_wo_number
-    ? await admin.from('con_jobs').select('id, job_number').eq('company_id', profile!.company_id).eq('work_order_number', (w as any).portal_wo_number).limit(1).maybeSingle()
-    : { data: null }
+  // The construction job carrying this call's WO# (if it was handed off), else probable jobs at the same site.
+  const links = await loadConstructionLinks(admin, profile!.company_id)
+  const link = (w as any).portal_wo_number ? links.get((w as any).portal_wo_number) : undefined
+  const siteDigits = String((w as any).site_number ?? '').replace(/\D/g, '')
+  const { data: siteJobs } = !link && canConstruction && siteDigits.length >= 4
+    ? await admin.from('con_jobs').select('id, job_number, site_number, stage, status_detail, work_order_number, updated_at').eq('company_id', profile!.company_id).ilike('site_number', `%${siteDigits}%`).order('updated_at', { ascending: false }).limit(12)
+    : { data: [] as any[] }
+  const probableJobs = (siteJobs ?? [])
+    .filter((j: any) => String(j.site_number ?? '').replace(/\D/g, '').includes(siteDigits))
+    .filter((j: any) => !woTokens(j.work_order_number).length)   // already tied to a different call
+    .slice(0, 5)
 
   const tech = (w as any).svc_technicians as { full_name: string; personal_email: string | null } | null
 
@@ -71,12 +82,41 @@ export default async function WorkOrderDetailPage({
         <form action={createServiceTicket} className="mb-5"><input type="hidden" name="work_order_id" value={w.id} /><button type="submit" className="rounded-lg bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700">Start field ticket</button></form>
       ) })()}
 
-      {canConstruction && (
-        existingJob ? (
-          <Link href={`/construction/jobs/${existingJob.id}`} className="inline-block bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 mb-5 text-sm text-amber-900">Construction job <b className="font-mono">{existingJob.job_number ?? ''}</b> →</Link>
-        ) : (
-          <form action={createJobFromWorkOrder.bind(null, w.id)} className="mb-5"><button type="submit" className="rounded-lg border border-gray-300 bg-white text-gray-800 text-sm font-medium px-4 py-2 hover:bg-gray-50">Create construction job →</button></form>
-        )
+      {link ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+          <p className="text-sm font-semibold text-amber-900">
+            🏗 Handed to construction —{' '}
+            <Link href={`/construction/jobs/${link.jobId}`} className="underline">job <span className="font-mono">{link.jobNumber ?? link.siteNumber ?? ''}</span></Link>
+            {' '}· {CON_STAGE_LABEL[link.stage] ?? link.stage}
+          </p>
+          {link.statusDetail && <p className="text-sm text-amber-800 mt-1">{link.statusDetail}</p>}
+          <p className="text-xs text-amber-700 mt-1.5">
+            {(CON_DONE_STAGES as readonly string[]).includes(link.stage)
+              ? 'The work is finished in construction, so this call is marked completed.'
+              : 'This call completes automatically when the job reaches close-out, invoicing or complete.'}
+          </p>
+        </div>
+      ) : canConstruction && (
+        <div className="mb-5 space-y-3">
+          <form action={createJobFromWorkOrder.bind(null, w.id)}><button type="submit" className="rounded-lg border border-gray-300 bg-white text-gray-800 text-sm font-medium px-4 py-2 hover:bg-gray-50">Create construction job →</button></form>
+          {probableJobs.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Already a construction job at this site?</p>
+              <ul className="space-y-2">
+                {probableJobs.map((j: any) => (
+                  <li key={j.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0">
+                      <Link href={`/construction/jobs/${j.id}`} className="font-mono text-blue-700 hover:underline">{j.job_number ?? j.site_number}</Link>
+                      <span className="text-gray-500"> · {CON_STAGE_LABEL[j.stage] ?? j.stage}</span>
+                      {j.status_detail && <span className="block text-xs text-gray-400 truncate">{j.status_detail}</span>}
+                    </span>
+                    <form action={linkConstructionJob.bind(null, w.id, j.id)}><button type="submit" className="shrink-0 rounded-lg bg-amber-600 text-white text-xs font-medium px-3 py-1.5 hover:bg-amber-700">This is the one</button></form>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
 
       {w.return_trip_needed && (

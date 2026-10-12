@@ -56,7 +56,7 @@ function targetFor(kind: EventKind): 'completed' | 'rtn_needed' | 'in_progress' 
   }
 }
 
-export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?: string | null } = {}): Promise<ReconcileResult> {
+export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?: string | null; onlyWo?: string } = {}): Promise<ReconcileResult> {
   const dryRun = opts.dryRun ?? true
   const admin: Admin = createAdminClient()
   const deadline = Date.now() + BUDGET_MS
@@ -70,7 +70,7 @@ export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?:
     .select('id, portal_wo_number, status, notes, last_update_at, completed_at, dispatch_gmail_message_id, dispatch_gmail_thread_id, return_trip_needed')
     .eq('company_id', COMPANY_ID).eq('archived', false).neq('status', 'completed')
     .not('portal_wo_number', 'is', null)
-  const calls = open ?? []
+  const calls = (open ?? []).filter(c => !opts.onlyWo || c.portal_wo_number === opts.onlyWo)
   result.openCalls = calls.length
   if (!calls.length) return result
 

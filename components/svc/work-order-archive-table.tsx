@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Archive, ArchiveRestore, X } from 'lucide-react'
 import { ClickableRow } from '@/components/clickable-row'
-import { WorkOrderStatusBadge, PriorityBadge, StaleBadge, clientLabel } from '@/components/svc/work-order-badges'
+import { WorkOrderStatusBadge, PriorityBadge, StaleBadge, ConstructionBadge, clientLabel } from '@/components/svc/work-order-badges'
+import type { ConstructionTag } from '@/lib/con-stage'
 import { ARCHIVE_REASON_PRESETS } from '@/lib/svc-archive-reasons'
 import { archiveWorkOrders, unarchiveWorkOrder } from '@/app/(app)/service/actions'
 
@@ -26,6 +27,7 @@ type WorkOrder = {
   archived_at: string | null
   archived_reason: string | null
   svc_technicians?: { full_name: string }[] | null
+  construction?: ConstructionTag | null
 }
 
 export function WorkOrderArchiveTable({ workOrders, showArchived }: { workOrders: WorkOrder[]; showArchived: boolean }) {
@@ -139,6 +141,9 @@ export function WorkOrderArchiveTable({ workOrders, showArchived }: { workOrders
                         {!showArchived && <StaleBadge lastUpdateAt={w.last_update_at} status={w.status} />}
                         {w.invoice_rejected && (
                           <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">Invoice Rejected</span>
+                        )}
+                        {w.construction && (
+                          <Link href={`/construction/jobs/${w.construction.jobId}`}><ConstructionBadge link={w.construction} /></Link>
                         )}
                       </div>
                     </td>

@@ -10,20 +10,11 @@
  * Pure DB reads — no Gmail — so it is cheap enough to run on every sync tick.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
+import { CON_DONE_STAGES, CON_ACTIVE_STAGES, CON_STAGE_LABEL } from '@/lib/con-stage'
 
 type Admin = ReturnType<typeof createAdminClient>
 
-/** Construction stages meaning the physical work is finished (close-out and invoicing are paperwork). */
-export const CON_DONE_STAGES = ['close_out', 'invoicing', 'complete'] as const
-/** Stages meaning crews are actively on it. */
-export const CON_ACTIVE_STAGES = ['in_progress'] as const
-
-export const CON_STAGE_LABEL: Record<string, string> = {
-  survey: 'Survey', permitting: 'Permitting', quoting: 'Quoting', material_ordering: 'Ordering materials',
-  needs_scheduled: 'Needs scheduled', scheduled: 'Scheduled', in_progress: 'In progress', on_hold: 'On hold',
-  return_needed: 'Return needed', close_out: 'Close-out', invoicing: 'Invoicing', complete: 'Complete',
-  overspill_program: 'Overspill program',
-}
+export { CON_DONE_STAGES, CON_ACTIVE_STAGES, CON_STAGE_LABEL }
 
 export type ConstructionLink = {
   jobId: string
