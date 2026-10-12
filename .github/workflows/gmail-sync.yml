@@ -114,14 +114,14 @@ jobs:
           LOOKUP_Q: ${{ github.event.inputs.lookup_q }}
           LOOKUP_MAILBOX: ${{ github.event.inputs.lookup_mailbox || 'invoicing' }}
         run: |
-          curl -G --fail-with-body -sS --max-time 90 \
+          curl -G -sS --fail-with-body --max-time 90 \
             --data-urlencode "secret=$CRON_SECRET" \
             --data-urlencode "pass=lookup" \
             --data-urlencode "q=$LOOKUP_Q" \
             --data-urlencode "full=1" \
             --data-urlencode "mailbox=$LOOKUP_MAILBOX" \
             -o resp.json -w "HTTP %{http_code}\n" \
-            "https://rps-maintenance.vercel.app/api/svc/gmail-sync"
+            "https://rps-maintenance.vercel.app/api/svc/gmail-sync" || { cat resp.json; exit 1; }
           echo "COUNT $(jq '.count' resp.json)"
           jq -r '.hits[] | "HIT " + tojson' resp.json | cut -c1-6000
 
