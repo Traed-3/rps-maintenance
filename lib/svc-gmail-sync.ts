@@ -408,7 +408,7 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
       if (parsed.woNumber) {
         const { data: candidates } = await admin
           .from('svc_work_orders')
-          .select('id, source_portal, status, completed_at, dispatched_at, dispatch_gmail_message_id, dispatch_gmail_thread_id')
+          .select('id, source_portal, status, completed_at, assigned_technician_id, dispatched_at, dispatch_gmail_message_id, dispatch_gmail_thread_id')
           .eq('portal_wo_number', parsed.woNumber)
           .order('dispatched_at', { ascending: false })
 
@@ -426,7 +426,7 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
         } else if (wo) {
           const { data: tech } = await admin
             .from('svc_technicians')
-            .select('id')
+            .select('id, role')
             .ilike('personal_email', techEmail)
             .maybeSingle()
 
@@ -435,7 +435,9 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
             completion_note_raw: parsed.note || null,
             completion_gmail_message_id: msgId,
           }
-          if (tech) updates.assigned_technician_id = tech.id
+          // The tech who sent the ticket is the call's technician; a manager forwarding someone else's ticket
+          // must not take it over (they only fill an empty slot).
+          if (tech && (tech.role === 'service_tech' || !wo.assigned_technician_id)) updates.assigned_technician_id = tech.id
 
           // Standing rule (Trae, 2026-10-12): a ticket for the call that does not say RTN / return trip needed
           // means the call is COMPLETE — "Incomplete", a blank forward and a bare "Sent from my iPhone" included.
