@@ -19,7 +19,7 @@
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { archiveThread, archiveMessage } from '@/lib/svc-gmail-client'
-import { isTrustedPortalNotice } from '@/lib/svc-work-order-parser'
+import { isTrustedPortalNotice, classifyCompletionNote } from '@/lib/svc-work-order-parser'
 import { loadConstructionLinks, CON_DONE_STAGES, CON_ACTIVE_STAGES, CON_STAGE_LABEL } from '@/lib/svc-construction-link'
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -80,17 +80,20 @@ export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?:
   const events = new Map<string, Evidence[]>()
   const push = (wo: string, e: Evidence) => { const l = events.get(wo) ?? []; l.push(e); events.set(wo, l) }
 
-  // 1. Tech notes in rpinvoicing (applied or not — the timeline decides).
-  for (let i = 0; i < woList.length; i += 80) {
+  // 1. Tech notes in rpinvoicing (applied or not — the timeline decides). Each stored note is re-read
+  //    with the CURRENT classifier, so parser fixes made since it was first logged still count.
+  for (let i = 0; i < woList.length; i += 60) {
     const { data } = await admin
       .from('svc_gmail_imports')
-      .select('id, gmail_message_id, received_at, status, parsed, subject')
+      .select('id, gmail_message_id, received_at, status, parsed')
       .eq('mailbox', 'rpinvoicing')
-      .in('parsed->>woNumber', woList.slice(i, i + 80))
-      .in('parsed->>status', ['complete', 'rtn', 'incomplete'])
+      .in('parsed->>woNumber', woList.slice(i, i + 60))
+      .limit(2000)
     for (const r of data ?? []) {
-      const wo = (r.parsed as any)?.woNumber as string
-      push(wo, { at: r.received_at, kind: (r.parsed as any).status as EventKind, source: 'tech note in rpinvoicing', note: (r.parsed as any).note ?? null, importId: r.id, msgId: r.gmail_message_id })
+      const p = r.parsed as any
+      const kind = classifyCompletionNote(p?.note ?? '')
+      if (kind === 'unknown' || !p?.woNumber) continue
+      push(p.woNumber, { at: r.received_at, kind: kind === 'rtn' ? 'rtn' : kind === 'incomplete' ? 'incomplete' : 'complete', source: 'tech note in rpinvoicing', note: p.note ?? null, importId: r.id, msgId: r.gmail_message_id })
     }
   }
 

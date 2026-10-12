@@ -247,11 +247,9 @@ function insertSignatureBoundary(text: string): string {
   return text.replace(/(\S)(sent from my (?:iphone|ipad|ipod|android|galaxy|mobile))/gi, '$1 $2')
 }
 
-export function parseCompletionEmail(subject: string, body: string): ParsedCompletion {
-  const woNumber = extractWorkOrderNumber(subject) ?? extractWorkOrderNumber(body)
-  const note = techNote(body)
+/** Classify a tech's note (the line(s) above the forwarded original). Exported so stored notes can be re-read with the current rules. */
+export function classifyCompletionNote(note: string): CompletionStatus {
   const noteLower = insertSignatureBoundary(note).toLowerCase()
-
   let status: CompletionStatus = 'unknown'
   // "Ntr" (Need To Return) is a common tech shorthand distinct from "RTN";
   // "need to return"/"needs to return" was also falling through — the old
@@ -270,5 +268,12 @@ export function parseCompletionEmail(subject: string, body: string): ParsedCompl
     status = 'complete'
   }
 
+  return status
+}
+
+export function parseCompletionEmail(subject: string, body: string): ParsedCompletion {
+  const woNumber = extractWorkOrderNumber(subject) ?? extractWorkOrderNumber(body)
+  const note = techNote(body)
+  const status = classifyCompletionNote(note)
   return { woNumber, status, note: note.slice(0, 1000) }
 }
