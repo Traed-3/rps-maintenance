@@ -30,7 +30,8 @@ type WorkOrder = {
   construction?: ConstructionTag | null
 }
 
-export function WorkOrderArchiveTable({ workOrders, showArchived }: { workOrders: WorkOrder[]; showArchived: boolean }) {
+/** `mixed` = search results: active and archived calls side by side, so archived-ness is decided per row. */
+export function WorkOrderArchiveTable({ workOrders, showArchived, mixed = false }: { workOrders: WorkOrder[]; showArchived: boolean; mixed?: boolean }) {
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [modalIds, setModalIds] = useState<string[] | null>(null)
@@ -105,13 +106,15 @@ export function WorkOrderArchiveTable({ workOrders, showArchived }: { workOrders
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Tech</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">
-                    {showArchived ? 'Archived' : 'Last Update'}
+                    {mixed ? 'Last Update / Archived' : showArchived ? 'Archived' : 'Last Update'}
                   </th>
                   <th className="px-4 py-3 w-10" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {workOrders.map((w) => (
+                {workOrders.map((w) => {
+                  const rowArchived = showArchived || (mixed && w.archived)
+                  return (
                   <ClickableRow key={w.id} href={`/service/${w.id}`}>
                     <td className="px-4 py-3">
                       <input
@@ -138,7 +141,8 @@ export function WorkOrderArchiveTable({ workOrders, showArchived }: { workOrders
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1 items-start">
                         <WorkOrderStatusBadge status={w.status} />
-                        {!showArchived && <StaleBadge lastUpdateAt={w.last_update_at} status={w.status} />}
+                        {mixed && rowArchived && <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">Archived</span>}
+                        {!rowArchived && <StaleBadge lastUpdateAt={w.last_update_at} status={w.status} />}
                         {w.invoice_rejected && (
                           <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">Invoice Rejected</span>
                         )}
@@ -151,7 +155,7 @@ export function WorkOrderArchiveTable({ workOrders, showArchived }: { workOrders
                       {w.svc_technicians?.[0]?.full_name ?? <span className="text-gray-400">Unassigned</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs hidden lg:table-cell">
-                      {showArchived ? (
+                      {rowArchived ? (
                         <>
                           {w.archived_at
                             ? new Date(w.archived_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -165,7 +169,7 @@ export function WorkOrderArchiveTable({ workOrders, showArchived }: { workOrders
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {showArchived ? (
+                      {rowArchived ? (
                         <button
                           onClick={() => handleUnarchive(w.id)}
                           disabled={isPending}
@@ -185,7 +189,8 @@ export function WorkOrderArchiveTable({ workOrders, showArchived }: { workOrders
                       )}
                     </td>
                   </ClickableRow>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

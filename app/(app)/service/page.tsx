@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { LayoutGrid, List } from 'lucide-react'
+import { LayoutGrid, List, Search } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { WorkOrderArchiveTable } from '@/components/svc/work-order-archive-table'
@@ -36,9 +36,12 @@ const PRIORITY_FILTERS = [
 export default async function ServiceDispatchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; client?: string; view?: string; priority?: string; rtn?: string; layout?: string }>
+  searchParams: Promise<{ status?: string; client?: string; view?: string; priority?: string; rtn?: string; layout?: string; q?: string }>
 }) {
-  const { status = '', client = '', view = '', priority = '', rtn = '', layout = '' } = await searchParams
+  const { status = '', client = '', view = '', priority = '', rtn = '', layout = '', q = '' } = await searchParams
+  // Search text goes into a PostgREST filter string, so drop the characters that would break it.
+  const term = q.replace(/[,()"'\\%*:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+  const searching = term.length > 0
   const priorityRank = priority ? parseInt(priority, 10) : null
   const rtnOnly = rtn === '1'
   const staleOnly = view === 'stale'
@@ -47,7 +50,7 @@ export default async function ServiceDispatchPage({
   const constructionOnly = view === 'construction'
   // Tiles by status are the default — bulk-select tools (archive/unarchive) only
   // make sense in the table, so Old/Archived force it regardless of the toggle.
-  const boardView = layout !== 'list' && !showArchived && !oldOnly
+  const boardView = layout !== 'list' && !showArchived && !oldOnly && !searching
   const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000
 
   const supabase = await createClient()
@@ -74,14 +77,15 @@ export default async function ServiceDispatchPage({
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
   const staleCount = (staleCandidates ?? []).filter(w => new Date(w.last_update_at as string).getTime() < sevenDaysAgo).length
 
-  let query = admin
-    .from('svc_work_orders')
-    .select(`
+  const WO_COLUMNS = `
       id, source_portal, client_name, portal_wo_number, site_number, site_name,
       priority_raw, priority_rank, status, last_update_at, dispatched_at,
       return_trip_needed, invoice_rejected, archived, archived_at, archived_reason,
       svc_technicians(full_name)
-    `)
+    `
+  let query = admin
+    .from('svc_work_orders')
+    .select(WO_COLUMNS)
     .eq('company_id', companyId)
     .limit(200)
 
@@ -109,7 +113,30 @@ export default async function ServiceDispatchPage({
   }
   if (client) query = query.eq('source_portal', client)
 
-  const { data: rawWorkOrders } = await query
+  let rawWorkOrders
+  let searchTotal: number | null = null
+  if (searching) {
+    // Search looks at everything — open, completed and archived — by WO#, incident, site number/name/address/city,
+    // technician name and construction job number. Typing "SU 5015" still finds "SU-5015".
+    const like = `%${term.replace(/[\s\-_.#/]+/g, '%')}%`
+    const lower = term.toLowerCase()
+    const { data: techs } = await admin.from('svc_technicians').select('id').eq('company_id', companyId).ilike('full_name', like)
+    const techIds = (techs ?? []).map(t => t.id)
+    const conWos = Array.from(links.entries())
+      .filter(([, l]) => (l.jobNumber ?? '').toLowerCase().includes(lower) || (l.siteNumber ?? '').toLowerCase().includes(lower))
+      .map(([wo]) => wo)
+    const ors = ['portal_wo_number', 'incident_number', 'site_number', 'site_name', 'site_address', 'site_city', 'subject_raw'].map(c => `${c}.ilike.${like}`)
+    if (techIds.length) ors.push(`assigned_technician_id.in.(${techIds.join(',')})`)
+    if (conWos.length) ors.push(`portal_wo_number.in.(${conWos.join(',')})`)
+    let sq = admin.from('svc_work_orders').select(WO_COLUMNS, { count: 'exact' })
+      .eq('company_id', companyId).or(ors.join(',')).order('dispatched_at', { ascending: false }).limit(200)
+    if (client) sq = sq.eq('source_portal', client)
+    const res = await sq
+    rawWorkOrders = res.data
+    searchTotal = res.count
+  } else {
+    rawWorkOrders = (await query).data
+  }
   const workOrders = (rawWorkOrders ?? []).map(w => {
     const l = w.portal_wo_number ? links.get(w.portal_wo_number) : undefined
     return { ...w, construction: l ? { jobId: l.jobId, jobNumber: l.jobNumber, stage: l.stage } : null }
@@ -124,14 +151,15 @@ export default async function ServiceDispatchPage({
   // Every quick/status/client pill below is built from the same current selection,
   // so clicking one preserves whatever else is already active (e.g. P1 + Wawa + RTN).
   // `view` is single-select: '' | 'stale' | 'old' | 'archived' | 'construction'.
-  function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; view?: string; layout?: string }) {
+  function buildHref(overrides: { status?: string; client?: string; priority?: string | null; rtn?: boolean; view?: string; layout?: string; q?: string }) {
     const next = {
-      status, client, priority: priorityRank ? String(priorityRank) : '',
+      q: term, status, client, priority: priorityRank ? String(priorityRank) : '',
       rtn: rtnOnly, view: showArchived ? 'archived' : staleOnly ? 'stale' : oldOnly ? 'old' : constructionOnly ? 'construction' : '',
       layout,
       ...overrides,
     }
     const params = new URLSearchParams()
+    if (next.q) params.set('q', next.q)
     if (next.status) params.set('status', next.status)
     if (next.client) params.set('client', next.client)
     if (next.priority) params.set('priority', next.priority)
@@ -194,12 +222,31 @@ export default async function ServiceDispatchPage({
         )}
       </div>
 
+      {/* Search — across every call (open, completed, archived): WO #, incident, site #, store name, address, tech, construction job. */}
+      <form action="/service" method="get" className="mb-4 flex items-center gap-2">
+        {client && <input type="hidden" name="client" value={client} />}
+        {layout && <input type="hidden" name="layout" value={layout} />}
+        <div className="relative flex-1 max-w-2xl">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="search"
+            name="q"
+            defaultValue={term}
+            autoComplete="off"
+            placeholder="Search WO #, site #, incident, store name, address, tech, construction job…"
+            className="w-full text-sm border border-gray-300 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <button type="submit" className="text-sm font-medium bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700">Search</button>
+        {searching && <Link href={buildHref({ q: '' })} className="text-sm text-gray-500 hover:text-gray-800 px-2">Clear</Link>}
+      </form>
+
       {/* Quick filters — the things a supervisor needs to jump to first thing.
           Independent toggles: combine freely with each other and with the status/client
           pills below (e.g. P1 + Wawa + RTN all at once). Priority is single-select
           (a work order only has one priority); RTN and Updates Needed toggle on their own.
           None of these apply in the Archived view, so they're hidden there. */}
-      {!showArchived && (
+      {!showArchived && !searching && (
         <div className="flex gap-1.5 flex-wrap mb-4">
           {PRIORITY_FILTERS.map((f) => (
             <Link
@@ -256,7 +303,7 @@ export default async function ServiceDispatchPage({
       )}
 
       {/* Supervisor summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      {!searching && <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <Link href="/service" className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-blue-300 transition-colors">
           <p className="text-2xl font-bold text-gray-900">{openCount ?? 0}</p>
           <p className="text-xs text-gray-500 mt-0.5">Open Work Orders</p>
@@ -273,10 +320,10 @@ export default async function ServiceDispatchPage({
           <p className={`text-2xl font-bold ${rejectedCount ? 'text-amber-600' : 'text-gray-900'}`}>{rejectedCount ?? 0}</p>
           <p className="text-xs text-gray-500 mt-0.5">Invoice Rejected</p>
         </div>
-      </div>
+      </div>}
 
       {/* Status filter pills — the board already sorts by status via its columns */}
-      {!showArchived && !boardView && (
+      {!showArchived && !boardView && !searching && (
         <div className="flex gap-1.5 flex-wrap mb-3">
           {STATUS_FILTERS.map((f) => (
             <Link
@@ -329,6 +376,14 @@ export default async function ServiceDispatchPage({
         </p>
       )}
 
+      {searching && (
+        <p className="text-sm text-gray-600 mb-3">
+          {(searchTotal ?? workOrders.length) === 0
+            ? <>No work orders match &ldquo;{term}&rdquo;. Try part of the number, or a store name.</>
+            : <><b>{searchTotal ?? workOrders.length}</b> result{(searchTotal ?? workOrders.length) === 1 ? '' : 's'} for &ldquo;{term}&rdquo; — open, completed and archived{(searchTotal ?? 0) > workOrders.length ? ` (showing the newest ${workOrders.length})` : ''}.</>}
+        </p>
+      )}
+
       {constructionOnly && (
         <p className="text-xs text-gray-500 mb-3">
           Open calls that have been handed to a construction job. When the job reaches close-out, invoicing or complete the call is marked completed automatically.
@@ -344,7 +399,7 @@ export default async function ServiceDispatchPage({
       {boardView ? (
         <WorkOrderBoard workOrders={workOrders} statuses={BOARD_STATUSES} />
       ) : (
-        <WorkOrderArchiveTable workOrders={workOrders} showArchived={showArchived} />
+        <WorkOrderArchiveTable workOrders={workOrders} showArchived={showArchived} mixed={searching} />
       )}
     </div>
   )
