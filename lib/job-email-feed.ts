@@ -120,8 +120,10 @@ export async function syncTechUpdates(opts: { sinceDays?: number; budget?: Budge
           out.skipped++; continue
         }
       }
+      // Credit the update to the person who sent it when they have a login (the shared econstruction mailbox is not a person).
+      const { data: submitter } = /^econstruction\.rp@/i.test(from.email) ? { data: null } : await admin.from('profiles').select('id').eq('company_id', job.company_id).ilike('email', from.email).maybeSingle()
       const { data: du, error: duErr } = await admin.from('con_daily_updates').insert({
-        company_id: job.company_id, job_id: job.id, work_date: workDate, work_description: body.slice(0, 4000),
+        company_id: job.company_id, job_id: job.id, work_date: workDate, work_description: body.slice(0, 4000), submitted_by: submitter?.id ?? null,
         notes: `Emailed to econstruction by ${from.name || from.email} · "${subject}"`,
         review_status: 'filed', source: 'gmail_update',
         source_refs: { update_message_id: id, thread_id: msg.threadId, subject, subject_key: skey, from_email: from.email },
