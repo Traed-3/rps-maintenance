@@ -30,6 +30,22 @@ const PHOTO_EXT = /\.(jpe?g|png|heic|heif|webp)$/i
 const RPS_TECH = /@rappahannockpetroleum\.com$|\.rp@gmail\.com$|^econstruction\.rp@gmail\.com$/i
 const NOISE_SUBJECT = /action required|work order|status updates|shared folders|returns spreadsheet|packing slip|invoice/i
 
+/**
+ * True only when every Authentication-Results header stamped by Gmail (authserv-id mx.google.com — a sender can inject
+ * look-alike headers, but not make Gmail's own say pass) reports DMARC pass aligned with the domain of the single plain
+ * address we are about to trust, i.e. header.from=<that domain>. Anything unusual (several addresses, no Gmail verdict) fails.
+ */
+export function isAuthenticatedSender(msg: { payload?: { headers?: { name: string; value: string }[] } }, email: string): boolean {
+  if (!/^[^\s@,<>"]+@[^\s@,<>"]+$/.test(email)) return false
+  const domain = email.split('@')[1]
+  const verdicts = (msg.payload?.headers ?? [])
+    .filter(h => h.name.toLowerCase() === 'authentication-results' && /^\s*mx\.google\.com\b/i.test(h.value))
+    .map(h => h.value)
+  if (!verdicts.length) return false
+  const aligned = new RegExp(`\\bdmarc=pass\\b[^;]*header\\.from=${domain.replace(/[^a-z0-9]/gi, c => '\\' + c)}\\b`, 'i')
+  return verdicts.every(v => aligned.test(v))
+}
+
 type Budget = { deadline: number }
 const over = (b?: Budget) => !!b && Date.now() > b.deadline
 
@@ -120,13 +136,11 @@ export async function syncTechUpdates(opts: { sinceDays?: number; budget?: Budge
           out.skipped++; continue
         }
       }
-      // Credit the update to the person who sent it when they have a login — but only if Gmail says the From address is
-      // genuinely theirs (DMARC aligned with the From domain). The From header alone is trivially forged, and the shared
-      // econstruction mailbox is not a person. Exact match, never ILIKE: "_" and "%" in an address are wildcards there.
-      const auth = header(msg, 'Authentication-Results')
-      const fromVerified = /\bdmarc=pass\b/i.test(auth) || /\bdkim=pass\b[^;]*header\.i=@gmail\.com/i.test(auth)
+      // Credit the update to the person who sent it when they have a login — but only if Gmail itself vouches that
+      // this exact address is the sender. The From header alone is trivially forged and the shared econstruction mailbox
+      // is not a person. Exact match, never ILIKE ("_" and "%" are wildcards there).
       const fromEmail = from.email.trim().toLowerCase()
-      const { data: submitter } = !fromVerified || /^econstruction\.rp@/i.test(fromEmail)
+      const { data: submitter } = !isAuthenticatedSender(msg, fromEmail) || /^econstruction\.rp@/i.test(fromEmail)
         ? { data: null }
         : await admin.from('profiles').select('id').eq('company_id', job.company_id).eq('email', fromEmail).maybeSingle()
       const { data: du, error: duErr } = await admin.from('con_daily_updates').insert({
