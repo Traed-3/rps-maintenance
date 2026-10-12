@@ -115,6 +115,11 @@ export async function getMessage(inbox: BillingInbox, id: string): Promise<Gmail
   return gmailFetch(inbox, `/messages/${id}`, { format: 'full' })
 }
 
+/** Headers + snippet only — a fraction of the Gmail quota cost of a full fetch (for read-only lookups). */
+export async function getMessageMeta(inbox: BillingInbox, id: string): Promise<GmailMessage> {
+  return gmailFetch(inbox, `/messages/${id}`, { format: 'metadata' })
+}
+
 /** Every message in a thread (headers + MIME tree), oldest first. */
 export async function getThread(inbox: BillingInbox, threadId: string): Promise<{ id: string; messages: GmailMessage[] }> {
   const data = await gmailFetch(inbox, `/threads/${threadId}`, { format: 'full' })

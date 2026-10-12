@@ -81,7 +81,8 @@ export async function GET(request: NextRequest) {
         const ids = await bg.listMessages('econstruction', q, 100)
         const hits = []
         for (const id of ids) {
-          const msg = await bg.getMessage('econstruction', id)
+          // Metadata only unless full=1 — the other sync jobs read this same mailbox in parallel and a full fetch per hit blew the per-minute Gmail quota.
+          const msg = full ? await bg.getMessage('econstruction', id) : await bg.getMessageMeta('econstruction', id)
           const hit: Record<string, unknown> = { id, threadId: msg.threadId, subject: bg.header(msg, 'Subject'), from: bg.header(msg, 'From'), to: bg.header(msg, 'To'), date: bg.header(msg, 'Date'), snippet: msg.snippet }
           if (full) hit.body = bg.extractText(msg).slice(0, 1500)
           hits.push(hit)
