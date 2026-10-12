@@ -78,11 +78,19 @@ export async function GET(request: NextRequest) {
       if (mailboxParam === 'econstruction') {
         // Read-only look at econstruction.rp — which service calls were handed to construction.
         const bg = await import('@/lib/billing-gmail-client')
-        const ids = await bg.listMessages('econstruction', q, 100)
+        // Gmail's per-minute quota is shared with the job-email feed reading this same inbox, so back off and retry on 403/429.
+        const retry = async <T,>(fn: () => Promise<T>): Promise<T> => {
+          for (let attempt = 0; ; attempt++) {
+            try { return await fn() } catch (e: any) {
+              if (attempt >= 4 || !/ 40[39] | 429 |Quota/i.test(String(e?.message))) throw e
+              await new Promise(r => setTimeout(r, 6000 * (attempt + 1)))
+            }
+          }
+        }
+        const ids = await retry(() => bg.listMessages('econstruction', q, 80))
         const hits = []
         for (const id of ids) {
-          // Metadata only unless full=1 — the other sync jobs read this same mailbox in parallel and a full fetch per hit blew the per-minute Gmail quota.
-          const msg = full ? await bg.getMessage('econstruction', id) : await bg.getMessageMeta('econstruction', id)
+          const msg = await retry(() => full ? bg.getMessage('econstruction', id) : bg.getMessageMeta('econstruction', id))
           const hit: Record<string, unknown> = { id, threadId: msg.threadId, subject: bg.header(msg, 'Subject'), from: bg.header(msg, 'From'), to: bg.header(msg, 'To'), date: bg.header(msg, 'Date'), snippet: msg.snippet }
           if (full) hit.body = bg.extractText(msg).slice(0, 1500)
           hits.push(hit)

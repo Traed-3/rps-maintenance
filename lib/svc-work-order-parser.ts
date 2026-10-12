@@ -76,6 +76,10 @@ export interface ParsedDispatch {
   invoiceRejectionReason: string | null
   isAssignmentOnly: boolean        // "has been assigned" / "mentioned" / "priority changed" — no new detail to extract
   isCancellation: boolean          // the portal cancelled the call — close it, never open one
+  isRedirected: boolean            // 7-Eleven moved the call to another service provider — it is no longer ours
+  isTerminated: boolean            // Wawa "FWKD… is Terminated" — the call is dead
+  isInvoiceApproved: boolean       // the customer approved our invoice — the job is done and billed
+  invoiceNumber: string | null     // INV###### from an invoice notice
 }
 
 function detectPortal(senderName: string, subject: string): SourcePortal {
@@ -102,7 +106,11 @@ export function parseDispatchEmail(subject: string, body: string, senderName: st
   const woNumber = extractWorkOrderNumber(subject) ?? extractWorkOrderNumber(body)
   const incidentNumber = extractIncidentNumber(subject) ?? extractIncidentNumber(body)
 
-  const isInvoiceRejection = /invoice.*(rejected|invoice rejected)/i.test(subject) || /invoice.*rejected/i.test(body)
+  // "… / INV05306531 Invoice Approved" — 7-Eleven signing off on our invoice. Checked first so a
+  // body that happens to mention "rejected" never turns an approval into a rejection.
+  const isInvoiceApproved = /invoice approved/i.test(subject)
+  const invoiceNumber = subject.match(/\bINV\d+\b/)?.[0] ?? body.match(/\bINV\d+\b/)?.[0] ?? null
+  const isInvoiceRejection = !isInvoiceApproved && (/invoice.*(rejected|invoice rejected)/i.test(subject) || /invoice.*rejected/i.test(body))
   const invoiceRejectionReasonMatch = body.match(/Rejection Reason:\s*([^\n]+)/i) || body.match(/rejected by [^\n]+ with the following reason:\s*([^\n]+)/i)
   const invoiceRejectionReason = invoiceRejectionReasonMatch ? invoiceRejectionReasonMatch[1].trim() : null
 
@@ -116,6 +124,11 @@ export function parseDispatchEmail(subject: string, body: string, senderName: st
     || /service cancell?ed\b/i.test(subject)
     || /\bcancell?ed\s+(?:WOT|FWKD)\d+/i.test(subject)
     || /\bcancell?ed\s+(?:WOT|FWKD)\d+/i.test(body)
+
+  // "Work Order WOT… has been redirected to another Service Provider" (7-Eleven) and
+  // "FWKD… is Terminated" (Wawa): the call has left our hands. Close it like a cancellation.
+  const isRedirected = /has been redirected/i.test(subject)
+  const isTerminated = /\bis terminated\b/i.test(subject)
 
   let siteNumber: string | null = null
   let siteName: string | null = null
@@ -183,6 +196,10 @@ export function parseDispatchEmail(subject: string, body: string, senderName: st
     invoiceRejectionReason,
     isAssignmentOnly,
     isCancellation,
+    isRedirected,
+    isTerminated,
+    isInvoiceApproved,
+    invoiceNumber,
   }
 }
 
@@ -229,7 +246,7 @@ export function parseCompletionEmail(subject: string, body: string): ParsedCompl
   // pattern only allowed a single optional "a" between "need" and "return".
   if (/\bntr\b|\brtn\b|re-?trip|return trip|return call|return needed|need.{0,4}to return|needs? (a )?return|return visit/i.test(noteLower)) {
     status = 'rtn'
-  } else if (/incomplete/i.test(noteLower)) {
+  } else if (/incompl/i.test(noteLower)) {   // also catches typos like "Incomplerte"
     status = 'incomplete'
   } else if (
     /\bcomplet(?:e|ed)\b|job complete/i.test(noteLower) ||
