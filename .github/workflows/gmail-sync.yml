@@ -101,6 +101,13 @@ jobs:
           URL="https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=invoicing&sinceDays=$SINCE_DAYS&max=$MAX_MSGS"
           if [ -n "$UNTIL_DAYS" ]; then URL="$URL&untilDays=$UNTIL_DAYS"; fi
           curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
+      - name: Reconcile call statuses (invoice approvals, late completions, construction)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body -sS --max-time 90 \
+            -w "\nHTTP %{http_code}\n" \
+            "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=reconcile&apply=1"
       - name: Draft transcripts for newly captured tickets
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}

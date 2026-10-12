@@ -153,7 +153,6 @@ export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?:
           archived: true, archived_at: new Date().toISOString(), archived_reason: `${last.closedAs} (${last.at.slice(0, 10)}).`,
           archived_by: opts.archivedBy ?? null, last_update_at: lastUpdate, notes,
         }).eq('id', call.id).eq('archived', false)
-        result.archivedClosed++
         await archiveDispatchEmail(call, last.msgId, result)
       } else {
         const updates: Record<string, unknown> = { status: target, last_update_at: lastUpdate, notes }
