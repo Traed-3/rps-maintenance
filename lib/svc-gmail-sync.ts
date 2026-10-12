@@ -62,15 +62,19 @@ async function captureWorkOrderDocument(
   const primary = stored.find(s => /pdf/i.test(s.mime)) ?? stored.find(s => /^image\//i.test(s.mime)) ?? stored[0]
   const extractable = stored.some(s => /pdf|^image\/(jpeg|jpg|png|gif|webp)$/i.test(s.mime) || /\.(pdf|jpe?g|png|gif|webp)$/i.test(s.name))
 
-  await admin.from('svc_work_order_documents').insert({
+  const { error: insertErr } = await admin.from('svc_work_order_documents').insert({
     company_id: COMPANY_ID, work_order_id: workOrderId,
     gmail_message_id: msgId, gmail_thread_id: msg.threadId,
     sender: from.name || from.email, sender_email: from.email, subject, received_at: receivedAt.toISOString(),
     attachments: stored, primary_path: primary?.path ?? null,
     extract_status: extractable ? 'pending' : 'skipped',
     extract_error: extractable ? null : 'Attachment type not readable automatically — type up the ticket by hand.',
-    status: 'dispatched',
+    // svc_work_order_documents.status is the document-review state (new / needs_review / ready /
+    // linked / dismissed), not the work-order status. 'dispatched' violated its CHECK constraint and
+    // every insert since 9/22 failed silently, so check the error instead of discarding it.
+    status: 'new',
   })
+  if (insertErr) throw new Error(`svc_work_order_documents insert: ${insertErr.message}`)
 }
 
 // Single-company deployment today (same constant used by the fleet gmail-sync) —
