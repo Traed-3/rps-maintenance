@@ -19,6 +19,7 @@
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { archiveThread, archiveMessage } from '@/lib/svc-gmail-client'
+import { isTrustedPortalNotice } from '@/lib/svc-work-order-parser'
 import { loadConstructionLinks, CON_DONE_STAGES, CON_ACTIVE_STAGES, CON_STAGE_LABEL } from '@/lib/svc-construction-link'
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -96,12 +97,13 @@ export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?:
   // 2 + 3. Closure notices in rpdispatcher (older imports carry no flag for these, so match on the subject).
   const { data: notices } = await admin
     .from('svc_gmail_imports')
-    .select('id, gmail_message_id, received_at, subject, parsed')
+    .select('id, gmail_message_id, received_at, subject, sender, parsed')
     .eq('mailbox', 'rpdispatcher')
     .or('subject.ilike.%invoice approved%,subject.ilike.%has been redirected%,subject.ilike.%is terminated%')
   for (const n of notices ?? []) {
     const wo = (n.parsed as any)?.woNumber as string | undefined
     if (!wo || !byWo.has(wo)) continue
+    if (!isTrustedPortalNotice(n.sender ?? '')) continue   // only the customer's ticketing system can close a call
     const subj = n.subject ?? ''
     if (/invoice approved/i.test(subj)) push(wo, { at: n.received_at, kind: 'approved', source: 'invoice approved by customer', msgId: n.gmail_message_id, invoiceNumber: subj.match(INV_RE)?.[0] ?? null })
     else if (/has been redirected/i.test(subj)) push(wo, { at: n.received_at, kind: 'closed', source: 'redirected to another service provider', msgId: n.gmail_message_id, closedAs: `Redirected to another service provider — "${subj.trim().slice(0, 140)}"` })

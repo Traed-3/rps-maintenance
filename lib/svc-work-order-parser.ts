@@ -82,6 +82,18 @@ export interface ParsedDispatch {
   invoiceNumber: string | null     // INV###### from an invoice notice
 }
 
+/**
+ * Closure notices (invoice approved / redirected / terminated) change a call's status, so they only count
+ * when they genuinely come from the customer's ticketing system: a service-now.com sender, and — when
+ * Gmail recorded an Authentication-Results line — SPF or DKIM actually passed. A display name or subject
+ * line alone is trivially forged by anyone who can email the inbox.
+ */
+export function isTrustedPortalNotice(senderEmail: string, authenticationResults?: string | null): boolean {
+  if (!/@service-now\.com$/i.test(senderEmail.trim())) return false
+  if (authenticationResults && !/\b(?:dkim|spf)=pass\b/i.test(authenticationResults)) return false
+  return true
+}
+
 function detectPortal(senderName: string, subject: string): SourcePortal {
   const n = senderName.toLowerCase()
   if (n.includes('7help')) return '7help'

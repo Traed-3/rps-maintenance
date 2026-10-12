@@ -21,7 +21,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { listMessages, getMessage, archiveThread, archiveMessage, listAttachments, getAttachment } from '@/lib/svc-gmail-client'
 import {
   extractBody, getHeader, parseSender,
-  parseDispatchEmail, parseCompletionEmail,
+  parseDispatchEmail, parseCompletionEmail, isTrustedPortalNotice,
 } from '@/lib/svc-work-order-parser'
 
 export const WORK_ORDER_DOCS_BUCKET = 'svc-work-order-docs'
@@ -155,8 +155,14 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
       let matchedWorkOrderId: string | null = null
       let importStatus = 'ignored'
 
+      // Approval / redirect / termination notices close calls, so a forged one must never act.
+      const untrustedClosure = (parsed.isInvoiceApproved || parsed.isRedirected || parsed.isTerminated)
+        && !isTrustedPortalNotice(senderEmail, getHeader(headers, 'Authentication-Results'))
+
       if (!parsed.woNumber) {
         importStatus = 'no_match'
+      } else if (untrustedClosure) {
+        importStatus = 'ignored'
       } else if (parsed.isInvoiceApproved) {
         // The customer approved our invoice: the job is done and billed. This used to fall through
         // to "create a work order" and put a brand-new "dispatched" call on the board for finished work.
