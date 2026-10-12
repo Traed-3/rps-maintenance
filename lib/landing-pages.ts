@@ -2,6 +2,7 @@
 // picker and the server-side validation on save.
 export const LANDING_PAGE_OPTIONS = [
   { value: '/dashboard',         label: 'Dashboard (default)' },
+  { value: '/my',                label: 'My Plate' },
   { value: '/maintenance',       label: 'Maintenance & Fleet' },
   { value: '/service',           label: 'Service Dispatch' },
   { value: '/construction',      label: 'Construction' },
