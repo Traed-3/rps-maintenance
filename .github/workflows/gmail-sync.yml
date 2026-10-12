@@ -120,8 +120,10 @@ jobs:
             --data-urlencode "q=$LOOKUP_Q" \
             --data-urlencode "full=1" \
             --data-urlencode "mailbox=$LOOKUP_MAILBOX" \
-            -w "\nHTTP %{http_code}\n" \
+            -o resp.json -w "HTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync"
+          echo "COUNT $(jq '.count' resp.json)"
+          jq -r '.hits[] | "HIT " + tojson' resp.json | cut -c1-6000
 
   svc-archive-stale:
     if: ${{ github.event.inputs.archive_stale_days != '' }}
