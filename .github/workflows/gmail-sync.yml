@@ -19,6 +19,9 @@ on:
       lookup_mailbox:
         description: 'Which mailbox the lookup reads: invoicing (default), dispatcher, or econstruction. Read-only.'
         default: 'invoicing'
+      reconcile:
+        description: 'Reconcile open call statuses against the evidence on file: dry (report only) or apply. Leave blank for a normal run.'
+        default: ''
       lookup_full:
         description: 'Lookup returns full message bodies (1, default) or headers only (0 — cheaper on Gmail quota).'
         default: '1'
@@ -128,6 +131,22 @@ jobs:
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync" || { cat resp.json; exit 1; }
           echo "COUNT $(jq '.count' resp.json)"
           jq -r '.hits[] | "HIT " + tojson' resp.json | cut -c1-6000
+
+  svc-reconcile:
+    if: ${{ github.event.inputs.reconcile != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reconcile open call statuses
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APPLY: ${{ github.event.inputs.reconcile }}
+        run: |
+          URL="https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=reconcile&archivedBy=09d76016-7ed8-427d-83c3-1f94c484c1ce"
+          if [ "$APPLY" = "apply" ]; then URL="$URL&apply=1"; fi
+          curl -sS --fail-with-body --max-time 90 -o resp.json -w "HTTP %{http_code}\n" "$URL" || { cat resp.json; exit 1; }
+          jq -c '.result | del(.changes)' resp.json
+          jq -r '.result.changes[] | "CHG " + tojson' resp.json
 
   svc-archive-stale:
     if: ${{ github.event.inputs.archive_stale_days != '' }}

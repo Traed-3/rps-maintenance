@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { syncDispatcher, syncInvoicing, archiveStaleWorkOrders } from '@/lib/svc-gmail-sync'
+import { reconcileWorkOrders } from '@/lib/svc-reconcile'
 import { extractPendingWorkOrderDocuments } from '@/lib/svc-work-order-docs-extract'
 
 // Allow enough time for a full pass through one mailbox.
@@ -24,6 +25,9 @@ export const maxDuration = 60
  * completed-ticket attachments the invoicing pass captured (see
  * captureWorkOrderDocument in svc-gmail-sync.ts), bounded by `limit` so it
  * stays inside the same time budget.
+ *
+ * `reconcile` (cron step, DB-only) fixes open calls whose status disagrees with the evidence on file —
+ * see lib/svc-reconcile.ts. apply=1 writes; otherwise it only reports what it would change.
  *
  * `archive-stale` is a manual maintenance sweep, not part of the cron: archives
  * work orders older than `days` (default 60) with no rpinvoicing mail ever
@@ -111,6 +115,14 @@ export async function GET(request: NextRequest) {
         hits.push(hit)
       }
       return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), count: hits.length, hits })
+    }
+    if (pass === 'reconcile') {
+      // Replays every open call's evidence in time order — tech notes (even ones that arrived before the
+      // call existed), customer invoice approvals, redirects/terminations, and the construction job the
+      // call was handed to — and fixes any call whose status disagrees. Dry run unless apply=1.
+      const dryRun = request.nextUrl.searchParams.get('apply') !== '1'
+      const result = await reconcileWorkOrders({ dryRun, archivedBy: request.nextUrl.searchParams.get('archivedBy') })
+      return NextResponse.json({ ok: true, timestamp: new Date().toISOString(), result })
     }
     if (pass === 'archive-stale') {
       // Sweeps for work orders that are old, dead in rpinvoicing (checked live,

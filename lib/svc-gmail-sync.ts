@@ -104,6 +104,21 @@ async function alreadyLogged(admin: ReturnType<typeof createAdminClient>, mailbo
   return !!data
 }
 
+/** A finished/closed call: clear its dispatch email (and the notice that closed it) out of rpdispatcher. Best-effort. */
+async function archiveDispatchEmails(
+  wo: { dispatch_gmail_message_id: string | null; dispatch_gmail_thread_id: string | null },
+  noticeMsgId: string | null,
+  result: { errors: string[] },
+) {
+  try {
+    if (wo.dispatch_gmail_thread_id) await archiveThread('dispatcher', wo.dispatch_gmail_thread_id)
+    else if (wo.dispatch_gmail_message_id) await archiveMessage('dispatcher', wo.dispatch_gmail_message_id)
+    if (noticeMsgId) await archiveMessage('dispatcher', noticeMsgId)
+  } catch (e: any) {
+    result.errors.push(`Archive rpdispatcher email: ${e.message}`)
+  }
+}
+
 // ── Pass 1: rpdispatcher → create/update work orders ───────────────────────
 
 export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['dispatcher']> {
@@ -117,6 +132,9 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
     result.errors.push(`List failed: ${e.message}`)
     return result
   }
+  // Gmail lists newest first. Replaying that order let a later "Messages"/reply create the call
+  // before its real dispatch was read, and let a later notice be overwritten by an earlier one.
+  msgIds.reverse()
 
   for (const msgId of msgIds) {
     try {
@@ -139,6 +157,36 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
 
       if (!parsed.woNumber) {
         importStatus = 'no_match'
+      } else if (parsed.isInvoiceApproved) {
+        // The customer approved our invoice: the job is done and billed. This used to fall through
+        // to "create a work order" and put a brand-new "dispatched" call on the board for finished work.
+        const { data: woRows } = await admin
+          .from('svc_work_orders')
+          .select('id, status, completed_at, notes, last_update_at, dispatch_gmail_message_id, dispatch_gmail_thread_id')
+          .eq('portal_wo_number', parsed.woNumber)
+          .order('dispatched_at', { ascending: false })
+        const wo = woRows?.[0] ?? null
+        if (wo) {
+          const patch: Record<string, unknown> = {
+            invoiced: true,
+            last_update_at: [wo.last_update_at, receivedAt.toISOString()].filter(Boolean).sort().pop(),
+          }
+          if (parsed.invoiceNumber) patch.invoice_number = parsed.invoiceNumber
+          const wasOpen = wo.status !== 'completed'
+          if (wasOpen) {
+            patch.status = 'completed'
+            patch.completed_at = wo.completed_at ?? receivedAt.toISOString()
+            patch.return_trip_needed = false
+            patch.notes = [wo.notes, `[auto ${receivedAt.toISOString().slice(0, 10)}] Completed — invoice ${parsed.invoiceNumber ?? ''} approved by the customer.`].filter(Boolean).join('\n')
+          }
+          await admin.from('svc_work_orders').update(patch).eq('id', wo.id)
+          if (wasOpen) await archiveDispatchEmails(wo, msgId, result)
+          matchedWorkOrderId = wo.id
+          importStatus = 'updated_wo'
+          result.updated++
+        } else {
+          importStatus = 'no_match'   // never create a call from an approval
+        }
       } else if (parsed.isInvoiceRejection) {
         const { data: woRows } = await admin
           .from('svc_work_orders')
@@ -176,17 +224,23 @@ export async function syncDispatcher(maxResults = 50): Promise<SvcSyncResult['di
           .order('dispatched_at', { ascending: false })
         const existing = existingRows?.[0] ?? null
 
-        if (parsed.isCancellation) {
-          // The portal killed the call. Close the work order if we have it, and
-          // never create one from a cancellation — doing so used to put a brand
-          // new "dispatched" row on the board for a job nobody will ever run.
+        const closedAs = parsed.isCancellation ? 'Cancelled by the portal'
+          : parsed.isRedirected ? 'Redirected to another service provider'
+          : parsed.isTerminated ? 'Terminated by the customer' : null
+        if (closedAs) {
+          // The call left our hands. Close the work order if we have it, and never create one
+          // from a closure notice — doing so used to put a brand new "dispatched" row on the
+          // board for a job nobody will ever run.
           if (existing) {
+            const { data: full } = await admin.from('svc_work_orders')
+              .select('dispatch_gmail_message_id, dispatch_gmail_thread_id').eq('id', existing.id).single()
             await admin.from('svc_work_orders').update({
               archived: true,
               archived_at: new Date().toISOString(),
-              archived_reason: `Cancelled by the portal — "${subject.trim().slice(0, 180)}" (${receivedAt.toISOString().slice(0, 10)}).`,
+              archived_reason: `${closedAs} — "${subject.trim().slice(0, 180)}" (${receivedAt.toISOString().slice(0, 10)}).`,
               last_update_at: receivedAt.toISOString(),
             }).eq('id', existing.id).eq('archived', false)
+            if (full) await archiveDispatchEmails(full, msgId, result)
             matchedWorkOrderId = existing.id
             result.updated++
           } else {
@@ -315,6 +369,9 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
     result.errors.push(`List failed: ${e.message}`)
     return result
   }
+  // Oldest first, so a later "Complete" is applied after an earlier "RTN" (newest-first order let the
+  // older note win and re-open a finished call).
+  msgIds.reverse()
 
   // Vercel gives the route 60 s. Stop starting new messages at 45 s and let the next
   // cron tick pick up the rest (unlogged messages are re-listed), instead of timing
@@ -344,7 +401,7 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
       if (parsed.woNumber) {
         const { data: candidates } = await admin
           .from('svc_work_orders')
-          .select('id, source_portal, dispatched_at, dispatch_gmail_message_id, dispatch_gmail_thread_id')
+          .select('id, source_portal, status, completed_at, dispatched_at, dispatch_gmail_message_id, dispatch_gmail_thread_id')
           .eq('portal_wo_number', parsed.woNumber)
           .order('dispatched_at', { ascending: false })
 
@@ -353,7 +410,13 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
         // note should still land on the real dispatch row rather than
         // whichever twin happens to be newer.
         const wo = candidates?.find(c => c.source_portal !== 'unknown') ?? candidates?.[0]
-        if (wo) {
+        // A note older than the call's completion (picked up late, or listed out of order) must not reopen it.
+        const staleNote = !!wo && wo.status === 'completed' && !!wo.completed_at && receivedAt < new Date(wo.completed_at)
+        if (wo && staleNote) {
+          matchedWorkOrderId = wo.id
+          importStatus = 'matched'
+          result.matched++
+        } else if (wo) {
           const { data: tech } = await admin
             .from('svc_technicians')
             .select('id')
