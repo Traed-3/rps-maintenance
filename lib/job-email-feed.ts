@@ -120,8 +120,15 @@ export async function syncTechUpdates(opts: { sinceDays?: number; budget?: Budge
           out.skipped++; continue
         }
       }
-      // Credit the update to the person who sent it when they have a login (the shared econstruction mailbox is not a person).
-      const { data: submitter } = /^econstruction\.rp@/i.test(from.email) ? { data: null } : await admin.from('profiles').select('id').eq('company_id', job.company_id).ilike('email', from.email).maybeSingle()
+      // Credit the update to the person who sent it when they have a login — but only if Gmail says the From address is
+      // genuinely theirs (DMARC aligned with the From domain). The From header alone is trivially forged, and the shared
+      // econstruction mailbox is not a person. Exact match, never ILIKE: "_" and "%" in an address are wildcards there.
+      const auth = header(msg, 'Authentication-Results')
+      const fromVerified = /\bdmarc=pass\b/i.test(auth) || /\bdkim=pass\b[^;]*header\.i=@gmail\.com/i.test(auth)
+      const fromEmail = from.email.trim().toLowerCase()
+      const { data: submitter } = !fromVerified || /^econstruction\.rp@/i.test(fromEmail)
+        ? { data: null }
+        : await admin.from('profiles').select('id').eq('company_id', job.company_id).eq('email', fromEmail).maybeSingle()
       const { data: du, error: duErr } = await admin.from('con_daily_updates').insert({
         company_id: job.company_id, job_id: job.id, work_date: workDate, work_description: body.slice(0, 4000), submitted_by: submitter?.id ?? null,
         notes: `Emailed to econstruction by ${from.name || from.email} · "${subject}"`,
