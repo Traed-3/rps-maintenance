@@ -16,6 +16,9 @@ on:
       lookup_q:
         description: 'Optional — raw Gmail query for a read-only rpinvoicing lookup (e.g. subject:(WOT1 OR WOT2)), no date crawl. Leave blank for a normal run.'
         default: ''
+      lookup_mailbox:
+        description: 'Which mailbox the lookup reads: invoicing (default), dispatcher, or econstruction. Read-only.'
+        default: 'invoicing'
       archive_stale_days:
         description: 'Optional — archive work orders older than this many days with no rpinvoicing mail ever and no system update in that window. Leave blank for a normal run.'
         default: ''
@@ -109,12 +112,14 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           LOOKUP_Q: ${{ github.event.inputs.lookup_q }}
+          LOOKUP_MAILBOX: ${{ github.event.inputs.lookup_mailbox || 'invoicing' }}
         run: |
           curl -G --fail-with-body -sS --max-time 90 \
             --data-urlencode "secret=$CRON_SECRET" \
             --data-urlencode "pass=lookup" \
             --data-urlencode "q=$LOOKUP_Q" \
             --data-urlencode "full=1" \
+            --data-urlencode "mailbox=$LOOKUP_MAILBOX" \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync"
 
