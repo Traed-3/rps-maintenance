@@ -19,7 +19,7 @@
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { archiveThread, archiveMessage } from '@/lib/svc-gmail-client'
-import { isTrustedPortalNotice, classifyCompletionNote } from '@/lib/svc-work-order-parser'
+import { isTrustedPortalNotice, isOfficeSender, isTicketSender, ticketOutcome, techWords } from '@/lib/svc-work-order-parser'
 import { loadConstructionLinks, CON_DONE_STAGES, CON_ACTIVE_STAGES, CON_STAGE_LABEL } from '@/lib/svc-construction-link'
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -27,7 +27,7 @@ const COMPANY_ID = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 const BUDGET_MS = 40_000
 
 type EventKind = 'complete' | 'approved' | 'rtn' | 'incomplete' | 'closed' | 'construction_done' | 'construction_active'
-type Evidence = { at: string; kind: EventKind; source: string; note?: string | null; importId?: string; msgId?: string; invoiceNumber?: string | null; closedAs?: string }
+type Evidence = { at: string; kind: EventKind; source: string; note?: string | null; importId?: string; msgId?: string; invoiceNumber?: string | null; closedAs?: string; decisive?: boolean }
 
 export interface ReconcileChange { woNumber: string; from: string; to: string; source: string; at: string }
 export interface ReconcileResult {
@@ -80,21 +80,42 @@ export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?:
   const events = new Map<string, Evidence[]>()
   const push = (wo: string, e: Evidence) => { const l = events.get(wo) ?? []; l.push(e); events.set(wo, l) }
 
-  // 1. Tech notes in rpinvoicing (applied or not — the timeline decides). Each stored note is re-read
-  //    with the CURRENT classifier, so parser fixes made since it was first logged still count.
+  // 1. Tickets in rpinvoicing — the standing rule (Trae, 2026-10-12): a ticket for the call that does not say
+  //    RTN / return trip needed means the call is COMPLETE. The latest tech ticket decides; the office's own
+  //    re-forwards (rpinvoicing@ → itself) only count when no tech ticket exists, and never override a tech's RTN.
+  //    Stored notes are re-read with the current wording rules, so older mis-filed ones still count.
+  const tickets = new Map<string, { tech: Evidence[]; office: Evidence[] }>()
   for (let i = 0; i < woList.length; i += 60) {
     const { data } = await admin
       .from('svc_gmail_imports')
-      .select('id, gmail_message_id, received_at, status, parsed')
+      .select('id, gmail_message_id, received_at, sender, parsed')
       .eq('mailbox', 'rpinvoicing')
       .in('parsed->>woNumber', woList.slice(i, i + 60))
       .limit(2000)
     for (const r of data ?? []) {
       const p = r.parsed as any
-      const kind = classifyCompletionNote(p?.note ?? '')
-      if (kind === 'unknown' || !p?.woNumber) continue
-      push(p.woNumber, { at: r.received_at, kind: kind === 'rtn' ? 'rtn' : kind === 'incomplete' ? 'incomplete' : 'complete', source: 'tech note in rpinvoicing', note: p.note ?? null, importId: r.id, msgId: r.gmail_message_id })
+      if (!p?.woNumber) continue
+      const sender = r.sender ?? ''
+      const office = isOfficeSender(sender)
+      if (!office && !isTicketSender(sender)) continue   // vendors, customers, construction/admin addresses
+      const own = techWords(p.note ?? '')
+      const e: Evidence = { at: r.received_at, kind: office ? 'complete' : ticketOutcome(own), source: office ? 'office ticket in rpinvoicing' : 'tech ticket in rpinvoicing', note: own, importId: r.id, msgId: r.gmail_message_id }
+      const t = tickets.get(p.woNumber) ?? { tech: [], office: [] }
+      ;(office ? t.office : t.tech).push(e)
+      tickets.set(p.woNumber, t)
     }
+  }
+  const linksEarly = await loadConstructionLinks(admin, COMPANY_ID)
+  for (const [wo, t] of tickets) {
+    // A construction job still under way is the authority: a routine ticket does not finish it. A return trip still applies.
+    const link = linksEarly.get(wo)
+    const jobOpen = !!link && !(CON_DONE_STAGES as readonly string[]).includes(link.stage)
+    for (const e of (t.tech.length ? t.tech : t.office)) {
+      if (jobOpen && e.kind === 'complete') continue
+      push(wo, e)
+    }
+    // Keep the office forwards attachable to the call even when they do not decide anything.
+    for (const e of t.office) if (!(t.tech.length ? t.tech : t.office).includes(e)) push(wo, { ...e, kind: 'incomplete', source: 'office re-forward', decisive: false })
   }
 
   // 2 + 3. Closure notices in rpdispatcher (older imports carry no flag for these, so match on the subject).
@@ -114,7 +135,7 @@ export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?:
   }
 
   // 4. Construction.
-  const links = await loadConstructionLinks(admin, COMPANY_ID)
+  const links = linksEarly
   for (const wo of woList) {
     const link = links.get(wo)
     if (!link) continue
@@ -128,7 +149,9 @@ export async function reconcileWorkOrders(opts: { dryRun?: boolean; archivedBy?:
     if (Date.now() > deadline) { result.budgetHit = true; break }
     const call = byWo.get(wo)!
     evs.sort((a, b) => a.at.localeCompare(b.at))
-    const last = evs[evs.length - 1]
+    const deciding = evs.filter(e => e.decisive !== false)
+    if (!deciding.length) { if (!dryRun) await attachImports(admin, call.id, evs, result); continue }
+    const last = deciding[deciding.length - 1]
     const target = targetFor(last.kind)
 
     // 'construction_active' only ever promotes a call nobody has touched; it must not downgrade real progress.

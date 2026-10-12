@@ -228,6 +228,9 @@ export interface ParsedCompletion {
 const FORWARD_MARKERS = [
   /-{5,}\s*Forwarded message\s*-{5,}/i,
   /Begin forwarded message:/i,
+  // Gmail's reply header — "On Wed, Aug 5, 2026 at 11:46 AM IT Service Desk wrote:" — everything after it is the
+  // quoted original dispatch, not the tech's own words, so it must never be searched for "return"/"RTN".
+  /\n\s*On [^\n]{5,140}\bwrote:/i,
 ]
 
 /** The tech's own line(s) sit above the quoted original — split there. */
@@ -247,14 +250,19 @@ function insertSignatureBoundary(text: string): string {
   return text.replace(/(\S)(sent from my (?:iphone|ipad|ipod|android|galaxy|mobile))/gi, '$1 $2')
 }
 
+/**
+ * "Return trip needed", the way techs actually write it: RTN / NTR (need to return) / retrip / "return trip" /
+ * "need(s) to return" / "will return" / "return with" / "come back". This is the ONLY thing that keeps a call
+ * open once a ticket for it reaches rpinvoicing (Trae, 2026-10-12): a ticket that does not say a return is
+ * needed means the call is complete.
+ */
+export const RTN_RE = /\bntr\b|\brtn\b|re-?trip|return trip|return call|return needed|need.{0,4}to return|needs? (a )?return|return visit|\bwill (?:need to )?return\b|\breturn with\b|\breturning\b|\bcome back\b/i
+
 /** Classify a tech's note (the line(s) above the forwarded original). Exported so stored notes can be re-read with the current rules. */
 export function classifyCompletionNote(note: string): CompletionStatus {
   const noteLower = insertSignatureBoundary(note).toLowerCase()
   let status: CompletionStatus = 'unknown'
-  // "Ntr" (Need To Return) is a common tech shorthand distinct from "RTN";
-  // "need to return"/"needs to return" was also falling through — the old
-  // pattern only allowed a single optional "a" between "need" and "return".
-  if (/\bntr\b|\brtn\b|re-?trip|return trip|return call|return needed|need.{0,4}to return|needs? (a )?return|return visit/i.test(noteLower)) {
+  if (RTN_RE.test(noteLower)) {
     status = 'rtn'
   } else if (/incompl/i.test(noteLower)) {   // also catches typos like "Incomplerte"
     status = 'incomplete'
@@ -276,4 +284,28 @@ export function parseCompletionEmail(subject: string, body: string): ParsedCompl
   const note = techNote(body)
   const status = classifyCompletionNote(note)
   return { woNumber, status, note: note.slice(0, 1000) }
+}
+
+/** A ticket's outcome under the standing rule: RTN wording = return trip, anything else = complete. */
+export function ticketOutcome(note: string): 'rtn' | 'complete' {
+  return RTN_RE.test(insertSignatureBoundary(note).toLowerCase()) ? 'rtn' : 'complete'
+}
+
+/** Cut the quoted reply/forward off a stored note so only the tech's own words are read. */
+export function techWords(note: string): string {
+  return techNote(note)
+}
+
+/** The office's own re-forward of a ticket (rpinvoicing@gmail.com sending to itself). */
+export function isOfficeSender(email: string): boolean {
+  return /^rpinvoicing@gmail\.com$/i.test(email.trim())
+}
+
+/**
+ * Staff who send service tickets: the techs and service managers (first-initial-lastname.rp@gmail.com). Construction,
+ * receipts and office-admin addresses are excluded — a foreman's field ticket or an office comment is not a service ticket.
+ */
+export function isTicketSender(email: string): boolean {
+  const e = email.trim().toLowerCase()
+  return /\.rp@gmail\.com$/.test(e) && !/^(const|econstruction|constructionreceipts|sparsons|sdodson|fdodson|tdodson|maintenance)/.test(e)
 }

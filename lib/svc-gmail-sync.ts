@@ -21,8 +21,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { listMessages, getMessage, archiveThread, archiveMessage, listAttachments, getAttachment } from '@/lib/svc-gmail-client'
 import {
   extractBody, getHeader, parseSender,
-  parseDispatchEmail, parseCompletionEmail, isTrustedPortalNotice,
+  parseDispatchEmail, parseCompletionEmail, isTrustedPortalNotice, isOfficeSender, isTicketSender,
 } from '@/lib/svc-work-order-parser'
+import { CON_DONE_STAGES, woTokens } from '@/lib/svc-construction-link'
 
 export const WORK_ORDER_DOCS_BUCKET = 'svc-work-order-docs'
 const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024
@@ -436,7 +437,26 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
           }
           if (tech) updates.assigned_technician_id = tech.id
 
-          if (parsed.status === 'complete') {
+          // Standing rule (Trae, 2026-10-12): a ticket for the call that does not say RTN / return trip needed
+          // means the call is COMPLETE — "Incomplete", a blank forward and a bare "Sent from my iPhone" included.
+          // Only staff tickets count (not vendors/customers), and the office's own re-forward only completes a
+          // call nothing else has spoken for.
+          const fromTech = isTicketSender(techEmail)
+          const fromOffice = isOfficeSender(techEmail)
+          const outcome: 'rtn' | 'complete' | null =
+            fromTech ? (parsed.status === 'rtn' ? 'rtn' : 'complete')
+            : fromOffice && wo.status === 'dispatched' ? 'complete'
+            : null
+
+          // A construction job still under way owns the call's status: a routine ticket does not finish it.
+          let jobStillOpen = false
+          if (outcome === 'complete') {
+            const { data: jobs } = await admin.from('con_jobs').select('stage, work_order_number').eq('company_id', COMPANY_ID).ilike('work_order_number', `%${parsed.woNumber}%`)
+            const mine = (jobs ?? []).filter(j => woTokens(j.work_order_number).includes(parsed.woNumber!.toUpperCase()))
+            jobStillOpen = mine.length > 0 && !mine.some(j => (CON_DONE_STAGES as readonly string[]).includes(j.stage))
+          }
+
+          if (outcome === 'complete' && !jobStillOpen) {
             updates.status = 'completed'
             updates.completed_at = receivedAt.toISOString()
             updates.return_trip_needed = false
@@ -455,14 +475,12 @@ export async function syncInvoicing(maxResults = 50, sinceDays = 14, untilDays?:
             } catch (archiveErr: any) {
               result.errors.push(`Archive rpdispatcher for ${parsed.woNumber}: ${archiveErr.message}`)
             }
-          } else if (parsed.status === 'rtn') {
+          } else if (outcome === 'rtn') {
             updates.status = 'rtn_needed'
             updates.return_trip_needed = true
             updates.return_trip_reason = parsed.note || null
-          } else if (parsed.status === 'incomplete') {
-            updates.status = 'in_progress'
           }
-          // 'unknown' status: still log the note + touch last_update_at, leave status alone
+          // Any other sender (vendor, customer, admin): still log the note + touch last_update_at, leave status alone
 
           await admin.from('svc_work_orders').update(updates).eq('id', wo.id)
           matchedWorkOrderId = wo.id
