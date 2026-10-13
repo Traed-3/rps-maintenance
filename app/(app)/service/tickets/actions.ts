@@ -96,7 +96,7 @@ export async function addPart(id: string, formData: FormData): Promise<void> {
   let unit_cost = num(formData, 'unit_cost'), sell_price = num(formData, 'sell_price'), is_stock = false
   if (partId) {
     const { data: part } = await admin.from('parts').select('unit_cost, freight_per_unit, taxable, markup_pct, sell_price, is_stocked').eq('id', partId).maybeSingle()
-    if (part) { unit_cost = unit_cost ?? part.unit_cost; sell_price = sell_price ?? sellPriceForLine(part, 0); is_stock = !!part.is_stocked }
+    if (part) { unit_cost = unit_cost ?? part.unit_cost; sell_price = sell_price ?? (part.sell_price != null ? Number(part.sell_price) : sellPriceForLine(part, 0)); is_stock = !!part.is_stocked }
   }
   await admin.from('service_ticket_parts').insert({ ticket_id: id, part_id: partId, description, quantity: num(formData, 'quantity') ?? 1, unit_cost, sell_price, charge_type: str(formData, 'charge_type') ?? 'billable', from_location: str(formData, 'from_location'), serial_number: str(formData, 'serial_number'), is_stock })
   paths(id)

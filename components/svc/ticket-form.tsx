@@ -154,7 +154,7 @@ function AddPartForm({ ticketId, trucks, defaultTruck }: { ticketId: string; tru
     <form ref={formRef} action={async (fd) => { await addPart(ticketId, fd); setDesc(''); setPartId(null); setPrice(''); formRef.current?.reset() }} className="space-y-2">
       <input type="hidden" name="part_id" value={partId ?? ''} />
       <input type="hidden" name="description" value={desc} />
-      <PartPicker value={desc} onChange={t => { setDesc(t); setPartId(null) }} onPick={(p: PickedPart) => { setDesc(p.part_number ? `${p.description} (${p.part_number})` : p.description); setPartId(p.id); setPrice(p.suggested_price != null ? String(p.suggested_price) : '') }} className={inp} placeholder="Part number or description" />
+      <PartPicker prefer="sell" value={desc} onChange={t => { setDesc(t); setPartId(null) }} onPick={(p: PickedPart) => { setDesc(p.part_number ? `${p.description} (${p.part_number})` : p.description); setPartId(p.id); setPrice(p.suggested_price != null ? String(p.suggested_price) : '') }} className={inp} placeholder="Part number or description" />
       <div className="grid grid-cols-3 gap-2">
         <div><label className={lbl} htmlFor="p-qty">Qty</label><input id="p-qty" name="quantity" type="number" step="any" inputMode="decimal" className={inp} defaultValue="1" /></div>
         <div><label className={lbl} htmlFor="p-sell">Sell $</label><input id="p-sell" name="sell_price" type="number" step="any" inputMode="decimal" className={inp} value={price} onChange={e => setPrice(e.target.value)} placeholder="auto" /></div>

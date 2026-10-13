@@ -35,6 +35,7 @@ export function PartPicker({
   placeholder = 'Description — or type a part number to search the catalog',
   className,
   category,
+  prefer,
   autoFocus,
 }: {
   value: string
@@ -44,6 +45,8 @@ export function PartPicker({
   className?: string
   /** Limit results to one REV19 category (the builder's per-category search boxes). */
   category?: number
+  /** 'sell' = suggest the stored sell price (service tickets) instead of cost + markup (quotes). */
+  prefer?: 'sell'
   autoFocus?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -78,7 +81,7 @@ export function PartPicker({
     timer.current = setTimeout(async () => {
       setLoading(true)
       try {
-        const r = await fetch(`/api/inventory/parts/search?q=${encodeURIComponent(text)}&limit=12${category ? `&category=${category}` : ''}`, { cache: 'no-store' })
+        const r = await fetch(`/api/inventory/parts/search?q=${encodeURIComponent(text)}&limit=12${category ? `&category=${category}` : ''}${prefer ? `&prefer=${prefer}` : ''}`, { cache: 'no-store' })
         const j = await r.json()
         setResults(j.parts ?? []); setOpen(true)
       } catch { setResults([]) } finally { setLoading(false) }
