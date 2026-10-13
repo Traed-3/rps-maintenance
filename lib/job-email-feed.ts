@@ -42,10 +42,11 @@ export type FeedResult = {
 
 type Job = { id: string; company_id: string; site_number: string | null; work_order_number: string | null; stage: string; status_detail: string | null; updated_at: string | null }
 
-/** "Re: Fwd: SU-9901 update MUL boots" -> ["SU-9901"]; "45967/58802 Invoice Wire Pull" -> ["45967","58802"]; "Wawa 8659 Update" -> ["Wawa 8659","8659"]. */
+/** "Re: Fwd: SU-9901 update MUL boots" -> ["SU-9901"]; "Fwd: SD- 40043 -6.5(x3)" -> ["40043"]; "45967/58802 Invoice Wire Pull" -> ["45967","58802"]; "Wawa 8659 Update" -> ["Wawa 8659","8659"]. */
 export function siteKeysFromSubject(subject: string): string[] {
-  // Techs sometimes lead with the word: "Update SU 9901", "UPDATE 32361".
-  const head = subject.replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, '').replace(/^update\s*[:\-]?\s+(?=\S)/i, '').trim()
+  // Techs sometimes lead with the word: "Update SU 9901", "UPDATE 32361". "SD- 40043 -6.5(x3)" = sent on by
+  // Starsky Dodson (his initials, Trae 10/13/26), not a site prefix.
+  const head = subject.replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, '').replace(/^SD\s*-\s*(?=\S)/i, '').replace(/^update\s*[:\-]?\s+(?=\S)/i, '').trim()
   let m = head.match(/^((?:SU|IP|CP|CPG|F)\s*-?\s*\d{3,5})\b/i)
   if (m) { const p = m[1].toUpperCase().replace(/\s+/g, ''); return [p.startsWith('IP') ? p.replace('-', '') : p.replace(/^(SU|CP|CPG|F)-?/, '$1-')] }
   m = head.match(/^((?:Wawa|Global|Sheetz|Sunoco|Royal Farms|Handy Mart)\s*#?\s*(\d{2,5}))\b/i)
