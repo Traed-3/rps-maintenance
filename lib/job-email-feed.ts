@@ -22,7 +22,7 @@ const DOCS_BUCKET = 'construction-docs'
 const MAX_PHOTO_BYTES = 12 * 1024 * 1024
 const MAX_PHOTOS_PER_UPDATE = 6
 const MAX_UPDATES_PER_PASS = 4
-/** Vercel gives the route 60 s; each pass stops starting new work after this many ms and finishes on the next tick. */
+/** Each pass stops starting new work after this many ms and finishes on the next tick — kept well under the route's 300 s so one pass doesn't burn a mailbox's per-minute Gmail quota. */
 const PASS_BUDGET_MS = 40_000
 const MAX_TICKET_JOBS_PER_PASS = 3
 const PHOTO_MIME = /^image\/(jpeg|jpg|png|heic|heif|webp)$/i
@@ -35,7 +35,7 @@ const over = (b?: Budget) => !!b && Date.now() > b.deadline
 
 export type FeedResult = {
   updates: { filed: number; skipped: number; unmatched: string[]; errors: string[]; budget_hit?: boolean }
-  tickets: { jobs: number; filed: number; errors: string[]; budget_hit?: boolean }
+  tickets: { jobs: number; filed: number; created: string[]; unmatched: string[]; errors: string[]; budget_hit?: boolean }
   invoices: { filed: number; completed: number; unmatched: string[]; errors: string[]; budget_hit?: boolean }
   orders: { sent: number; po: number; replied: number; errors: string[]; budget_hit?: boolean }
 }
@@ -146,9 +146,62 @@ export async function syncTechUpdates(opts: { sinceDays?: number; budget?: Budge
   return out
 }
 
-/** 2. New handwritten tickets in rpinvoicing → the existing per-job backfill (OCR + needs_review draft), a few jobs per pass. */
+/** A ticket this soon after the site's last job closed is a trailing ticket for that job, not new work. */
+const LATE_TICKET_DAYS = 14
+export const DRAFT_JOB_STATUS = 'Draft — started automatically from a field ticket; confirm scope, customer and stage'
+
+/**
+ * A field ticket for a site with no open job: start the job as a draft so the ticket has somewhere to land
+ * (Trae 10/13/26: tickets were silently dropped when nobody had opened the project yet). Fills site, address
+ * and brand from con_sites when the site is known; the office confirms the rest.
+ */
+async function createDraftJobForTicket(
+  admin: ReturnType<typeof createAdminClient>, messageId: string, keys: string[], subject: string, internalDate?: string,
+): Promise<{ job: Job; reason?: undefined } | { job?: undefined; reason: string }> {
+  const ticketDate = ymdET(internalDate)
+  // Service techs use the same "(x2)" subject, so a ticket the service sync already tied to a call, or one for a
+  // site with a live (or just-finished) service call, is a service ticket — never a new construction job.
+  const { data: svcDoc } = await admin.from('svc_work_order_documents').select('id').eq('gmail_message_id', messageId).not('work_order_id', 'is', null).limit(1)
+  if (svcDoc?.length) return { reason: 'service ticket (matched to a service call)' }
+  const recent = new Date(Date.now() - LATE_TICKET_DAYS * 86_400_000).toISOString()
+  const { data: svcCalls } = await admin.from('svc_work_orders').select('id, status, completed_at').eq('archived', false)
+    .or(keys.map(k => `site_number.ilike.${k}`).join(',')).limit(20)
+  if ((svcCalls ?? []).some(w => w.status !== 'completed' || (w.completed_at && w.completed_at > recent))) {
+    return { reason: 'service call open or just completed at this site — treated as a service ticket' }
+  }
+  const last = await findJobForKeys(admin, keys, true)
+  if (last?.stage === 'complete' && last.updated_at && Date.now() - new Date(last.updated_at).getTime() < LATE_TICKET_DAYS * 86_400_000) {
+    return { reason: `job at ${last.site_number} closed ${last.updated_at.slice(0, 10)} — late ticket, file it by hand` }
+  }
+  const { data: sites } = await admin.from('con_sites').select('id, company_id, site_number, store_brand, address, city, state')
+    .or(keys.map(k => `site_number.ilike.${k}`).join(',')).limit(2)
+  const site = sites?.length === 1 ? sites[0] : null
+  let companyId = site?.company_id as string | undefined
+  if (!companyId) {
+    const { data: companies } = await admin.from('companies').select('id').limit(2)
+    if (companies?.length !== 1) return { reason: 'site not on file and more than one company — start the job by hand' }
+    companyId = companies[0].id as string
+  }
+  const { data: job, error } = await admin.from('con_jobs').insert({
+    company_id: companyId,
+    site_id: site?.id ?? null,
+    site_number: site?.site_number ?? keys[0],
+    stage: 'in_progress',
+    status_detail: DRAFT_JOB_STATUS,
+    facility_address: site ? [site.address, site.city, site.state].filter(Boolean).join(', ') || null : null,
+    gas_brand: site?.store_brand ?? null,
+    date_received: ticketDate,
+    project_start_date: ticketDate,
+    notes: `Opened by the email sync from rpinvoicing field ticket "${subject}" (${ticketDate}).`,
+  }).select('id, company_id, site_number, work_order_number, stage, status_detail, updated_at').single()
+  if (error || !job) return { reason: `could not create job: ${error?.message ?? 'insert failed'}` }
+  return { job: job as Job }
+}
+
+/** 2. New handwritten tickets in rpinvoicing → the existing per-job backfill (OCR + needs_review draft), a few jobs per pass.
+ *  A ticket for a site with no open job starts a draft job first (createDraftJobForTicket). */
 export async function syncFieldTickets(opts: { sinceDays?: number; budget?: Budget } = {}): Promise<FeedResult['tickets']> {
-  const out: FeedResult['tickets'] = { jobs: 0, filed: 0, errors: [] }
+  const out: FeedResult['tickets'] = { jobs: 0, filed: 0, created: [], unmatched: [], errors: [] }
   if (!connectedInboxes().includes('rpinvoicing')) { out.errors.push('rpinvoicing not connected'); return out }
   const admin = createAdminClient()
   let ids: string[]
@@ -162,7 +215,13 @@ export async function syncFieldTickets(opts: { sinceDays?: number; budget?: Budg
       if (!/\(x\d+\)/i.test(subject)) continue
       const { data: seen } = await admin.from('con_daily_updates').select('id').contains('source_refs', { ticket_message_id: id }).maybeSingle()
       if (seen) continue
-      const job = await findJobForKeys(admin, siteKeysFromSubject(subject))
+      const keys = siteKeysFromSubject(subject)
+      let job = await findJobForKeys(admin, keys)
+      if (!job && keys.length) {
+        const made = await createDraftJobForTicket(admin, id, keys, subject, msg.internalDate)
+        if (made.job) { job = made.job; out.created.push(`${job.site_number} — "${subject}"`) }
+        else out.unmatched.push(`${subject} (${made.reason})`)
+      } else if (!job) out.unmatched.push(`${subject} (no site number in the subject)`)
       if (job && !jobs.has(job.id)) jobs.set(job.id, job)
     } catch (e) { out.errors.push(`${id}: ${(e as Error).message}`) }
   }

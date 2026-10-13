@@ -1,7 +1,8 @@
 name: Gmail sync
+# The 15-minute schedule lives in Supabase pg_cron (supabase/migrations/sync_pg_cron.sql) — GitHub only ran this
+# schedule every ~6 hours. This workflow stays as the manual "Run workflow" button: a full sync on demand plus the
+# one-off backfill / lookup / reconcile tools below.
 on:
-  schedule:
-    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       since_days:
@@ -69,29 +70,30 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Hit /api/gmail/sync
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/gmail/sync?secret=$CRON_SECRET&max=30"
 
 
   svc-sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Sync rpdispatcher (create/update work orders)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=dispatcher"
       - name: Sync rpinvoicing (completion status + ticket attachments)
+        if: ${{ !cancelled() }}
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           SINCE_DAYS: ${{ github.event.inputs.since_days || '14' }}
@@ -100,26 +102,28 @@ jobs:
         run: |
           URL="https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=invoicing&sinceDays=$SINCE_DAYS&max=$MAX_MSGS"
           if [ -n "$UNTIL_DAYS" ]; then URL="$URL&untilDays=$UNTIL_DAYS"; fi
-          curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
+          curl --fail-with-body -sS --max-time 290 -w "\nHTTP %{http_code}\n" "$URL"
       - name: Reconcile call statuses (invoice approvals, late completions, construction)
+        if: ${{ !cancelled() }}
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=reconcile&apply=1"
       - name: Draft transcripts for newly captured tickets
+        if: ${{ !cancelled() }}
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=extract-docs&limit=5"
 
   svc-lookup:
     if: ${{ github.event.inputs.lookup_q != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Read-only rpinvoicing lookup
         env:
@@ -128,7 +132,7 @@ jobs:
           LOOKUP_MAILBOX: ${{ github.event.inputs.lookup_mailbox || 'invoicing' }}
           LOOKUP_FULL: ${{ github.event.inputs.lookup_full || '1' }}
         run: |
-          curl -G -sS --fail-with-body --max-time 90 \
+          curl -G -sS --fail-with-body --max-time 290 \
             --data-urlencode "secret=$CRON_SECRET" \
             --data-urlencode "pass=lookup" \
             --data-urlencode "q=$LOOKUP_Q" \
@@ -142,7 +146,7 @@ jobs:
   svc-reconcile:
     if: ${{ github.event.inputs.reconcile != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Reconcile open call statuses
         env:
@@ -151,14 +155,14 @@ jobs:
         run: |
           URL="https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=reconcile&archivedBy=09d76016-7ed8-427d-83c3-1f94c484c1ce"
           if [ "$APPLY" = "apply" ]; then URL="$URL&apply=1"; fi
-          curl -sS --fail-with-body --max-time 90 -o resp.json -w "HTTP %{http_code}\n" "$URL" || { cat resp.json; exit 1; }
+          curl -sS --fail-with-body --max-time 290 -o resp.json -w "HTTP %{http_code}\n" "$URL" || { cat resp.json; exit 1; }
           jq -c '.result | del(.changes)' resp.json
           jq -r '.result.changes[] | "CHG " + tojson' resp.json
 
   svc-archive-stale:
     if: ${{ github.event.inputs.archive_stale_days != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Archive stale work orders
         env:
@@ -170,12 +174,12 @@ jobs:
           URL="https://rps-maintenance.vercel.app/api/svc/gmail-sync?secret=$CRON_SECRET&pass=archive-stale&days=$DAYS"
           if [ "$APPLY" = "1" ]; then URL="$URL&apply=1"; fi
           if [ -n "$ARCHIVED_BY" ]; then URL="$URL&archivedBy=$ARCHIVED_BY"; fi
-          curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
+          curl --fail-with-body -sS --max-time 290 -w "\nHTTP %{http_code}\n" "$URL"
 
   billing-permit-backfill:
     if: ${{ github.event.inputs.backfill_permits_offset != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Backfill historical permit emails from econstruction
         env:
@@ -186,12 +190,12 @@ jobs:
         run: |
           URL="https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=backfill-permits&offset=$OFFSET&limit=$LIMIT"
           if [ "$APPLY" = "1" ]; then URL="$URL&apply=1"; fi
-          curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
+          curl --fail-with-body -sS --max-time 290 -w "\nHTTP %{http_code}\n" "$URL"
 
   billing-inbox-historical-sync:
     if: ${{ github.event.inputs.billing_sync_inbox != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Historical sync for one billing inbox
         env:
@@ -200,14 +204,14 @@ jobs:
           SINCE_DAYS: ${{ github.event.inputs.billing_sync_since_days }}
           MAX_MSGS: ${{ github.event.inputs.billing_sync_max }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=sync&inbox=$INBOX&since=$SINCE_DAYS&max=$MAX_MSGS"
 
   billing-field-ticket-backfill:
     if: ${{ github.event.inputs.backfill_ticket_job_id != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Backfill one job's field tickets (rpinvoicing + econstruction)
         env:
@@ -217,40 +221,43 @@ jobs:
         run: |
           URL="https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=backfill-field-tickets&jobId=$JOB_ID"
           if [ "$APPLY" = "1" ]; then URL="$URL&apply=1"; fi
-          curl --fail-with-body -sS --max-time 90 -w "\nHTTP %{http_code}\n" "$URL"
+          curl --fail-with-body -sS --max-time 290 -w "\nHTTP %{http_code}\n" "$URL"
 
   billing-inbox-sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Pull paperwork from the billing inboxes
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=sync&max=30"
       - name: Read pending documents
+        if: ${{ !cancelled() }}
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=extract&limit=3"
       - name: Tech updates, field tickets and invoice workups onto their jobs
+        if: ${{ !cancelled() }}
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           # Gmail allows 6,000 query units per user per minute; the sync + thread pass above spends most of that,
           # so wait for the next window before this pass lists and reads the update mail.
           sleep 65
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=updates&since=3"
       - name: Invoice workups and order mail onto their jobs and the plate
+        if: ${{ !cancelled() }}
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body -sS --max-time 90 \
+          curl --fail-with-body -sS --max-time 290 \
             -w "\nHTTP %{http_code}\n" \
             "https://rps-maintenance.vercel.app/api/billing/inbox-sync?secret=$CRON_SECRET&pass=orders&since=3"

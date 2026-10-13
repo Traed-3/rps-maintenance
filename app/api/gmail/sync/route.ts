@@ -5,13 +5,13 @@ import { notifyGmailSyncError } from '@/lib/notifications'
 
 const COMPANY_ID = 'f3d06874-2e21-40f3-a7d0-a1d86bad02e7'
 
-// Allow longer runs for historical backfills (chunked imports of older mail)
-export const maxDuration = 60
+// Up to 300 s (Fluid Compute) for historical backfills (chunked imports of older mail)
+export const maxDuration = 300
 
 /**
  * GET /api/gmail/sync
  *
- * Called every 3 minutes by Vercel Cron.
+ * Called every 15 minutes by Supabase pg_cron (supabase/migrations/sync_pg_cron.sql).
  * Also callable manually from the Settings page with ?secret=CRON_SECRET
  *
  * Query params:

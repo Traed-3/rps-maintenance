@@ -230,7 +230,7 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
   → store attachments → classify kind/vendor/ref), extractDocument/extractPending (Claude `claude-sonnet-5`, PDF/image
   document blocks, forced `record_document` tool, fallback claude-sonnet-4-6) + matchLinesToCatalog (normalized
   part number, prefix-stripped, then contains). Route GET /api/billing/inbox-sync?secret&pass=sync|extract|both
-  (CRON_SECRET); GitHub Actions gmail-sync.yml job `billing-inbox-sync` every 15 min. Never archives/marks read.
+  (CRON_SECRET); scheduled every 15 min by Supabase pg_cron (see SYNC SCHEDULE below). Never archives/marks read.
   UI: /inventory/receive/queue (tabs by status, inbox status strip, Sync now), /inventory/receive/queue/[id]
   (attachment preview via signed URL, editable lines with PartPicker re-match / "create as new part", mode
   "Put into stock" (receive rows + receipt cost) or "Cost update only", duplicate-reference warning, dismiss).
@@ -310,3 +310,19 @@ history and use up the ticket's 4-attachment cap).
   window → `notifyRepeatToolPurchase` (lib/notifications.ts, alert type `repeat_purchase`, registered in
   settings/alerts) → per-person notifications to owner/manager/shop_manager/construction_manager only (not company-wide).
   Default window 12 months when no type is picked; 0 disables checking for a type.
+
+---
+
+## SYNC SCHEDULE (changed 2026-10-13)
+
+- Every 15 min via Supabase pg_cron + pg_net: `supabase/migrations/sync_pg_cron.sql` (run in SQL Editor after storing
+  CRON_SECRET in Vault as `rps_cron_secret`). Nine staggered jobs `rps-*`, one per pass (gmail sync, svc dispatcher /
+  invoicing / reconcile / extract-docs, billing sync / extract / updates / orders). App URL lives in `rps_cron.call()`.
+  Why: GitHub's */15 schedule only fired ~every 6 h; Vercel Cron on Hobby is once a day.
+- `.github/workflows/gmail-sync.yml` is now manual-only (Run workflow = full sync + the backfill/lookup tools); later
+  steps run even if an earlier one fails.
+- Sync routes have `maxDuration = 300` (the Claude extract passes 504ed at 60 s).
+- Field tickets (rpinvoicing, "(xN)" subject) for a site with no open job start a draft job (stage in_progress,
+  status_detail "Draft — started automatically from a field ticket…") — `createDraftJobForTicket` in lib/job-email-feed.ts.
+  Skipped when the ticket is a service ticket (tied to a svc call, or a live/just-completed svc call at the site) or the
+  site's job closed in the last 14 days. Results show in the `updates` pass output as tickets.created / tickets.unmatched.

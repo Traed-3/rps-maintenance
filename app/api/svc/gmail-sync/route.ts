@@ -3,8 +3,8 @@ import { syncDispatcher, syncInvoicing, archiveStaleWorkOrders } from '@/lib/svc
 import { reconcileWorkOrders } from '@/lib/svc-reconcile'
 import { extractPendingWorkOrderDocuments } from '@/lib/svc-work-order-docs-extract'
 
-// Allow enough time for a full pass through one mailbox.
-export const maxDuration = 60
+// Up to 300 s (Fluid Compute) — the Claude transcript pass (extract-docs) ran past the old 60 s and 504ed.
+export const maxDuration = 300
 
 /**
  * GET /api/svc/gmail-sync?pass=dispatcher|invoicing|extract-docs[&max=N|&limit=N|&sinceDays=N]
