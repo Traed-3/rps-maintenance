@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { StatusBadge } from '@/components/assets/status-badge'
 import { Button } from '@/components/ui/button'
-import { Pencil, Gauge, Wrench } from 'lucide-react'
+import { Pencil, Gauge, Wrench, Hammer } from 'lucide-react'
 import { revalidatePath } from 'next/cache'
 import { DeleteAssetButton } from './delete-button'
 import { AssetPhotoSection } from '@/components/assets/asset-photo-section'
@@ -102,6 +102,12 @@ export default async function AssetDetailPage({
       .limit(100),
   ])
 
+  const { data: toolRows } = await admin
+    .from('asset_tool_items')
+    .select('total_cost, kind')
+    .eq('asset_id', id)
+  const toolTotal = (toolRows ?? []).reduce((sum, r) => sum + Number(r.total_cost), 0)
+
   async function saveAssetPhoto(photoUrl: string, caption: string) {
     'use server'
     const supabase = await createClient()
@@ -189,6 +195,12 @@ export default async function AssetDetailPage({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
         >
           <Wrench className="w-3.5 h-3.5" /> Tire Service
+        </Link>
+        <Link
+          href={`/assets/${id}/tools`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+        >
+          <Hammer className="w-3.5 h-3.5" /> Tools &amp; Supplies
         </Link>
       </div>
       )}
@@ -323,6 +335,22 @@ export default async function AssetDetailPage({
             </div>
           )}
         </div>
+        )}
+
+        {/* Tools & Supplies bought for this asset */}
+        {!isProperty && (toolRows?.length ?? 0) > 0 && (
+          <Link
+            href={`/assets/${id}/tools`}
+            className="block bg-white rounded-2xl border border-gray-200 shadow-sm p-5 hover:border-blue-300 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Tools &amp; Supplies</h2>
+              <span className="text-sm font-medium text-gray-700">
+                ${toolTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <span className="ml-2 text-xs text-gray-400">{toolRows!.length} purchase{toolRows!.length === 1 ? '' : 's'} →</span>
+              </span>
+            </div>
+          </Link>
         )}
 
         {/* Repair Ticket History — every ticket (incl. closed email tickets) */}

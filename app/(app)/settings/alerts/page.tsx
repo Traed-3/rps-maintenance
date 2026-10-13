@@ -36,6 +36,12 @@ const ALERT_DEFS = [
     desc: 'When any new repair ticket is opened in the system.',
     icon: '📋',
   },
+  {
+    type: 'repeat_purchase',
+    label: 'Repeat Tool / Supply Purchase',
+    desc: 'When the same tool or supply is bought again for the same truck inside its watch window (e.g. extension cords for O15 twice in 12 months). Management only.',
+    icon: '🔁',
+  },
 ]
 
 type Pref = {
