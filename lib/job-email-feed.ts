@@ -18,7 +18,6 @@ import { listMessages, getMessage, getThread, getAttachment, listAttachments, he
 import { stripQuoted, INBOX_BUCKET, type ThreadReply } from '@/lib/billing-inbox-sync'
 import { backfillFieldTicketsForJob } from '@/lib/field-ticket-gmail-match'
 import { woTokens } from '@/lib/svc-construction-link'
-import { isTrustedPortalNotice } from '@/lib/svc-work-order-parser'
 
 const DOCS_BUCKET = 'construction-docs'
 const MAX_PHOTO_BYTES = 12 * 1024 * 1024
@@ -160,12 +159,18 @@ type TicketAuth = { wo: string | null; source: string; candidates: string[] }
 
 const ownWoTokens = (msg: GmailMsg) => woTokens(`${header(msg, 'Subject')}\n${extractText(msg)}`)
 
-/** WO#s written anywhere in the ticket email or its thread (Starsky files tickets under the portal WO thread). */
-async function ticketWoTokens(msg: GmailMsg): Promise<string[]> {
+/**
+ * WO#s on the ticket email, else in its thread (Starsky files tickets under the portal WO thread). Anyone can reply
+ * into a thread by matching the subject, so a thread message only counts when its sender is verified.
+ * Callers have already verified the ticket's own sender.
+ */
+async function ticketWoTokens(admin: ReturnType<typeof createAdminClient>, msg: GmailMsg): Promise<string[]> {
   const own = ownWoTokens(msg)
   if (own.length || !msg.threadId) return own
   const thread = await getThread('rpinvoicing', msg.threadId)
-  return woTokens(thread.messages.map(m => `${header(m, 'Subject')}\n${extractText(m)}`).join('\n'))
+  const texts: string[] = []
+  for (const m of thread.messages) if (m.id !== msg.id && await isTrustedWoSender(admin, m)) texts.push(`${header(m, 'Subject')}\n${extractText(m)}`)
+  return woTokens(texts.join('\n'))
 }
 
 /** Master Schedule rows this far either side of a ticket can be the job it belongs to. */
@@ -224,10 +229,7 @@ async function econstructionAuthorization(admin: ReturnType<typeof createAdminCl
       if (!keys.some(k => text.includes(k))) continue
       const toks = woTokens(text)
       if (!toks.length) continue
-      const from = singleFromAddress(msg as { payload?: { headers?: { name: string; value: string }[] } })
-      const rps = !!from && (COMPANY_MAILBOXES.has(from) ? isAuthenticatedSender(msg as { payload?: { headers?: { name: string; value: string }[] } }, from) : !(await staffSenderProblem(admin, msg)))
-      const portal = !!from && isTrustedPortalNotice(from, header(msg, 'Authentication-Results'))
-      ;(rps || portal ? trusted : other).push(...toks)
+      ;(await isTrustedWoSender(admin, msg) ? trusted : other).push(...toks)
     } catch (e) { errors.push(`econstruction ${id}: ${(e as Error).message}`) }
   }
   const sure = distinct(trusted)
@@ -249,7 +251,7 @@ async function ticketAuthorization(
   const sched = await scheduleAuthorization(admin, keys, ticketDate)
   if (sched.wo) return { wo: sched.wo, source: 'Master Schedule W/O', candidates: [], errors: [] }
   if (senderVerified) {
-    const tokens = await ticketWoTokens(msg)
+    const tokens = await ticketWoTokens(admin, msg)
     if (tokens.length) return { wo: tokens.join(' - '), source: 'WO# on the ticket email', candidates: [], errors: [] }
   }
   const econ = await econstructionAuthorization(admin, keys, ticketDate)
@@ -321,6 +323,19 @@ async function staffSenderProblem(admin: ReturnType<typeof createAdminClient>, m
   if (!(staff ?? []).some(p => (p.email as string).trim().toLowerCase() === from)) return `sender ${from} is not an active staff address`
   if (!isAuthenticatedSender(m, from)) return `sender ${from} not verified by Gmail (DMARC)`
   return null
+}
+
+/**
+ * Mail whose WO# can be taken as fact: Gmail verified (DMARC aligned, mx.google.com verdict) that it really came from
+ * RPS — an active staff address or one of the company mailboxes — or from the customer's ticketing system
+ * (service-now). Everyone else's WO# is only offered as a choice.
+ */
+async function isTrustedWoSender(admin: ReturnType<typeof createAdminClient>, msg: GmailMsg): Promise<boolean> {
+  const m = msg as { payload?: { headers?: { name: string; value: string }[] } }
+  const from = singleFromAddress(m)
+  if (!from || !isAuthenticatedSender(m, from)) return false
+  if (COMPANY_MAILBOXES.has(from) || /@service-now\.com$/.test(from)) return true
+  return !(await staffSenderProblem(admin, msg))
 }
 
 async function createDraftJobForTicket(
