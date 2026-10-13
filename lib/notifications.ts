@@ -245,6 +245,56 @@ export async function notifyAssetUnsafe(
   }
 }
 
+// ── Rule: same tool/supply bought again for the same truck within its window ──
+// Sent per manager (not company-wide) so field staff never see "why did you re-buy X?".
+
+export async function notifyRepeatToolPurchase(
+  admin: AdminClient,
+  companyId: string,
+  args: {
+    assetId: string
+    unitNumber: string
+    itemName: string
+    windowMonths: number
+    newCost: number
+    newDate: string
+    previous: { purchased_on: string; total_cost: number; quantity: number }[]
+  },
+) {
+  const { data: mgrs } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('company_id', companyId)
+    .in('role', ['owner', 'manager', 'shop_manager', 'construction_manager'])
+    .eq('is_active', true)
+  const recipientIds = mgrs?.map((p: { id: string }) => p.id) ?? []
+  if (recipientIds.length === 0) return
+
+  const fmtDate = (d: string) =>
+    new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const last = args.previous[0]
+  const title = `Repeat purchase — ${args.itemName} for ${args.unitNumber}`
+  const message =
+    `${args.itemName} was bought for ${args.unitNumber} on ${fmtDate(args.newDate)} ($${args.newCost.toFixed(2)}), ` +
+    `but it was already bought on ${fmtDate(last.purchased_on)} ($${last.total_cost.toFixed(2)}, qty ${last.quantity})` +
+    (args.previous.length > 1 ? ` and ${args.previous.length - 1} other time${args.previous.length > 2 ? 's' : ''}` : '') +
+    ` within the ${args.windowMonths}-month watch window. Find out why.`
+  const link = `/assets/${args.assetId}/tools`
+
+  for (const recipientId of recipientIds) {
+    await notify(admin, {
+      companyId,
+      recipientId,
+      type: 'repeat_purchase',
+      title,
+      message,
+      link,
+      relatedAssetId: args.assetId,
+    })
+  }
+  await deliverAlert(admin, { recipientIds, type: 'repeat_purchase', title, message, link })
+}
+
 // ── Rule: new repair ticket ───────────────────────────────────────────────────
 
 export async function notifyNewTicket(

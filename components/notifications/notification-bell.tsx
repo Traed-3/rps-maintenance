@@ -21,6 +21,7 @@ const TYPE_ICON: Record<string, string> = {
   asset_unsafe:        '⚠️',
   clock_out_reminder:  '⏰',
   ticket_assigned:     '🎫',
+  repeat_purchase:     '🔁',
   default:             '🔔',
 }
 

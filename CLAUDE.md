@@ -289,3 +289,24 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
 - Next: connect econstruction + constructionreceipts tokens (Trae mints them), RESEND key for email-out, truck
   inventory sheets from Smartsheet, quote → Excel (REV19 workbook) export, Phase 6 (warranty claims, compliance
   SKUs, historical pull before Mar 2026).
+
+---
+
+## TOOLS & SUPPLIES PER ASSET (added 2026-10-13)
+
+Tools and supplies bought for a truck live on the asset, NOT on repair tickets (receipts on a ticket muddy the repair
+history and use up the ticket's 4-attachment cap).
+- Migration `supabase/migrations/asset_tools_supplies.sql` (run in Supabase SQL Editor — NOT applied until Trae/owner runs it):
+  `asset_tool_types` (item types + `repeat_window_months`, seeded ~21 types per company), `asset_tool_items`
+  (asset_id, type_id, item_name, kind tool|supply, quantity, total_cost, purchased_on, vendor, receipt_url,
+  status on_truck|lost|replaced|consumed|removed, expense_id), plus an asset expense category "Truck Supplies"
+  ("Truck Tools & Equipment" already existed).
+- Third kind `fluid` (DEF, oil, coolant…): no repeat alert (window 0), optional odometer (`mileage`) per fill-up → page shows fluid cost per mile once a truck has 2+ fill-ups with mileage; own expense category "Truck Fluids".
+- UI: /assets/[id]/tools (totals, purchases list, add form, status, delete = owner/manager). Linked from the asset
+  page ("Tools & Supplies" pill + summary card). Code: app/(app)/assets/[id]/tools/*, lib/asset-tools.ts.
+- One entry, two views: adding an item (default on) also inserts an `expenses` row (expense_type 'asset',
+  category by kind) and stores `expense_id`; deleting the item deletes that expense.
+- Repeat-purchase alert: same asset + same item type (or same normalized name when no type) inside the type's
+  window → `notifyRepeatToolPurchase` (lib/notifications.ts, alert type `repeat_purchase`, registered in
+  settings/alerts) → per-person notifications to owner/manager/shop_manager/construction_manager only (not company-wide).
+  Default window 12 months when no type is picked; 0 disables checking for a type.
