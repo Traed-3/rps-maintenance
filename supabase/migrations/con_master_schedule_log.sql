@@ -1,7 +1,7 @@
 -- Running history of Starsky's Master Schedule job rows (Job List + Completed Jobs tabs).
 --
 -- The workbook is overwritten every day, so a row's W/O ("WOT0061857" or the name of whoever authorized the work)
--- is gone once the row is cleared. scripts/sync-master-schedule-log.py (hourly, on the office Mac) upserts every row
+-- is gone once the row is cleared. scripts/sync-master-schedule-log.py (7:05 / 12:05 / 17:05, on the office Mac) upserts every row
 -- it sees — one row per tab + site + W/O + scope, with first/last seen — and never deletes, so the authorization
 -- stays on record. The ticket sync (lib/job-email-feed.ts) reads it first when a job has no WO#.
 --

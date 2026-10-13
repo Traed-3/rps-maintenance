@@ -333,9 +333,9 @@ history and use up the ticket's 4-attachment cap).
   choices); (4) service calls at the site in 60 days — suggestions only, never written (a wrong WO# makes that call
   follow the job). Never overwrites an existing WO#. `isAuthorization` drops scope notes parked in the W/O column
   ("Disp replacement x 2"). The ticket draft's billing preview prints "WO# / authorized by: …" or MISSING.
-- Master Schedule history: Starsky rewrites the workbook daily, so the office Mac snapshots it hourly
-  (`scripts/master-schedule-hourly.sh` via LaunchAgent `com.rps.master-schedule-sync`, log
-  ~/Library/Logs/rps-master-schedule.log): `sync-master-schedule-log.py` upserts every Job List row into
+- Master Schedule history: Starsky rewrites the workbook daily, so the office Mac snapshots it at 7:05, 12:05 and 17:05
+  (`scripts/master-schedule-hourly.sh`, run by the Claude desktop scheduled task `rps-master-schedule-snapshot` — a
+  launchd agent can't read ~/Library/CloudStorage without granting bash Full Disk Access): `sync-master-schedule-log.py` upserts every Job List row into
   `con_master_schedule_log` (migration con_master_schedule_log.sql; first/last seen, never deleted) and
   `import-master-schedule.py --apply` records who-went-where per day in con_schedule_entries (replaces today and
   later only). Uses /usr/bin/python3 (has openpyxl). The Completed Jobs tab has no W/O column.

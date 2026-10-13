@@ -9,7 +9,7 @@ whoever authorized the work, like "John M") is lost once a row is cleared. This 
 one log row per site + W/O + scope — bumping last_seen_at, and marks rows that have left the sheet on_sheet=false.
 It never deletes, so the authorization stays on record for the ticket sync (lib/job-email-feed.ts).
 
-Runs hourly from scripts/master-schedule-hourly.sh. Reads NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+Run three times a day by scripts/master-schedule-hourly.sh. Reads NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 from .env.local next to the repo root.
 """
 import sys, re, json, hashlib, datetime, importlib.util

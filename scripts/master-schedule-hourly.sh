@@ -1,9 +1,9 @@
 #!/bin/bash
-# Hourly snapshot of Starsky's Master Schedule (the workbook is rewritten daily, so anything not captured is lost):
+# Snapshot (7:05 / 12:05 / 17:05) of Starsky's Master Schedule (the workbook is rewritten daily, so anything not captured is lost):
 #   1. sync-master-schedule-log.py  — every Job List row + its W/O / authorizer, kept forever
 #   2. import-master-schedule.py    — who goes where each day (con_schedule_entries; replaces today and later only,
 #                                     so past days keep their record)
-# Run by ~/Library/LaunchAgents/com.rps.master-schedule-sync.plist (see scripts/com.rps.master-schedule-sync.plist).
+# Run by the Claude desktop scheduled task "rps-master-schedule-snapshot" (the app can read Dropbox; launchd can't).
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$HOME/Library/CloudStorage/Dropbox-RP/Construction Department/1-Master Schedule/1 - Schedule/1 - Master schedule .xlsm"
