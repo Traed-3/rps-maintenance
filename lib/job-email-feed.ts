@@ -155,10 +155,32 @@ export const DRAFT_JOB_STATUS = 'Draft — started automatically from a field ti
  * (Trae 10/13/26: tickets were silently dropped when nobody had opened the project yet). Fills site, address
  * and brand from con_sites when the site is known; the office confirms the rest.
  */
+/**
+ * Gmail's own verdict (an mx.google.com Authentication-Results header — a sender can add their own, so others are
+ * ignored) shows DMARC pass aligned to this exact address's domain. Combined with an exact staff address, that is
+ * what stops anyone who can email rpinvoicing from opening a job with a crafted "12345 (x2)" subject.
+ */
+function isAuthenticatedSender(msg: { payload?: { headers?: { name: string; value: string }[] } }, email: string): boolean {
+  if (!/^[^\s@,<>"]+@[^\s@,<>"]+$/.test(email)) return false
+  const domain = email.split('@')[1]
+  const verdicts = (msg.payload?.headers ?? [])
+    .filter(h => h.name.toLowerCase() === 'authentication-results' && /^\s*mx\.google\.com\b/i.test(h.value))
+    .map(h => h.value)
+  if (!verdicts.length) return false
+  const aligned = new RegExp(`\\bdmarc=pass\\b[^;]*header\\.from=${domain.replace(/[^a-z0-9]/gi, c => '\\' + c)}\\b`, 'i')
+  return verdicts.every(v => aligned.test(v))
+}
+
 async function createDraftJobForTicket(
-  admin: ReturnType<typeof createAdminClient>, messageId: string, keys: string[], subject: string, internalDate?: string,
+  admin: ReturnType<typeof createAdminClient>, msg: Awaited<ReturnType<typeof getMessage>>, messageId: string,
+  keys: string[], subject: string, internalDate?: string,
 ): Promise<{ job: Job; reason?: undefined } | { job?: undefined; reason: string }> {
   const ticketDate = ymdET(internalDate)
+  // Only a ticket from an active staff address, verified by Gmail, may open a job.
+  const from = parseAddress(header(msg, 'From')).email.trim().toLowerCase()
+  const { data: staff } = await admin.from('profiles').select('id').ilike('email', from.replace(/[%_\\]/g, c => '\\' + c)).eq('is_active', true).limit(1)
+  if (!staff?.length) return { reason: `sender ${from || '(none)'} is not an active staff address` }
+  if (!isAuthenticatedSender(msg as { payload?: { headers?: { name: string; value: string }[] } }, from)) return { reason: `sender ${from} not verified by Gmail (DMARC)` }
   // Service techs use the same "(x2)" subject, so a ticket the service sync already tied to a call, or one for a
   // site with a live (or just-finished) service call, is a service ticket — never a new construction job.
   const { data: svcDoc } = await admin.from('svc_work_order_documents').select('id').eq('gmail_message_id', messageId).not('work_order_id', 'is', null).limit(1)
@@ -218,7 +240,7 @@ export async function syncFieldTickets(opts: { sinceDays?: number; budget?: Budg
       const keys = siteKeysFromSubject(subject)
       let job = await findJobForKeys(admin, keys)
       if (!job && keys.length) {
-        const made = await createDraftJobForTicket(admin, id, keys, subject, msg.internalDate)
+        const made = await createDraftJobForTicket(admin, msg, id, keys, subject, msg.internalDate)
         if (made.job) { job = made.job; out.created.push(`${job.site_number} — "${subject}"`) }
         else out.unmatched.push(`${subject} (${made.reason})`)
       } else if (!job) out.unmatched.push(`${subject} (no site number in the subject)`)

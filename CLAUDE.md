@@ -324,5 +324,5 @@ history and use up the ticket's 4-attachment cap).
 - Sync routes have `maxDuration = 300` (the Claude extract passes 504ed at 60 s).
 - Field tickets (rpinvoicing, "(xN)" subject) for a site with no open job start a draft job (stage in_progress,
   status_detail "Draft — started automatically from a field ticket…") — `createDraftJobForTicket` in lib/job-email-feed.ts.
-  Skipped when the ticket is a service ticket (tied to a svc call, or a live/just-completed svc call at the site) or the
+  Only from an active staff address (profiles.email) with Gmail-verified DMARC. Skipped when the ticket is a service ticket (tied to a svc call, or a live/just-completed svc call at the site) or the
   site's job closed in the last 14 days. Results show in the `updates` pass output as tickets.created / tickets.unmatched.
