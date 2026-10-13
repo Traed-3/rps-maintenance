@@ -72,7 +72,8 @@ export async function addToolItem(assetId: string, _state: State, formData: Form
   if (!itemName) return { error: 'Pick an item type or type what it is.' }
 
   const kindRaw = str(formData.get('kind'))
-  const kind: 'tool' | 'supply' = type?.kind ?? (kindRaw === 'supply' ? 'supply' : 'tool')
+  const kind: 'tool' | 'supply' | 'fluid' =
+    type?.kind ?? (kindRaw === 'supply' ? 'supply' : kindRaw === 'fluid' ? 'fluid' : 'tool')
 
   const quantity = num(formData.get('quantity')) ?? 1
   if (quantity <= 0) return { error: 'Quantity must be more than 0.' }
@@ -81,6 +82,7 @@ export async function addToolItem(assetId: string, _state: State, formData: Form
   const purchasedOn = str(formData.get('purchased_on'))
   if (!purchasedOn) return { error: 'Purchase date is required.' }
 
+  const mileage = num(formData.get('mileage'))
   const vendor = str(formData.get('vendor'))
   const receiptUrl = str(formData.get('receipt_url'))
   const notes = str(formData.get('notes'))
@@ -88,7 +90,7 @@ export async function addToolItem(assetId: string, _state: State, formData: Form
   // One entry, two views: post the matching expense so company expense totals include it.
   let expenseId: string | null = null
   if (formData.get('record_expense') === 'on' && totalCost > 0) {
-    const wantedCategory = kind === 'supply' ? 'Truck Supplies' : 'Truck Tools & Equipment'
+    const wantedCategory = kind === 'supply' ? 'Truck Supplies' : kind === 'fluid' ? 'Truck Fluids' : 'Truck Tools & Equipment'
     const { data: cats } = await admin
       .from('expense_categories')
       .select('id, name')
@@ -126,6 +128,7 @@ export async function addToolItem(assetId: string, _state: State, formData: Form
       type_id: type?.id ?? null,
       item_name: itemName,
       kind,
+      mileage: mileage != null ? Math.round(mileage) : null,
       quantity,
       total_cost: totalCost,
       purchased_on: purchasedOn,
@@ -145,7 +148,7 @@ export async function addToolItem(assetId: string, _state: State, formData: Form
   // Repeat-purchase watch
   const windowMonths = type?.repeat_window_months ?? DEFAULT_REPEAT_WINDOW_MONTHS
   let flagged = ''
-  if (windowMonths > 0) {
+  if (windowMonths > 0 && kind !== 'fluid') {
     const repeats = await loadRepeatsForNewItem(admin, {
       assetId: asset.id,
       typeId: type?.id ?? null,

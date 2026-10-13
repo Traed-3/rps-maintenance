@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS asset_tool_types (
   id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id           uuid NOT NULL REFERENCES companies ON DELETE CASCADE,
   name                 text NOT NULL,
-  kind                 text NOT NULL DEFAULT 'tool' CHECK (kind IN ('tool','supply')),
+  kind                 text NOT NULL DEFAULT 'tool' CHECK (kind IN ('tool','supply','fluid')),
   repeat_window_months integer NOT NULL DEFAULT 12 CHECK (repeat_window_months >= 0),
   is_active            boolean NOT NULL DEFAULT true,
   created_at           timestamptz DEFAULT now(),
@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS asset_tool_items (
   asset_id     uuid NOT NULL REFERENCES assets ON DELETE CASCADE,
   type_id      uuid REFERENCES asset_tool_types ON DELETE SET NULL,
   item_name    text NOT NULL,
-  kind         text NOT NULL DEFAULT 'tool' CHECK (kind IN ('tool','supply')),
+  kind         text NOT NULL DEFAULT 'tool' CHECK (kind IN ('tool','supply','fluid')),
+  mileage      integer,        -- odometer at purchase (fluids → cost per mile)
   quantity     numeric(10,2) NOT NULL DEFAULT 1 CHECK (quantity > 0),
   total_cost   numeric(10,2) NOT NULL DEFAULT 0 CHECK (total_cost >= 0),
   purchased_on date NOT NULL,
@@ -69,15 +70,24 @@ CROSS JOIN (VALUES
   ('Sanding supplies',            'supply',  6),
   ('Blades',                      'supply',  6),
   ('Rags / towels',               'supply',  3),
-  ('Supply (other)',              'supply', 12)
+  ('Supply (other)',              'supply', 12),
+  -- Fluids: re-bought routinely, so no repeat alert (window 0). Tracked for cost per mile.
+  ('DEF',                         'fluid',   0),
+  ('Engine oil',                  'fluid',   0),
+  ('Coolant',                     'fluid',   0),
+  ('Washer fluid',                'fluid',   0),
+  ('Transmission fluid',          'fluid',   0),
+  ('Grease',                      'fluid',   0),
+  ('Fluid (other)',               'fluid',   0)
 ) AS t(name, kind, months)
 ON CONFLICT (company_id, name) DO NOTHING;
 
--- ── "Truck Supplies" expense category (Truck Tools & Equipment already exists) ──
+-- ── Expense categories (Truck Tools & Equipment already exists) ──
 INSERT INTO expense_categories (company_id, name, context, sort_order)
-SELECT c.id, 'Truck Supplies', 'asset', 11
+SELECT c.id, n.name, 'asset', n.sort_order
 FROM companies c
+CROSS JOIN (VALUES ('Truck Supplies', 11), ('Truck Fluids', 12)) AS n(name, sort_order)
 WHERE NOT EXISTS (
   SELECT 1 FROM expense_categories x
-  WHERE x.company_id = c.id AND x.context = 'asset' AND x.name = 'Truck Supplies'
+  WHERE x.company_id = c.id AND x.context = 'asset' AND x.name = n.name
 );

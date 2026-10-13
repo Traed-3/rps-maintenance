@@ -23,9 +23,11 @@ export function ToolForm({
   // clear on their own after a successful save (React resets the uncontrolled inputs).
   const [receipt, setReceipt] = useState<{ url: string | null; at: State }>({ url: null, at: null })
   const [typePick, setTypePick] = useState<{ id: string; at: State }>({ id: '', at: null })
+  const [kindPick, setKindPick] = useState<{ kind: string; at: State }>({ kind: 'tool', at: null })
   const receiptUrl = receipt.at === state ? receipt.url : null
   const typeId = typePick.at === state ? typePick.id : ''
   const picked = types.find((t) => t.id === typeId)
+  const kindNow = picked?.kind ?? (kindPick.at === state ? kindPick.kind : 'tool')
 
   return (
     <form action={formAction} className="space-y-4">
@@ -52,6 +54,11 @@ export function ToolForm({
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </optgroup>
+            <optgroup label="Fluids">
+              {types.filter((t) => t.kind === 'fluid').map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </optgroup>
           </select>
           {picked && (
             <p className="text-xs text-gray-400 mt-1">
@@ -72,10 +79,11 @@ export function ToolForm({
 
       {!picked && (
         <div>
-          <label className={lbl}>Is it a tool or a supply?</label>
-          <select name="kind" className={inp} defaultValue="tool">
+          <label className={lbl}>Is it a tool, a supply or a fluid?</label>
+          <select name="kind" className={inp} defaultValue="tool" onChange={(e) => setKindPick({ kind: e.target.value, at: state })}>
             <option value="tool">Tool (lasts)</option>
             <option value="supply">Supply (gets used up)</option>
+            <option value="fluid">Fluid (DEF, oil, coolant…)</option>
           </select>
         </div>
       )}
@@ -94,6 +102,14 @@ export function ToolForm({
           <input name="purchased_on" type="date" className={inp} defaultValue={today} required />
         </div>
       </div>
+
+      {kindNow === 'fluid' && (
+        <div>
+          <label className={lbl}>Odometer at fill-up (miles)</label>
+          <input name="mileage" type="number" min="0" className={inp} placeholder="Lets us work out fluid cost per mile" />
+          <p className="text-xs text-gray-400 mt-1">Quantity above = gallons (or quarts — just be consistent per truck).</p>
+        </div>
+      )}
 
       <div>
         <label className={lbl}>Vendor</label>

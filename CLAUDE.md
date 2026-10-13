@@ -301,6 +301,7 @@ history and use up the ticket's 4-attachment cap).
   (asset_id, type_id, item_name, kind tool|supply, quantity, total_cost, purchased_on, vendor, receipt_url,
   status on_truck|lost|replaced|consumed|removed, expense_id), plus an asset expense category "Truck Supplies"
   ("Truck Tools & Equipment" already existed).
+- Third kind `fluid` (DEF, oil, coolant…): no repeat alert (window 0), optional odometer (`mileage`) per fill-up → page shows fluid cost per mile once a truck has 2+ fill-ups with mileage; own expense category "Truck Fluids".
 - UI: /assets/[id]/tools (totals, purchases list, add form, status, delete = owner/manager). Linked from the asset
   page ("Tools & Supplies" pill + summary card). Code: app/(app)/assets/[id]/tools/*, lib/asset-tools.ts.
 - One entry, two views: adding an item (default on) also inserts an `expenses` row (expense_type 'asset',

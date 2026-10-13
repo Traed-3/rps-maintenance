@@ -40,7 +40,7 @@ export default async function AssetToolsPage({ params }: { params: Promise<{ id:
   const [{ data: itemsRaw }, { data: typesRaw }] = await Promise.all([
     admin
       .from('asset_tool_items')
-      .select('id, type_id, item_name, kind, quantity, total_cost, purchased_on, vendor, receipt_url, status, notes')
+      .select('id, type_id, item_name, kind, mileage, quantity, total_cost, purchased_on, vendor, receipt_url, status, notes')
       .eq('asset_id', id)
       .order('purchased_on', { ascending: false })
       .order('created_at', { ascending: false }),
@@ -72,9 +72,18 @@ export default async function AssetToolsPage({ params }: { params: Promise<{ id:
   const yearAgoStr = yearAgo.toISOString().split('T')[0]
   const total = items.reduce((s, i) => s + i.total_cost, 0)
   const last12 = items.filter((i) => i.purchased_on >= yearAgoStr).reduce((s, i) => s + i.total_cost, 0)
-  const toolTotal = items.filter((i) => i.kind === 'tool').reduce((s, i) => s + i.total_cost, 0)
-  const supplyTotal = items.filter((i) => i.kind === 'supply').reduce((s, i) => s + i.total_cost, 0)
+  const sumKind = (k: string) => items.filter((i) => i.kind === k).reduce((s, i) => s + i.total_cost, 0)
+  const toolTotal = sumKind('tool')
+  const supplyTotal = sumKind('supply')
+  const fluidTotal = sumKind('fluid')
   const onTruck = items.filter((i) => i.status === 'on_truck' && i.kind === 'tool').length
+
+  // Fluid cost per mile: every fill-up after the first one pays for the miles driven since it.
+  const fluidFills = items
+    .filter((i) => i.kind === 'fluid' && i.mileage != null)
+    .sort((a, b) => (a.mileage as number) - (b.mileage as number))
+  const fluidMiles = fluidFills.length >= 2 ? (fluidFills[fluidFills.length - 1].mileage as number) - (fluidFills[0].mileage as number) : 0
+  const fluidPerMile = fluidMiles > 0 ? fluidFills.slice(1).reduce((s, i) => s + i.total_cost, 0) / fluidMiles : null
 
   const canWrite = profile!.role !== 'viewer'
   const canDelete = ['owner', 'manager'].includes(profile!.role)
@@ -89,12 +98,13 @@ export default async function AssetToolsPage({ params }: { params: Promise<{ id:
       <h1 className="text-2xl font-bold text-gray-900 mt-2">Tools &amp; Supplies — {asset.unit_number}</h1>
       {vehicleLabel && <p className="text-gray-500 text-sm mt-0.5">{vehicleLabel}</p>}
 
-      <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
           ['Total spent', money(total)],
           ['Last 12 months', money(last12)],
-          ['Tools / Supplies', `${money(toolTotal)} / ${money(supplyTotal)}`],
+          ['Tools / Supplies / Fluids', `${money(toolTotal)} / ${money(supplyTotal)} / ${money(fluidTotal)}`],
           ['Tools on truck', String(onTruck)],
+          ['Fluid cost per mile', fluidPerMile != null ? `$${fluidPerMile.toFixed(4)}` : 'needs 2+ fill-ups with mileage'],
         ].map(([label, value]) => (
           <div key={label} className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
             <p className="text-xs text-gray-500">{label}</p>
@@ -141,6 +151,7 @@ export default async function AssetToolsPage({ params }: { params: Promise<{ id:
                           🔁 repeat
                         </span>
                       )}
+                      {it.mileage != null && <p className="text-xs text-gray-400 mt-0.5">at {it.mileage.toLocaleString()} mi</p>}
                       {it.notes && <p className="text-xs text-gray-400 italic mt-0.5">{it.notes}</p>}
                     </td>
                     <td className="py-2 pr-3 text-right text-gray-600">{it.quantity}</td>

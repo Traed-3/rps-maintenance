@@ -23,7 +23,7 @@ export const DEFAULT_REPEAT_WINDOW_MONTHS = 12
 export interface ToolType {
   id: string
   name: string
-  kind: 'tool' | 'supply'
+  kind: 'tool' | 'supply' | 'fluid'
   repeat_window_months: number
 }
 
