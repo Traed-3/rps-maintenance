@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(30, Math.max(1, parseInt(request.nextUrl.searchParams.get('limit') ?? '15', 10) || 15))
   // Optional REV19 category (1–12): the builder's per-category pickers only want parts filed there.
   const category = parseInt(request.nextUrl.searchParams.get('category') ?? '', 10)
+  // Service tickets price from the master list's sell price; quotes keep the cost + markup rule.
+  const preferSell = request.nextUrl.searchParams.get('prefer') === 'sell'
   if (q.length < 2) return NextResponse.json({ parts: [] })
 
   const like = `%${q.replace(/[%_,]/g, ' ')}%`
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
   const RANK: Record<string, number> = { receipt: 0, vendor_quote: 1, book: 2, sell_billed: 3, web: 4, estimate: 5, rate_card: 6 }
   const qUpper = q.toUpperCase()
   const parts = (data ?? [])
-    .map(p => ({ ...p, suggested_price: sellPriceForLine(p, 0) }))
+    .map(p => ({ ...p, suggested_price: preferSell && p.sell_price != null ? Number(p.sell_price) : sellPriceForLine(p, 0) }))
     .sort((a, b) => {
       const ea = (a.part_number ?? '').toUpperCase() === qUpper ? -1 : 0, eb = (b.part_number ?? '').toUpperCase() === qUpper ? -1 : 0
       if (ea !== eb) return ea - eb
