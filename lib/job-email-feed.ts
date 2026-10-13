@@ -177,6 +177,15 @@ async function ticketWoTokens(admin: ReturnType<typeof createAdminClient>, msg: 
 const SCHEDULE_WINDOW_DAYS = 120
 /** RPS's own mailboxes that forward work orders (the service department's dispatcher and invoicing inboxes). */
 const COMPANY_MAILBOXES = new Set(['rpdispatcher@gmail.com', 'rpinvoicing@gmail.com', 'econstruction.rp@gmail.com'])
+/**
+ * The customers' ticketing systems, by exact sender address. Anyone can run a ServiceNow instance that mails from
+ * @service-now.com, so the domain alone is not trusted. These are the two seen in rpdispatcher (lookup 2026-10-13:
+ * 7HELP Service Desk 88 msgs, WTSC 12); add more comma-separated in TRUSTED_TICKETING_SENDERS.
+ */
+const TRUSTED_TICKETING_SENDERS = new Set(['7elevenna@service-now.com', 'wawa@service-now.com',
+  ...(process.env.TRUSTED_TICKETING_SENDERS ?? '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean)])
+/** App roles that count as RPS staff for a ticket or forward; viewers can be outside parties. */
+const STAFF_ROLES = ['owner', 'manager', 'construction_manager', 'construction_tech', 'service_tech', 'field_surveyor', 'shop_employee', 'mechanic']
 const day = (ymd: string, offsetDays: number) => new Date(new Date(`${ymd}T12:00:00Z`).getTime() + offsetDays * 86_400_000).toISOString()
 const distinct = (xs: string[]) => { const seen = new Map<string, string>(); for (const x of xs) if (!seen.has(x.trim().toUpperCase())) seen.set(x.trim().toUpperCase(), x.trim()); return [...seen.values()] }
 
@@ -213,7 +222,7 @@ async function scheduleAuthorization(admin: ReturnType<typeof createAdminClient>
 /**
  * 3. Work orders forwarded to econstruction for the site — by the service department or a customer. A WO# counts
  * as fact only from a sender Gmail verified as RPS (staff or an RPS mailbox) or the customer's ticketing system
- * (service-now); a WO# in anyone else's email is offered as a choice, since anyone can email econstruction.
+ * (exact addresses in TRUSTED_TICKETING_SENDERS); a WO# in anyone else's email is offered as a choice, since anyone can email econstruction.
  */
 async function econstructionAuthorization(admin: ReturnType<typeof createAdminClient>, keys: string[], ticketDate: string): Promise<{ wo: string | null; candidates: string[]; errors: string[] }> {
   if (!connectedInboxes().includes('econstruction')) return { wo: null, candidates: [], errors: [] }
@@ -319,7 +328,7 @@ async function staffSenderProblem(admin: ReturnType<typeof createAdminClient>, m
   const from = singleFromAddress(m)
   if (!from) return 'From header is not a single plain address'
   // Exact comparison in code — PostgREST's ilike treats * as a wildcard, so a pattern match could be steered.
-  const { data: staff } = await admin.from('profiles').select('email').eq('is_active', true).not('email', 'is', null)
+  const { data: staff } = await admin.from('profiles').select('email').eq('is_active', true).in('role', STAFF_ROLES).not('email', 'is', null)
   if (!(staff ?? []).some(p => (p.email as string).trim().toLowerCase() === from)) return `sender ${from} is not an active staff address`
   if (!isAuthenticatedSender(m, from)) return `sender ${from} not verified by Gmail (DMARC)`
   return null
@@ -328,13 +337,13 @@ async function staffSenderProblem(admin: ReturnType<typeof createAdminClient>, m
 /**
  * Mail whose WO# can be taken as fact: Gmail verified (DMARC aligned, mx.google.com verdict) that it really came from
  * RPS — an active staff address or one of the company mailboxes — or from the customer's ticketing system
- * (service-now). Everyone else's WO# is only offered as a choice.
+ * (TRUSTED_TICKETING_SENDERS, exact addresses). Everyone else's WO# is only offered as a choice.
  */
 async function isTrustedWoSender(admin: ReturnType<typeof createAdminClient>, msg: GmailMsg): Promise<boolean> {
   const m = msg as { payload?: { headers?: { name: string; value: string }[] } }
   const from = singleFromAddress(m)
   if (!from || !isAuthenticatedSender(m, from)) return false
-  if (COMPANY_MAILBOXES.has(from) || /@service-now\.com$/.test(from)) return true
+  if (COMPANY_MAILBOXES.has(from) || TRUSTED_TICKETING_SENDERS.has(from)) return true
   return !(await staffSenderProblem(admin, msg))
 }
 
