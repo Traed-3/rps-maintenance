@@ -326,3 +326,16 @@ history and use up the ticket's 4-attachment cap).
   status_detail "Draft — started automatically from a field ticket…") — `createDraftJobForTicket` in lib/job-email-feed.ts.
   Only from an active staff address (profiles.email) with Gmail-verified DMARC. Skipped when the ticket is a service ticket (tied to a svc call, or a live/just-completed svc call at the site) or the
   site's job closed in the last 14 days. Results show in the `updates` pass output as tickets.created / tickets.unmatched.
+- WO# / authorization for ticket jobs (2026-10-13). When a ticket's job has no WO#, lib/job-email-feed.ts
+  `ticketAuthorization` checks, in Trae's order: (1) Master Schedule W/O for the site — a WO# or who authorized it —
+  from `con_master_schedule_log`; (2) a WO# on the ticket email/thread (verified staff sender only); (3) work orders
+  forwarded to econstruction (taken as fact only from verified RPS staff/mailboxes or service-now; others are
+  choices); (4) service calls at the site in 60 days — suggestions only, never written (a wrong WO# makes that call
+  follow the job). Never overwrites an existing WO#. `isAuthorization` drops scope notes parked in the W/O column
+  ("Disp replacement x 2"). The ticket draft's billing preview prints "WO# / authorized by: …" or MISSING.
+- Master Schedule history: Starsky rewrites the workbook daily, so the office Mac snapshots it hourly
+  (`scripts/master-schedule-hourly.sh` via LaunchAgent `com.rps.master-schedule-sync`, log
+  ~/Library/Logs/rps-master-schedule.log): `sync-master-schedule-log.py` upserts every Job List row into
+  `con_master_schedule_log` (migration con_master_schedule_log.sql; first/last seen, never deleted) and
+  `import-master-schedule.py --apply` records who-went-where per day in con_schedule_entries (replaces today and
+  later only). Uses /usr/bin/python3 (has openpyxl). The Completed Jobs tab has no W/O column.
