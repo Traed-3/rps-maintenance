@@ -178,6 +178,7 @@ export async function backfillFieldTicketsForJob(jobId: string, opts: { apply?: 
 
     const input: FieldTicketDraftInput = {
       companyId: job.company_id, jobId: job.id, workDate,
+      workOrder: job.work_order_number,
       description: description || '(no typed update body — see ticket photo)',
       techs: ocr.techs.map(t => ({ name: t.name, onsite_hours: t.onsite_hours })),
       trucks: ocr.trucks,

@@ -230,7 +230,7 @@ Own top-level modules shared by Construction and Service (department-tagged), NO
   → store attachments → classify kind/vendor/ref), extractDocument/extractPending (Claude `claude-sonnet-5`, PDF/image
   document blocks, forced `record_document` tool, fallback claude-sonnet-4-6) + matchLinesToCatalog (normalized
   part number, prefix-stripped, then contains). Route GET /api/billing/inbox-sync?secret&pass=sync|extract|both
-  (CRON_SECRET); GitHub Actions gmail-sync.yml job `billing-inbox-sync` every 15 min. Never archives/marks read.
+  (CRON_SECRET); scheduled every 15 min by Supabase pg_cron (see SYNC SCHEDULE below). Never archives/marks read.
   UI: /inventory/receive/queue (tabs by status, inbox status strip, Sync now), /inventory/receive/queue/[id]
   (attachment preview via signed URL, editable lines with PartPicker re-match / "create as new part", mode
   "Put into stock" (receive rows + receipt cost) or "Cost update only", duplicate-reference warning, dismiss).
@@ -310,3 +310,32 @@ history and use up the ticket's 4-attachment cap).
   window → `notifyRepeatToolPurchase` (lib/notifications.ts, alert type `repeat_purchase`, registered in
   settings/alerts) → per-person notifications to owner/manager/shop_manager/construction_manager only (not company-wide).
   Default window 12 months when no type is picked; 0 disables checking for a type.
+
+---
+
+## SYNC SCHEDULE (changed 2026-10-13)
+
+- Every 15 min via Supabase pg_cron + pg_net: `supabase/migrations/sync_pg_cron.sql` (run in SQL Editor after storing
+  CRON_SECRET in Vault as `rps_cron_secret`). Nine staggered jobs `rps-*`, one per pass (gmail sync, svc dispatcher /
+  invoicing / reconcile / extract-docs, billing sync / extract / updates / orders). App URL lives in `rps_cron.call()`.
+  Why: GitHub's */15 schedule only fired ~every 6 h; Vercel Cron on Hobby is once a day.
+- `.github/workflows/gmail-sync.yml` is now manual-only (Run workflow = full sync + the backfill/lookup tools); later
+  steps run even if an earlier one fails.
+- Sync routes have `maxDuration = 300` (the Claude extract passes 504ed at 60 s).
+- Field tickets (rpinvoicing, "(xN)" subject) for a site with no open job start a draft job (stage in_progress,
+  status_detail "Draft — started automatically from a field ticket…") — `createDraftJobForTicket` in lib/job-email-feed.ts.
+  Only from an active staff address (profiles.email) with Gmail-verified DMARC. Skipped when the ticket is a service ticket (tied to a svc call, or a live/just-completed svc call at the site) or the
+  site's job closed in the last 14 days. Results show in the `updates` pass output as tickets.created / tickets.unmatched.
+- WO# / authorization for ticket jobs (2026-10-13). When a ticket's job has no WO#, lib/job-email-feed.ts
+  `ticketAuthorization` checks, in Trae's order: (1) Master Schedule W/O for the site — a WO# or who authorized it —
+  from `con_master_schedule_log`; (2) a WO# on the ticket email/thread (verified staff sender only); (3) work orders
+  forwarded to econstruction (taken as fact only from verified RPS staff/mailboxes or service-now; others are
+  choices); (4) service calls at the site in 60 days — suggestions only, never written (a wrong WO# makes that call
+  follow the job). Never overwrites an existing WO#. `isAuthorization` drops scope notes parked in the W/O column
+  ("Disp replacement x 2"). The ticket draft's billing preview prints "WO# / authorized by: …" or MISSING.
+- Master Schedule history: Starsky rewrites the workbook daily, so the office Mac snapshots it at 7:05, 12:05 and 17:05
+  (`scripts/master-schedule-hourly.sh`, run by the Claude desktop scheduled task `rps-master-schedule-snapshot` — a
+  launchd agent can't read ~/Library/CloudStorage without granting bash Full Disk Access): `sync-master-schedule-log.py` upserts every Job List row into
+  `con_master_schedule_log` (migration con_master_schedule_log.sql; first/last seen, never deleted) and
+  `import-master-schedule.py --apply` records who-went-where per day in con_schedule_entries (replaces today and
+  later only). Uses /usr/bin/python3 (has openpyxl). The Completed Jobs tab has no W/O column.

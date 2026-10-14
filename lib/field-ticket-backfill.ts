@@ -41,6 +41,8 @@ export type FieldTicketDraftInput = {
   equipmentFee?: EquipmentFeeFlag
   crossCheckNotes?: string[]
   pendingCorrectionNote?: string
+  /** The job's WO# or who authorized the work (Master Schedule W/O); null/blank prints as missing so the office chases it. */
+  workOrder?: string | null
   sourceRefs: Record<string, string | undefined>
   attachments?: { bytes: Uint8Array; filename: string; mimeType: string; kind: 'daily_ticket' | 'photo' }[]
 }
@@ -75,6 +77,9 @@ function money(n: number): string {
 
 function buildBillingPreview(input: FieldTicketDraftInput, trip: TripFeeCalc): string {
   const lines: string[] = ['BILLING PREVIEW (draft — confirm before invoicing)']
+  lines.push(input.workOrder?.trim()
+    ? `  WO# / authorized by: ${input.workOrder.trim()}`
+    : '  WO# / authorized by: MISSING — not on the Master Schedule, the ticket or econstruction; get it before invoicing')
   for (const t of input.techs) lines.push(`  ${t.name}${t.initials ? ` (${t.initials})` : ''} — ${t.onsite_hours} hr onsite`)
   lines.push(`  Trip fee: ${trip.note}`)
   if (input.equipmentFee) {

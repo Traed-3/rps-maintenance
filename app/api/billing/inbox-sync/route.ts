@@ -6,7 +6,8 @@ import { backfillPermitEmails } from '@/lib/permit-email-backfill'
 import { backfillFieldTicketsForJob } from '@/lib/field-ticket-gmail-match'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+// 300 s (Fluid Compute): the Claude document read (pass=extract) ran past the old 60 s and 504ed.
+export const maxDuration = 300
 
 /**
  * GET /api/billing/inbox-sync?secret=…&pass=sync|extract|both|updates|orders|backfill-permits[&inbox=econstruction][&max=30][&since=14][&limit=3]

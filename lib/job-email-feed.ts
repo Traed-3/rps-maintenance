@@ -17,12 +17,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { listMessages, getMessage, getThread, getAttachment, listAttachments, header, parseAddress, extractText, connectedInboxes } from '@/lib/billing-gmail-client'
 import { stripQuoted, INBOX_BUCKET, type ThreadReply } from '@/lib/billing-inbox-sync'
 import { backfillFieldTicketsForJob } from '@/lib/field-ticket-gmail-match'
+import { woTokens } from '@/lib/svc-construction-link'
 
 const DOCS_BUCKET = 'construction-docs'
 const MAX_PHOTO_BYTES = 12 * 1024 * 1024
 const MAX_PHOTOS_PER_UPDATE = 6
 const MAX_UPDATES_PER_PASS = 4
-/** Vercel gives the route 60 s; each pass stops starting new work after this many ms and finishes on the next tick. */
+/** Each pass stops starting new work after this many ms and finishes on the next tick — kept well under the route's 300 s so one pass doesn't burn a mailbox's per-minute Gmail quota. */
 const PASS_BUDGET_MS = 40_000
 const MAX_TICKET_JOBS_PER_PASS = 3
 const PHOTO_MIME = /^image\/(jpeg|jpg|png|heic|heif|webp)$/i
@@ -35,17 +36,18 @@ const over = (b?: Budget) => !!b && Date.now() > b.deadline
 
 export type FeedResult = {
   updates: { filed: number; skipped: number; unmatched: string[]; errors: string[]; budget_hit?: boolean }
-  tickets: { jobs: number; filed: number; errors: string[]; budget_hit?: boolean }
+  tickets: { jobs: number; filed: number; created: string[]; paired: string[]; needs_wo: string[]; unmatched: string[]; errors: string[]; budget_hit?: boolean }
   invoices: { filed: number; completed: number; unmatched: string[]; errors: string[]; budget_hit?: boolean }
   orders: { sent: number; po: number; replied: number; errors: string[]; budget_hit?: boolean }
 }
 
 type Job = { id: string; company_id: string; site_number: string | null; work_order_number: string | null; stage: string; status_detail: string | null; updated_at: string | null }
 
-/** "Re: Fwd: SU-9901 update MUL boots" -> ["SU-9901"]; "45967/58802 Invoice Wire Pull" -> ["45967","58802"]; "Wawa 8659 Update" -> ["Wawa 8659","8659"]. */
+/** "Re: Fwd: SU-9901 update MUL boots" -> ["SU-9901"]; "Fwd: SD- 40043 -6.5(x3)" -> ["40043"]; "45967/58802 Invoice Wire Pull" -> ["45967","58802"]; "Wawa 8659 Update" -> ["Wawa 8659","8659"]. */
 export function siteKeysFromSubject(subject: string): string[] {
-  // Techs sometimes lead with the word: "Update SU 9901", "UPDATE 32361".
-  const head = subject.replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, '').replace(/^update\s*[:\-]?\s+(?=\S)/i, '').trim()
+  // Techs sometimes lead with the word: "Update SU 9901", "UPDATE 32361". "SD- 40043 -6.5(x3)" = sent on by
+  // Starsky Dodson (his initials, Trae 10/13/26), not a site prefix.
+  const head = subject.replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, '').replace(/^SD\s*-\s*(?=\S)/i, '').replace(/^update\s*[:\-]?\s+(?=\S)/i, '').trim()
   let m = head.match(/^((?:SU|IP|CP|CPG|F)\s*-?\s*\d{3,5})\b/i)
   if (m) { const p = m[1].toUpperCase().replace(/\s+/g, ''); return [p.startsWith('IP') ? p.replace('-', '') : p.replace(/^(SU|CP|CPG|F)-?/, '$1-')] }
   m = head.match(/^((?:Wawa|Global|Sheetz|Sunoco|Royal Farms|Handy Mart)\s*#?\s*(\d{2,5}))\b/i)
@@ -146,9 +148,254 @@ export async function syncTechUpdates(opts: { sinceDays?: number; budget?: Budge
   return out
 }
 
-/** 2. New handwritten tickets in rpinvoicing → the existing per-job backfill (OCR + needs_review draft), a few jobs per pass. */
+/** A ticket this soon after the site's last job closed is a trailing ticket for that job, not new work. */
+const LATE_TICKET_DAYS = 14
+export const DRAFT_JOB_STATUS = 'Draft — started automatically from a field ticket; confirm scope, customer and stage'
+
+/** A service call dispatched this long before a ticket can still be the work it authorizes. */
+const AUTH_LOOKBACK_DAYS = 60
+type GmailMsg = Awaited<ReturnType<typeof getMessage>>
+type TicketAuth = { wo: string | null; source: string; candidates: string[] }
+
+const ownWoTokens = (msg: GmailMsg) => woTokens(`${header(msg, 'Subject')}\n${extractText(msg)}`)
+
+/**
+ * WO#s on the ticket email, else in its thread (Starsky files tickets under the portal WO thread). Anyone can reply
+ * into a thread by matching the subject, so a thread message only counts when its sender is verified.
+ * Callers have already verified the ticket's own sender.
+ */
+async function ticketWoTokens(admin: ReturnType<typeof createAdminClient>, msg: GmailMsg): Promise<string[]> {
+  const own = ownWoTokens(msg)
+  if (own.length || !msg.threadId) return own
+  const thread = await getThread('rpinvoicing', msg.threadId)
+  const texts: string[] = []
+  for (const m of thread.messages) if (m.id !== msg.id && await isTrustedWoSender(admin, m)) texts.push(`${header(m, 'Subject')}\n${extractText(m)}`)
+  return woTokens(texts.join('\n'))
+}
+
+/** Master Schedule rows this far either side of a ticket can be the job it belongs to. */
+const SCHEDULE_WINDOW_DAYS = 120
+/** RPS's own mailboxes that forward work orders (the service department's dispatcher and invoicing inboxes). */
+const COMPANY_MAILBOXES = new Set(['rpdispatcher@gmail.com', 'rpinvoicing@gmail.com', 'econstruction.rp@gmail.com'])
+/**
+ * The customers' ticketing systems, by exact sender address. Anyone can run a ServiceNow instance that mails from
+ * @service-now.com, so the domain alone is not trusted. These are the two seen in rpdispatcher (lookup 2026-10-13:
+ * 7HELP Service Desk 88 msgs, WTSC 12); add more comma-separated in TRUSTED_TICKETING_SENDERS.
+ */
+const TRUSTED_TICKETING_SENDERS = new Set(['7elevenna@service-now.com', 'wawa@service-now.com',
+  ...(process.env.TRUSTED_TICKETING_SENDERS ?? '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean)])
+/** App roles that count as RPS staff for a ticket or forward; viewers can be outside parties. */
+const STAFF_ROLES = ['owner', 'manager', 'construction_manager', 'construction_tech', 'service_tech', 'field_surveyor', 'shop_employee', 'mechanic']
+const day = (ymd: string, offsetDays: number) => new Date(new Date(`${ymd}T12:00:00Z`).getTime() + offsetDays * 86_400_000).toISOString()
+const distinct = (xs: string[]) => { const seen = new Map<string, string>(); for (const x of xs) if (!seen.has(x.trim().toUpperCase())) seen.set(x.trim().toUpperCase(), x.trim()); return [...seen.values()] }
+
+const NAME_WORD = String.raw`(?:[A-Z][a-z']+\.?|[A-Z]\.?|[A-Z]{2,4})`
+const AUTHORIZER = new RegExp(String.raw`^${NAME_WORD}(?:\s+${NAME_WORD}){0,2}(?:\s*-\s*${NAME_WORD})?(?:\s*\(?\+?[\d\s().-]{7,}\)?)?$`)
+const PERSON_THEN_NOTE = /^[A-Z][a-z']+(?:\s+[A-Z][a-z']*\.?){0,2}\s+-\s+\S/
+/**
+ * A W/O cell that records an authorization: a WO#, or the person who gave it ("John M", "Katina Walters",
+ * "Joel Silver (304-582-2490)", "PF - PE") — not a scope note Starsky parked there ("Disp replacement x 2").
+ */
+export function isAuthorization(wo: string): boolean {
+  const v = wo.trim()
+  // "Kevin Rickard - Patriot clean fuel", "Liz - Needs repiped": a real (mixed-case) name ahead of a note.
+  return woTokens(v).length > 0 || AUTHORIZER.test(v) || PERSON_THEN_NOTE.test(v)
+}
+
+/**
+ * 1. Starsky's Master Schedule — the W/O column for the site (a WO# or the name of whoever authorized the work), from
+ * the running history the office Mac keeps (con_master_schedule_log; the sheet itself is rewritten daily). Rows still
+ * on the sheet win; otherwise the rows seen nearest the ticket. One distinct W/O is the answer; more is a choice.
+ */
+async function scheduleAuthorization(admin: ReturnType<typeof createAdminClient>, keys: string[], ticketDate: string): Promise<{ wo: string | null; candidates: string[] }> {
+  const { data, error } = await admin.from('con_master_schedule_log').select('wo, on_sheet, last_seen_at')
+    .overlaps('site_tokens', keys).not('wo', 'is', null)
+    .gte('last_seen_at', day(ticketDate, -SCHEDULE_WINDOW_DAYS)).lte('first_seen_at', day(ticketDate, SCHEDULE_WINDOW_DAYS))
+    .order('last_seen_at', { ascending: false }).limit(20)
+  const rows = (data ?? []).filter(r => isAuthorization(r.wo as string))
+  if (error || !rows.length) return { wo: null, candidates: [] }   // table not created yet, or nothing logged for the site
+  const live = rows.filter(r => r.on_sheet)
+  const pool = distinct((live.length ? live : rows.filter(r => r.last_seen_at === rows[0].last_seen_at)).map(r => r.wo as string))
+  return pool.length === 1 ? { wo: pool[0], candidates: [] } : { wo: null, candidates: distinct(rows.map(r => r.wo as string)) }
+}
+
+/**
+ * 3. Work orders forwarded to econstruction for the site — by the service department or a customer. A WO# counts
+ * as fact only from a sender Gmail verified as RPS (staff or an RPS mailbox) or the customer's ticketing system
+ * (exact addresses in TRUSTED_TICKETING_SENDERS); a WO# in anyone else's email is offered as a choice, since anyone can email econstruction.
+ */
+async function econstructionAuthorization(admin: ReturnType<typeof createAdminClient>, keys: string[], ticketDate: string): Promise<{ wo: string | null; candidates: string[]; errors: string[] }> {
+  if (!connectedInboxes().includes('econstruction')) return { wo: null, candidates: [], errors: [] }
+  const terms = keys.map(k => `"${k.replace(/"/g, '')}"`).join(' OR ')
+  const after = day(ticketDate, -SCHEDULE_WINDOW_DAYS).slice(0, 10).replace(/-/g, '/')
+  const trusted: string[] = [], other: string[] = [], errors: string[] = []
+  let ids: string[] = []
+  try { ids = await listMessages('econstruction', `(${terms}) (WOT OR FWKD OR "work order") after:${after}`, 10) } catch (e) { return { wo: null, candidates: [], errors: [`econstruction search: ${(e as Error).message}`] } }
+  for (const id of ids) {
+    try {
+      const msg = await getMessage('econstruction', id)
+      const text = `${header(msg, 'Subject')}\n${extractText(msg)}`
+      if (!keys.some(k => text.includes(k))) continue
+      const toks = woTokens(text)
+      if (!toks.length) continue
+      ;(await isTrustedWoSender(admin, msg) ? trusted : other).push(...toks)
+    } catch (e) { errors.push(`econstruction ${id}: ${(e as Error).message}`) }
+  }
+  const sure = distinct(trusted)
+  return sure.length === 1 ? { wo: sure[0], candidates: [], errors } : { wo: null, candidates: distinct([...sure, ...other]), errors }
+}
+
+/**
+ * Where a ticket's work was authorized, checked in Trae's order (10/13/26):
+ *   1. the Master Schedule W/O for the site (WO# or who authorized it),
+ *   2. a WO# written on the ticket or its thread — only when the ticket's sender is verified staff,
+ *   3. work orders forwarded to econstruction by the service department or a customer,
+ *   4. service calls at the site in the 60 days before — suggestions only: busy sites get many routine calls, and a
+ *      wrong WO# on a job makes that call follow the job (svc-construction-link) and hides its own completion.
+ */
+async function ticketAuthorization(
+  admin: ReturnType<typeof createAdminClient>, msg: GmailMsg, keys: string[], ticketDate: string, senderVerified: boolean,
+): Promise<TicketAuth & { errors: string[] }> {
+  if (!keys.length) return { wo: null, source: 'no site number', candidates: [], errors: [] }
+  const sched = await scheduleAuthorization(admin, keys, ticketDate)
+  if (sched.wo) return { wo: sched.wo, source: 'Master Schedule W/O', candidates: [], errors: [] }
+  if (senderVerified) {
+    const tokens = await ticketWoTokens(admin, msg)
+    if (tokens.length) return { wo: tokens.join(' - '), source: 'WO# on the ticket email', candidates: [], errors: [] }
+  }
+  const econ = await econstructionAuthorization(admin, keys, ticketDate)
+  if (econ.wo) return { wo: econ.wo, source: 'work order forwarded to econstruction', candidates: [], errors: econ.errors }
+  const { data: calls } = await admin.from('svc_work_orders').select('portal_wo_number')
+    .or(keys.map(k => `site_number.ilike.${k}`).join(',')).not('portal_wo_number', 'is', null)
+    .gte('dispatched_at', day(ticketDate, -AUTH_LOOKBACK_DAYS)).lte('dispatched_at', `${ticketDate}T23:59:59Z`).order('dispatched_at', { ascending: false }).limit(10)
+  const candidates = distinct([...sched.candidates, ...econ.candidates, ...(calls ?? []).map(c => c.portal_wo_number as string)])
+  return {
+    wo: null, errors: econ.errors, candidates,
+    source: candidates.length ? 'nothing certain on the Master Schedule, the ticket or econstruction — possible' : 'not on the Master Schedule, the ticket, econstruction or a recent service call',
+  }
+}
+
+/** The job already carrying one of these WO#s (the ticket names its WO, so that beats a site-number match). */
+async function findJobForWo(admin: ReturnType<typeof createAdminClient>, tokens: string[]): Promise<Job | null> {
+  for (const wo of tokens) {
+    const { data } = await admin.from('con_jobs').select('id, company_id, site_number, work_order_number, stage, status_detail, updated_at')
+      .ilike('work_order_number', `%${wo}%`).neq('stage', 'complete').order('updated_at', { ascending: false }).limit(1)
+    if (data?.length) return data[0] as Job
+  }
+  return null
+}
+
+const needsWoNote = (a: TicketAuth) => `Needs WO# / authorization — ${a.source}${a.candidates.length ? `: ${a.candidates.join(', ')}` : ''}`
+
+/**
+ * A field ticket for a site with no open job: start the job as a draft so the ticket has somewhere to land
+ * (Trae 10/13/26: tickets were silently dropped when nobody had opened the project yet). Fills site, address
+ * and brand from con_sites when the site is known; the office confirms the rest.
+ */
+/**
+ * Gmail's own verdict (an mx.google.com Authentication-Results header — a sender can add their own, so others are
+ * ignored) shows DMARC pass aligned to this exact address's domain. Combined with an exact staff address, that is
+ * what stops anyone who can email rpinvoicing from opening a job with a crafted "12345 (x2)" subject.
+ */
+/**
+ * The one address in the one From header, or null. Gmail hands back decoded header values, so a display name can
+ * carry an address of its own ("Trae <tdodson.rp@gmail.com>" encoded into the name, then the real sender) — anything
+ * with more than one "@", more than one From header, or a group/comment form is refused rather than parsed.
+ */
+export function singleFromAddress(msg: { payload?: { headers?: { name: string; value: string }[] } }): string | null {
+  const froms = (msg.payload?.headers ?? []).filter(h => h.name.toLowerCase() === 'from')
+  if (froms.length !== 1) return null
+  const raw = froms[0].value.trim()
+  if ((raw.match(/@/g) ?? []).length !== 1) return null
+  const m = raw.match(/^(?:"[^"<>@]*"|[^"<>@,;:()]*)\s*<([^\s<>@",;:()]+@[^\s<>@",;:()]+)>$/) ?? raw.match(/^([^\s<>@",;:()]+@[^\s<>@",;:()]+)$/)
+  return m ? m[1].toLowerCase() : null
+}
+
+function isAuthenticatedSender(msg: { payload?: { headers?: { name: string; value: string }[] } }, email: string): boolean {
+  if (!/^[^\s@,<>"]+@[^\s@,<>"]+$/.test(email)) return false
+  const domain = email.split('@')[1]
+  const verdicts = (msg.payload?.headers ?? [])
+    .filter(h => h.name.toLowerCase() === 'authentication-results' && /^\s*mx\.google\.com\b/i.test(h.value))
+    .map(h => h.value)
+  if (!verdicts.length) return false
+  const aligned = new RegExp(`\\bdmarc=pass\\b[^;]*header\\.from=${domain.replace(/[^a-z0-9]/gi, c => '\\' + c)}\\b`, 'i')
+  return verdicts.every(v => aligned.test(v))
+}
+
+/** Null when the ticket comes from an active staff address Gmail verified; otherwise why not. Gates every write a ticket can cause. */
+async function staffSenderProblem(admin: ReturnType<typeof createAdminClient>, msg: GmailMsg): Promise<string | null> {
+  const m = msg as { payload?: { headers?: { name: string; value: string }[] } }
+  const from = singleFromAddress(m)
+  if (!from) return 'From header is not a single plain address'
+  // Exact comparison in code — PostgREST's ilike treats * as a wildcard, so a pattern match could be steered.
+  const { data: staff } = await admin.from('profiles').select('email').eq('is_active', true).in('role', STAFF_ROLES).not('email', 'is', null)
+  if (!(staff ?? []).some(p => (p.email as string).trim().toLowerCase() === from)) return `sender ${from} is not an active staff address`
+  if (!isAuthenticatedSender(m, from)) return `sender ${from} not verified by Gmail (DMARC)`
+  return null
+}
+
+/**
+ * Mail whose WO# can be taken as fact: Gmail verified (DMARC aligned, mx.google.com verdict) that it really came from
+ * RPS — an active staff address or one of the company mailboxes — or from the customer's ticketing system
+ * (TRUSTED_TICKETING_SENDERS, exact addresses). Everyone else's WO# is only offered as a choice.
+ */
+async function isTrustedWoSender(admin: ReturnType<typeof createAdminClient>, msg: GmailMsg): Promise<boolean> {
+  const m = msg as { payload?: { headers?: { name: string; value: string }[] } }
+  const from = singleFromAddress(m)
+  if (!from || !isAuthenticatedSender(m, from)) return false
+  if (COMPANY_MAILBOXES.has(from) || TRUSTED_TICKETING_SENDERS.has(from)) return true
+  return !(await staffSenderProblem(admin, msg))
+}
+
+async function createDraftJobForTicket(
+  admin: ReturnType<typeof createAdminClient>, msg: GmailMsg, messageId: string,
+  keys: string[], subject: string, internalDate: string | undefined, auth: TicketAuth,
+): Promise<{ job: Job; reason?: undefined } | { job?: undefined; reason: string }> {
+  const ticketDate = ymdET(internalDate)
+  // Service techs use the same "(x2)" subject, so a ticket the service sync already tied to a call, or one for a
+  // site with a live (or just-finished) service call, is a service ticket — never a new construction job.
+  const { data: svcDoc } = await admin.from('svc_work_order_documents').select('id').eq('gmail_message_id', messageId).not('work_order_id', 'is', null).limit(1)
+  if (svcDoc?.length) return { reason: 'service ticket (matched to a service call)' }
+  const recent = new Date(Date.now() - LATE_TICKET_DAYS * 86_400_000).toISOString()
+  const { data: svcCalls } = await admin.from('svc_work_orders').select('id, status, completed_at').eq('archived', false)
+    .or(keys.map(k => `site_number.ilike.${k}`).join(',')).limit(20)
+  if ((svcCalls ?? []).some(w => w.status !== 'completed' || (w.completed_at && w.completed_at > recent))) {
+    return { reason: 'service call open or just completed at this site — treated as a service ticket' }
+  }
+  const last = await findJobForKeys(admin, keys, true)
+  if (last?.stage === 'complete' && last.updated_at && Date.now() - new Date(last.updated_at).getTime() < LATE_TICKET_DAYS * 86_400_000) {
+    return { reason: `job at ${last.site_number} closed ${last.updated_at.slice(0, 10)} — late ticket, file it by hand` }
+  }
+  const { data: sites } = await admin.from('con_sites').select('id, company_id, site_number, store_brand, address, city, state')
+    .or(keys.map(k => `site_number.ilike.${k}`).join(',')).limit(2)
+  const site = sites?.length === 1 ? sites[0] : null
+  let companyId = site?.company_id as string | undefined
+  if (!companyId) {
+    const { data: companies } = await admin.from('companies').select('id').limit(2)
+    if (companies?.length !== 1) return { reason: 'site not on file and more than one company — start the job by hand' }
+    companyId = companies[0].id as string
+  }
+  const { data: job, error } = await admin.from('con_jobs').insert({
+    company_id: companyId,
+    site_id: site?.id ?? null,
+    site_number: site?.site_number ?? keys[0],
+    stage: 'in_progress',
+    work_order_number: auth.wo,
+    status_detail: auth.wo ? `${DRAFT_JOB_STATUS}. WO# from ${auth.source}` : `${DRAFT_JOB_STATUS}. ${needsWoNote(auth)}`,
+    facility_address: site ? [site.address, site.city, site.state].filter(Boolean).join(', ') || null : null,
+    gas_brand: site?.store_brand ?? null,
+    date_received: ticketDate,
+    project_start_date: ticketDate,
+    notes: `Opened by the email sync from rpinvoicing field ticket "${subject}" (${ticketDate}).`,
+  }).select('id, company_id, site_number, work_order_number, stage, status_detail, updated_at').single()
+  if (error || !job) return { reason: `could not create job: ${error?.message ?? 'insert failed'}` }
+  return { job: job as Job }
+}
+
+/** 2. New handwritten tickets in rpinvoicing → the existing per-job backfill (OCR + needs_review draft), a few jobs per pass.
+ *  A ticket for a site with no open job starts a draft job first (createDraftJobForTicket). */
 export async function syncFieldTickets(opts: { sinceDays?: number; budget?: Budget } = {}): Promise<FeedResult['tickets']> {
-  const out: FeedResult['tickets'] = { jobs: 0, filed: 0, errors: [] }
+  const out: FeedResult['tickets'] = { jobs: 0, filed: 0, created: [], paired: [], needs_wo: [], unmatched: [], errors: [] }
   if (!connectedInboxes().includes('rpinvoicing')) { out.errors.push('rpinvoicing not connected'); return out }
   const admin = createAdminClient()
   let ids: string[]
@@ -162,7 +409,34 @@ export async function syncFieldTickets(opts: { sinceDays?: number; budget?: Budg
       if (!/\(x\d+\)/i.test(subject)) continue
       const { data: seen } = await admin.from('con_daily_updates').select('id').contains('source_refs', { ticket_message_id: id }).maybeSingle()
       if (seen) continue
-      const job = await findJobForKeys(admin, siteKeysFromSubject(subject))
+      const keys = siteKeysFromSubject(subject)
+      let job = (await findJobForWo(admin, ownWoTokens(msg))) ?? (await findJobForKeys(admin, keys))
+      const date = ymdET(msg.internalDate)
+      if (!job && keys.length) {
+        // Only a verified staff ticket may open a job (anyone can email rpinvoicing).
+        const problem = await staffSenderProblem(admin, msg)
+        if (problem) out.unmatched.push(`${subject} (${problem})`)
+        else {
+          const auth = await ticketAuthorization(admin, msg, keys, date, true)
+          out.errors.push(...auth.errors)
+          const made = await createDraftJobForTicket(admin, msg, id, keys, subject, msg.internalDate, auth)
+          if (made.job) { job = made.job; out.created.push(`${job.site_number} — "${subject}" · ${auth.wo ? `${auth.wo} (${auth.source})` : 'needs WO#'}`) }
+          else out.unmatched.push(`${subject} (${made.reason})`)
+        }
+      } else if (!job) out.unmatched.push(`${subject} (no site number in the subject)`)
+      else if (!job.work_order_number?.trim()) {
+        // Pair a job that has no WO# yet with the one its work was authorized under — never overwrite one. The
+        // Master Schedule and verified econstruction forwards stand on their own; the ticket's own WO# needs a
+        // verified staff sender.
+        const verified = !(await staffSenderProblem(admin, msg))
+        const auth = await ticketAuthorization(admin, msg, keys.length ? keys : (job.site_number ? [job.site_number] : []), date, verified)
+        out.errors.push(...auth.errors)
+        if (auth.wo) {
+          const { data: set } = await admin.from('con_jobs').update({ work_order_number: auth.wo }).eq('id', job.id)
+            .or('work_order_number.is.null,work_order_number.eq.').select('id')
+          if (set?.length) { job = { ...job, work_order_number: auth.wo }; out.paired.push(`${job.site_number} → ${auth.wo} (${auth.source})`) }
+        } else out.needs_wo.push(`${job.site_number}: ${needsWoNote(auth)}`)
+      }
       if (job && !jobs.has(job.id)) jobs.set(job.id, job)
     } catch (e) { out.errors.push(`${id}: ${(e as Error).message}`) }
   }
