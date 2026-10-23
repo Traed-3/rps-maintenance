@@ -19,7 +19,7 @@ import {
   CalendarDays,
   Fuel,
   Package,
-  type LucideIcon, ListChecks, ClipboardCheck,
+  type LucideIcon, ListChecks, ClipboardCheck, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -27,8 +27,9 @@ import { useRouter } from 'next/navigation'
 import { canReadConstruction } from '@/lib/construction'
 import { canUseFieldSurveys, isSurveyOnly } from '@/lib/field-surveys'
 import { BILLING_READ_ROLES } from '@/lib/billing'
+import { canReadCompliance } from '@/lib/compliance'
 
-type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean; billing?: boolean; module?: string }
+type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; construction?: boolean; billing?: boolean; compliance?: boolean; module?: string }
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -46,6 +47,7 @@ const navItems: NavItem[] = [
   { href: '/service', label: 'Service Dispatch', icon: Fuel, module: 'service_dispatch' },
   { href: '/billing', label: 'Quotes & Invoices', icon: FileText, billing: true, module: 'billing' },
   { href: '/inventory', label: 'Inventory', icon: Package, module: 'inventory' },
+  { href: '/compliance', label: 'DQF & Certs', icon: ShieldCheck, compliance: true, module: 'compliance' },
   // Company-wide calendar that overlays Maintenance and Construction items.
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/expenses', label: 'Expenses', icon: Receipt },
@@ -71,6 +73,7 @@ export default function AppNav({ email, role, userId, blockedModules }: { email:
   ].filter(i =>
     (canSeeConstruction || !('construction' in i)) &&
     (canSeeBilling || !('billing' in i)) &&
+    (canReadCompliance({ id: userId, role }) || !('compliance' in i)) &&
     !(i.module && blocked.has(i.module))
   )
 
