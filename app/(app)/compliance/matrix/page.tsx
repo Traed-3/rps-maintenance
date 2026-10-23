@@ -16,7 +16,8 @@ export default async function MatrixPage({ searchParams }: { searchParams: Promi
   const cat = TABS.some(t => t.value === sp.cat) ? sp.cat! : 'certification'
   const me = await requireCompliance()
   const { files } = await loadFiles(createAdminClient(), me.company_id)
-  const rowsFor = files.filter(f => cat !== 'dqf' || f.employee.is_dot_driver)
+  // Only people who have (or must have) something in this category.
+  const rowsFor = files.filter(f => (cat !== 'dqf' || f.employee.is_dot_driver) && f.rows.some(r => r.type.category === cat && (r.item || r.required)))
   // Only the columns somebody actually has (or is required to have).
   const colMap = new Map<string, { id: string; name: string; sort: number }>()
   for (const f of rowsFor) for (const r of f.rows) if (r.type.category === cat && (r.item || r.required)) colMap.set(r.type.id, { id: r.type.id, name: r.type.name, sort: r.type.sort_order })
