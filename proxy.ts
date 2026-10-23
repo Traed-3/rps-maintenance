@@ -57,9 +57,10 @@ export async function proxy(request: NextRequest) {
   // to /login instead of running — "succeeding" in CI with an HTTP 307 body
   // while doing nothing. Only in-app "Sync now" clicks (already logged in)
   // ever actually ran.
+  // /api/compliance/check (daily DQF & certification expiry check) checks CRON_SECRET itself, same as the rest.
   // PWA manifest + service worker must be reachable without a session so the
   // app icon / theme apply on install.
-  const publicPaths = ['/login', '/auth/', '/api/auth/', '/api/gmail/', '/api/svc/', '/api/billing/', '/api/daily-summary', '/manifest.webmanifest', '/sw.js']
+  const publicPaths = ['/login', '/auth/', '/api/auth/', '/api/gmail/', '/api/svc/', '/api/billing/', '/api/daily-summary', '/api/compliance/check', '/manifest.webmanifest', '/sw.js']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
 
   if (!user && !isPublic) {
