@@ -58,7 +58,10 @@ export function buildFiles(employees: Employee[], types: RequirementType[], item
     const counts = Object.fromEntries(SEVERITY.map(h => [h, 0])) as Record<Health, number>
     // A missing optional record is not a gap — only count missing items that are required.
     for (const r of rows) if (r.health !== 'missing' || r.required) counts[r.health]++
-    const worst = SEVERITY.find(h => counts[h] > 0 && h !== 'not_required') ?? 'ok'
+    // Standing: personnel-file paperwork (W-4, direct deposit…) doesn't make someone "Missing" — only expiring or
+    // DQF/certification gaps do.
+    const standing = rows.filter(r => !(r.type.category === 'personnel' && r.health === 'missing'))
+    const worst = SEVERITY.find(h => h !== 'not_required' && standing.some(r => r.health === h && (h !== 'missing' || r.required))) ?? 'ok'
     return { employee, rows, counts, worst }
   })
 }
