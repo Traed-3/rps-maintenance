@@ -310,3 +310,22 @@ history and use up the ticket's 4-attachment cap).
   window → `notifyRepeatToolPurchase` (lib/notifications.ts, alert type `repeat_purchase`, registered in
   settings/alerts) → per-person notifications to owner/manager/shop_manager/construction_manager only (not company-wide).
   Default window 12 months when no type is picked; 0 disables checking for a type.
+
+---
+
+## DQF & CERTIFICATIONS MODULE (added 2026-10-23)
+
+Replaces the Smartsheet "DQF & Cert Tracker" (sheet 6846054072117124). Top-level `/compliance` ("DQF & Certs" in the nav,
+module key `compliance`; roles owner/manager/construction_manager — `lib/compliance.ts` COMPLIANCE_*_ROLES).
+- Migration `supabase/migrations/hr_compliance_module.sql` (APPLIED 2026-10-23): hr_employees (roster, DOT/CDL flags,
+  linked to con_contacts/profiles), hr_requirement_types (catalog: category dqf|certification|personnel, applies_to
+  dot|cdl|all|optional, expires, renewal_months, per-type notice_days override), hr_employee_items (one per employee ×
+  requirement; blank expiry = issued + renewal_months), hr_item_history (renewals), hr_compliance_settings (notice days
+  per side, overdue repeat, employee/management email lists, weekly digest, master `emails_enabled` — OFF by default),
+  hr_notice_log (dedup). Private bucket `hr-compliance` (scans upload direct via signed upload URL).
+- "Every DOT driver"/"CDL"/"all" requirements show on a file automatically (virtual until saved); optional certs are added per person.
+- Daily check: `lib/compliance-notices.ts` → GET /api/compliance/check (CRON_SECRET) fired by
+  `.github/workflows/compliance-check.yml` at 11:00 UTC. Stage = tightest notice window; dedup on (item, stage, expiry);
+  expired notices repeat every `overdue_repeat_days`. Employee emails + management lists + weekly roll-up via Resend.
+- Import: `node --env-file=.env.local scripts/import-smartsheet-dqf.mjs <seed.json> [--apply]` (idempotent). The seed holds
+  personal data, so it is NOT in git: Work Mac copy at ~/Library/Application Support/RPS Compliance/. Sheet password/code columns deliberately NOT imported.

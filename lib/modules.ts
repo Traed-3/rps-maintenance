@@ -20,6 +20,7 @@ export const MODULES = [
   { key: 'billing',         label: 'Quotes & Invoices',     prefixes: ['/billing'] },
   { key: 'inventory',       label: 'Inventory',             prefixes: ['/inventory'] },
   { key: 'reports_payroll', label: 'Reports & Payroll',     prefixes: ['/reports'] },
+  { key: 'compliance',      label: 'DQF & Certifications',  prefixes: ['/compliance'] },
 ] as const
 
 export type ModuleKey = typeof MODULES[number]['key']
