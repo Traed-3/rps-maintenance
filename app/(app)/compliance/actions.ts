@@ -156,10 +156,13 @@ export async function prepareUpload(employeeId: string, typeId: string, filename
 export async function attachDocument(itemId: string, path: string, name: string): Promise<ActionState> {
   const me = await complianceCaller(true)
   if (!me) return { error: 'No permission.' }
-  if (!path.startsWith(`${me.company_id}/`)) return { error: 'Bad path.' }
   const admin = createAdminClient()
   const { data: item } = await admin.from('hr_employee_items').select('*').eq('id', itemId).eq('company_id', me.company_id).single()
   if (!item) return { error: 'Not found.' }
+  // Only accept the exact folder prepareUpload issued for THIS item (no traversal, no other employee's files).
+  const prefix = `${me.company_id}/${item.employee_id}/${item.type_id}/`
+  const rest = path.slice(prefix.length)
+  if (!path.startsWith(prefix) || !/^\d+-[\w.\-]+$/.test(rest) || rest.includes('..')) return { error: 'Bad path.' }
   if (item.document_path) {
     await admin.from('hr_item_history').insert({
       company_id: me.company_id, item_id: item.id, issued_date: item.issued_date, expiration_date: item.expiration_date,
