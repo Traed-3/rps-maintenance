@@ -3,15 +3,26 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireConstruction } from '@/lib/construction-guard'
 import { buildPlate, buildSignals, businessDaysSince, dueDelta, KIND_CLASS, KIND_LABEL, type TaskRow, type TaskKind } from '@/lib/my-plate'
 import { packingSlipSiteKey } from '@/lib/construction-dashboard'
-import { addTask, completeTask, dropTask, reopenTask, setDue, setPriority, snoozeTask, waitTask, answerTask, resolvePriceLine, draftOrderEmail, markOrderSent } from './actions'
+import { addTask, completeTask, completeTasks, dropTask, reopenTask, setDue, setPriority, snoozeTask, waitTask, answerTask, resolvePriceLine, draftOrderEmail, markOrderSent } from './actions'
 import { ORDER_VENDORS, mailtoHref, type OrderDraft, type OrderVendorKey } from '@/lib/order-email'
 import { CopyButton } from '@/components/plate/copy-button'
+import { BulkBar } from '@/components/plate/bulk-bar'
+import { WORK_ORDER_DOCS_BUCKET } from '@/lib/svc-gmail-sync'
+
+type TicketRef = { date?: string; subject?: string; paths: string[] }
+type TicketUrls = Map<string, string>
+const ticketRefs = (t: TaskRow): TicketRef[] => {
+  const v = (t.action as { tickets?: unknown } | null)?.tickets
+  return Array.isArray(v) ? (v as TicketRef[]).filter(r => Array.isArray(r?.paths)) : []
+}
 
 export const dynamic = 'force-dynamic'
 
 const fmt = (iso: string | null) => iso ? new Date(iso + (iso.length === 10 ? 'T12:00:00Z' : '')).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }) : ''
 
-export default async function MyPlatePage() {
+export default async function MyPlatePage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
+  const { kind: kindParam } = await searchParams
+  const kindFilter = kindParam && kindParam in KIND_LABEL ? kindParam as TaskKind : null
   const profile = await requireConstruction()
   const admin = createAdminClient()
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
@@ -28,7 +39,16 @@ export default async function MyPlatePage() {
   ])
 
   const tasks = (rows ?? []) as TaskRow[]
-  const plate = buildPlate(tasks, today)
+  // Type filter (Trae 10/30): chips above the lists; counts are open + waiting rows of each kind.
+  const kindCounts = new Map<TaskKind, number>()
+  for (const t of tasks) if (t.status === 'open' || t.status === 'waiting') kindCounts.set(t.kind, (kindCounts.get(t.kind) ?? 0) + 1)
+  const plate = buildPlate(kindFilter ? tasks.filter(t => t.kind === kindFilter) : tasks, today)
+  // Crew ticket scans the daily job routine attached to a row (action.tickets) -> signed links, one batch call.
+  const ticketPaths = [...new Set(tasks.filter(t => t.status !== 'done').flatMap(t => ticketRefs(t).flatMap(r => r.paths)))]
+  const { data: signed } = ticketPaths.length
+    ? await admin.storage.from(WORK_ORDER_DOCS_BUCKET).createSignedUrls(ticketPaths, 60 * 60)
+    : { data: [] }
+  const ticketUrls: TicketUrls = new Map((signed ?? []).filter(s => s.signedUrl && s.path).map(s => [s.path as string, s.signedUrl as string] as [string, string]))
   const quotedJobs = new Set((quoted ?? []).map(q => q.job_id))
   const unmatchedSlips = (slips ?? []).filter(s => {
     const replies = ((s.thread_replies ?? []) as { text?: string }[]).map(x => x.text ?? '')
@@ -56,20 +76,31 @@ export default async function MyPlatePage() {
         <span className="text-xs text-gray-400">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' })}</span>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          <Link href="/my" className={`px-2.5 py-1 rounded-full border ${!kindFilter ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>All {[...kindCounts.values()].reduce((a, b) => a + b, 0)}</Link>
+          {(Object.keys(KIND_LABEL) as TaskKind[]).filter(k => kindCounts.get(k)).map(k => (
+            <Link key={k} href={`/my?kind=${k}`} className={`px-2.5 py-1 rounded-full border ${kindFilter === k ? 'ring-2 ring-offset-1 ring-gray-900 ' : ''}${KIND_CLASS[k]}`}>{KIND_LABEL[k]} {kindCounts.get(k)}</Link>
+          ))}
+        </div>
+        <form id="plate-bulk" action={completeTasks} />
+        <BulkBar formId="plate-bulk" />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4 min-w-0">
           <Section title="Do now" hint="Overdue, due today, hot, or due within 3 days" tone="bg-[#C00000] text-white" count={plate.now.length} empty="Nothing pressing. Work the Next list.">
-            {plate.now.map(t => <TaskLine key={t.id} t={t} today={today} />)}
+            {plate.now.map(t => <TaskLine key={t.id} t={t} today={today} urls={ticketUrls} />)}
           </Section>
           <Section title="Next" hint="In order: soonest due, then priority, then oldest" tone="bg-[#FFC000] text-black" count={plate.next.length} empty="Empty. Add what is on your mind below.">
-            {plate.next.map(t => <TaskLine key={t.id} t={t} today={today} />)}
+            {plate.next.map(t => <TaskLine key={t.id} t={t} today={today} urls={ticketUrls} />)}
           </Section>
           <Section title="Waiting on someone" hint="Longest wait first. Five business days is a nudge." tone="bg-[#5B9BD5] text-white" count={plate.waiting.length} empty="Nobody owes you anything right now.">
-            {plate.waiting.map(t => <TaskLine key={t.id} t={t} today={today} waiting />)}
+            {plate.waiting.map(t => <TaskLine key={t.id} t={t} today={today} urls={ticketUrls} waiting />)}
           </Section>
           {plate.snoozed.length > 0 && (
             <Section title="Snoozed" hint="Back on the list on the date shown" tone="bg-gray-200 text-gray-700" count={plate.snoozed.length} empty="">
-              {plate.snoozed.map(t => <TaskLine key={t.id} t={t} today={today} />)}
+              {plate.snoozed.map(t => <TaskLine key={t.id} t={t} today={today} urls={ticketUrls} />)}
             </Section>
           )}
           {plate.doneToday.length > 0 && (
@@ -139,7 +170,7 @@ function Section({ title, hint, tone, count, empty, children }: { title: string;
   )
 }
 
-function TaskLine({ t, today, waiting = false }: { t: TaskRow; today: string; waiting?: boolean }) {
+function TaskLine({ t, today, urls, waiting = false }: { t: TaskRow; today: string; urls: TicketUrls; waiting?: boolean }) {
   const d = dueDelta(t, today)
   const dueText = d === null ? '' : d > 0 ? `${d}d overdue` : d === 0 ? 'due today' : `due ${fmt(t.due_date)}`
   const dueClass = d === null ? 'text-gray-400' : d > 0 ? 'text-red-600 font-semibold' : d === 0 ? 'text-amber-700 font-semibold' : 'text-gray-500'
@@ -147,10 +178,12 @@ function TaskLine({ t, today, waiting = false }: { t: TaskRow; today: string; wa
   return (
     <li className="px-3 py-2.5">
       <div className="flex items-start gap-2">
+        <input type="checkbox" name="ids" value={t.id} form="plate-bulk" aria-label="Select to complete" className="shrink-0 mt-1" />
         <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full border text-[10px] ${KIND_CLASS[t.kind]}`}>{KIND_LABEL[t.kind]}</span>
         <div className="min-w-0 flex-1">
           <div className="text-sm text-gray-900 leading-snug">{t.priority === 1 && <span className="text-red-600 mr-1" title="Hot">●</span>}{t.site_number && <span className="font-mono text-xs text-gray-500 mr-1.5">{t.site_number}</span>}{t.title}</div>
           {t.detail && <div className="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{t.detail}</div>}
+          <Tickets refs={ticketRefs(t)} urls={urls} />
           {!waiting && t.status === 'open' && <Resolver t={t} />}
           <div className="text-[11px] mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             {waiting ? <span className={waitDays >= 5 ? 'text-red-600 font-semibold' : 'text-blue-700'}>waiting on {t.waiting_on}{t.waiting_since ? ` since ${fmt(t.waiting_since)} · ${waitDays} business day${waitDays === 1 ? '' : 's'}` : ''}{waitDays >= 5 ? ' · nudge' : ''}</span> : <span className={dueClass}>{dueText}</span>}
@@ -178,6 +211,33 @@ function TaskLine({ t, today, waiting = false }: { t: TaskRow; today: string; wa
   )
 }
 
+/** The crew ticket(s) behind a question, so it can be answered without digging through the job folder. */
+function Tickets({ refs, urls }: { refs: TicketRef[]; urls: TicketUrls }) {
+  const shown = refs.map(r => ({ ...r, files: r.paths.map(p => ({ p, url: urls.get(p) })).filter((f): f is { p: string; url: string } => !!f.url) })).filter(r => r.files.length)
+  if (!shown.length) return null
+  return (
+    <details className="mt-1.5 group">
+      <summary className="cursor-pointer text-[11px] text-blue-600 hover:underline select-none">
+        View ticket{shown.length > 1 ? `s (${shown.length})` : ''} · {shown.map(r => fmt(r.date ?? null)).filter(Boolean).join(', ')}
+      </summary>
+      <div className="mt-1.5 space-y-2">
+        {shown.map((r, i) => (
+          <div key={i}>
+            <div className="text-[11px] text-gray-500">{fmt(r.date ?? null)}{r.subject ? ` · ${r.subject}` : ''}</div>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {r.files.map(f => /\.(jpe?g|png|gif|webp)$/i.test(f.p)
+                ? <a key={f.p} href={f.url} target="_blank" rel="noopener" title="Open full size">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={f.url} alt={f.p.split('/').pop()} loading="lazy" className="h-40 max-w-full rounded border border-gray-200 object-contain bg-gray-50" />
+                  </a>
+                : <a key={f.p} href={f.url} target="_blank" rel="noopener" className="text-[11px] px-2 py-1 rounded border border-gray-300 text-blue-600 hover:bg-gray-50">{f.p.split('/').pop()}</a>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  )
+}
 
 /** The control that handles the need from the row: price a quote line, draft the order mail, or just answer and close. */
 function Resolver({ t }: { t: TaskRow }) {

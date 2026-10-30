@@ -56,6 +56,16 @@ export async function completeTask(id: string): Promise<void> {
   revalidatePath('/my')
 }
 
+/** Bulk check-off: every ticked row (checkbox name "ids") that belongs to the signed-in user goes to done. */
+export async function completeTasks(formData: FormData): Promise<void> {
+  const { admin, id: owner } = await me()
+  const ids = formData.getAll('ids').map(String).filter(Boolean)
+  if (!ids.length) return
+  const now = new Date().toISOString()
+  await admin.from('con_tasks').update({ status: 'done', done_at: now, updated_at: now }).in('id', ids).eq('owner_id', owner)
+  revalidatePath('/my')
+}
+
 export async function reopenTask(id: string): Promise<void> {
   const { admin, id: owner } = await me(); await mine(admin, id, owner)
   await admin.from('con_tasks').update({ status: 'open', done_at: null, waiting_on: null, waiting_since: null, snoozed_until: null, updated_at: new Date().toISOString() }).eq('id', id)
